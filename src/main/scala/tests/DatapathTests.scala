@@ -48,7 +48,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
 
   for ((isa, i) <- isaTest.zipWithIndex) {
     println("*********************")
-    println("  " + instStr(isa))
+    println("  " + dasm(isa))
     println("*********************")
 
     poke(c.io.ctrl.inst_re, 1)

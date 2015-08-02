@@ -36,7 +36,7 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
           if (wb_en == 1) peek(c.dpath.regWrite) 
           else peekAt(c.dpath.regFile.regs, rd(inst)) 
         println("[%h] %s -> RegFile[%d] = %h".format(
-                pc, instStr(inst), rd(inst), wb_val))
+                pc, dasm(inst), rd(inst), wb_val))
       }
     } while (peek(c.io.host.tohost) == 0 && t < maxcycles) 
 

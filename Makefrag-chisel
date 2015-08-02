@@ -5,7 +5,7 @@ log_dir = $(base_dir)/logs
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
 
-C_FLAGS  := --targetDir $(gen_dir) --genHarness --compile --test --vcd --debug
+C_FLAGS  := --targetDir $(gen_dir) --genHarness --compile --test --vcd --vcdMem --debug --minimumCompatibility 3.0
 V_FLAGS  := $(C_FLAGS) --v
 
 VPATH = $(src_dir):$(gen_dir):$(log_dir)

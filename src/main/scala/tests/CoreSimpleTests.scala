@@ -22,7 +22,7 @@ class CoreSimpleTests(c: Core) extends Tester(c) {
       
       step(1)
       if (ire) {
-        println("FEED: " + instStr(inst))
+        println("FEED: " + dasm(inst))
         poke(c.io.icache.dout, inst.litValue())
       }
       if (dre) {

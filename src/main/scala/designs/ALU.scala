@@ -19,11 +19,11 @@ object ALU {
 }
 
 class ALUIo extends CoreBundle {
-  val A = Bits(INPUT, instLen)
-  val B = Bits(INPUT, instLen)
-  val alu_op = Bits(INPUT, 4)
-  val out = Bits(OUTPUT, instLen)
-  val sum = Bits(OUTPUT, instLen)
+  val A = UInt(INPUT, instLen)
+  val B = UInt(INPUT, instLen)
+  val alu_op = UInt(INPUT, 4)
+  val out = UInt(OUTPUT, instLen)
+  val sum = UInt(OUTPUT, instLen)
 }
 
 import ALU._
@@ -35,7 +35,7 @@ class ALU extends Module {
   io.out := MuxLookup(io.alu_op, io.B, Seq(
       ALU_ADD  -> (io.A + io.B),
       ALU_SUB  -> (io.A - io.B),
-      ALU_SRA  -> (io.A.toSInt >> shamt),
+      ALU_SRA  -> (io.A.toSInt >> shamt).toUInt,
       ALU_SRL  -> (io.A >> shamt),
       ALU_SLL  -> (io.A << shamt),
       ALU_SLT  -> (io.A.toSInt < io.B.toSInt),

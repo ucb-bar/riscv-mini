@@ -64,7 +64,7 @@ class TileTests(c: Tile, args: Array[String]) extends Tester(c, false) {
           if (wb_en == 1) peek(c.core.dpath.regWrite) 
           else peekAt(c.core.dpath.regFile.regs, rd(inst)) 
         println("[%h] %s -> RegFile[%d] = %h".format(
-                pc, instStr(inst), rd(inst), wb_val))
+                pc, dasm(inst), rd(inst), wb_val))
       }
     } while (peek(c.io.htif.host.tohost) == 0 && t < maxcycles)
 
