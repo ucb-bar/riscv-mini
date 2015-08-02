@@ -1,0 +1,73 @@
+src_dir = $(base_dir)/src/main/scala/designs
+gen_dir = $(base_dir)/generated-src
+log_dir = $(base_dir)/logs
+
+SBT       = sbt
+SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
+
+C_FLAGS  := --targetDir $(gen_dir) --genHarness --compile --test --vcd --debug
+V_FLAGS  := $(C_FLAGS) --v
+
+VPATH = $(src_dir):$(gen_dir):$(log_dir)
+
+units = ALUTop Control Datapath Core
+v     = $(addsuffix .v,   $(units))
+cpp   = $(addsuffix .cpp, $(units))
+
+$(cpp): %.cpp: %.scala
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(C_FLAGS)" | tee $(log_dir)/$(notdir $@).out
+
+$(v): %.v: %.scala
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS)" | tee $(log_dir)/$(notdir $@).out
+
+$(gen_dir)/%.v: %.scala
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS)" | tee $(log_dir)/$(notdir $@).out
+
+timeout_cycles = 30000
+core_asm_c = $(addprefix Core., $(addsuffix .cpp.out, $(asm_p_tests)))
+$(core_asm_c): Core.%.cpp.out: $(tests_isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run CoreHex $(C_FLAGS) \
+	+verbose +loadmem=$< +max-cycles=$(timeout_cycles)" \
+	| tee $(log_dir)/$(notdir $@)
+core_asm_c: $(core_asm_c)
+	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
+	$(addprefix $(log_dir)/, $(core_asm_c)); echo;
+
+core_asm_v = $(addprefix Core., $(addsuffix .v.out, $(asm_p_tests)))
+$(core_asm_v): Core.%.v.out: $(tests_isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run CoreHex $(V_FLAGS) \
+	+verbose +loadmem=$< +max-cycles=$(timeout_cycles)" \
+	| tee $(log_dir)/$(notdir $@)
+core_asm_v: $(core_asm_v)
+	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
+	$(addprefix $(log_dir)/, $(core_asm_v)); echo;
+
+timeout_cycles = 300000
+tile_asm_c = $(addprefix Tile., $(addsuffix .cpp.out, $(asm_p_tests)))
+$(tile_asm_c): Tile.%.cpp.out: $(tests_isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) \
+	+loadmem=$< +max-cycles=$(timeout_cycles)" \
+	| tee $(log_dir)/$(notdir $@)
+tile_asm_c: $(tile_asm_c)
+	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
+	$(addprefix $(log_dir)/, $(tile_asm_c)); echo;
+
+tile_asm_v = $(addprefix Tile., $(addsuffix .v.out, $(asm_p_tests)))
+$(tile_asm_v): Tile.%.v.out: $(tests_isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) \
+	+loadmem=$< +max-cycles=$(timeout_cycles)" \
+	| tee $(log_dir)/$(notdir $@)
+tile_asm_v: $(tile_asm_v)
+	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
+	$(addprefix $(log_dir)/, $(tile_asm_v)); echo;
+
+.PHONY: ALUCTests ALUVTests ALUCVectorTests ALUVVectorTests 
+.PHONY: core_asm_c core_asm_v 
+.PHONY: tile_asm_c tile_asm_v 

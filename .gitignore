@@ -1,0 +1,5 @@
+generated-src
+target
+project/target
+logs
+*.key
