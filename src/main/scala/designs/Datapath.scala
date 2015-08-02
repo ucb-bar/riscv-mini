@@ -101,7 +101,7 @@ class Datapath extends Module with CoreParams {
   // Load
   val loffset = ew_alu(1) << UInt(4) | ew_alu(0) << UInt(3)
   val lshift = io.dcache.dout >> loffset
-  val load =  MuxLookup(io.ctrl.ld_type, io.dcache.dout, Seq(
+  val load =  MuxLookup(io.ctrl.ld_type, io.dcache.dout.zext, Seq(
     LD_LH  -> lshift(15, 0).toSInt,
     LD_LB  -> lshift(7, 0).toSInt,
     LD_LHU -> lshift(15, 0).zext,
@@ -114,10 +114,10 @@ class Datapath extends Module with CoreParams {
   csr.io.cmd  := io.ctrl.csr_cmd
 
   // Regfile Write
-  val regWrite = MuxLookup(io.ctrl.wb_sel, ew_alu, Seq(
+  val regWrite = MuxLookup(io.ctrl.wb_sel, ew_alu.zext, Seq(
     WB_MEM  -> load,
-    WB_PC_4 -> (ew_pc + UInt(4)),
-    WB_CSR  -> csr.io.data) )
+    WB_PC_4 -> (ew_pc + UInt(4)).zext,
+    WB_CSR  -> csr.io.data.zext) )
 
   regFile.io.wen   := io.ctrl.wb_en
   regFile.io.waddr := ex_rd_addr

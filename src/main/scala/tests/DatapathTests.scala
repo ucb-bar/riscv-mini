@@ -4,8 +4,6 @@ import Chisel._
 import TestCommon._
 
 class DatapathTests(c: Datapath) extends Tester(c) {
-  def removeSign(x: Int) = BigInt(x >>> 1) << 1 | x & 1
-
   def pokeExCtrl(ctrl: Array[BigInt], br_cond: Boolean) {
     val inst_type = if (ctrl(8) != ld_xxx || ctrl(6) == y) i_kill else i_next
     val data_re   = if (ctrl(8) != ld_xxx) y else n
@@ -40,7 +38,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     if (i == 0)
       pokeAt(c.regFile.regs, 0, i)
     else
-      pokeAt(c.regFile.regs, removeSign(rnd.nextInt() & 0xffffffff), i)
+      pokeAt(c.regFile.regs, int(rnd.nextInt() & 0xffffffff), i)
   }
   println("")
   step(1) 
@@ -87,16 +85,15 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else if (ctrl(2) == b_imm) imm_val
       else BigInt(0)
     val alu_sum = 
-      if ((ctrl(4) & 1) == 1) removeSign(a.toInt - b.toInt) 
-      else removeSign(a.toInt + b.toInt)
+      if ((ctrl(4) & 1) == 1) int(a.toInt - b.toInt) else int(a.toInt + b.toInt)
     val alu_out = if (ctrl(4) == alu_copy_a) a
       else if (ctrl(4) == alu_copy_b) b
       else if (ctrl(4) == alu_add || ctrl(4) == alu_sub) alu_sum
       else if (ctrl(4) == alu_slt) if (a.toInt < b.toInt) BigInt(1) else BigInt(0)
       else if (ctrl(4) == alu_sltu) if (a < b) BigInt(1) else BigInt(0)
-      else if (ctrl(4) == alu_sll) removeSign(a.toInt << (b.toInt & 0x1f))
-      else if (ctrl(4) == alu_srl) removeSign(a.toInt >>> (b.toInt & 0x1f))
-      else if (ctrl(4) == alu_sra) removeSign(a.toInt >> (b.toInt & 0x1f))
+      else if (ctrl(4) == alu_sll) int(a.toInt << (b.toInt & 0x1f))
+      else if (ctrl(4) == alu_srl) int(a.toInt >>> (b.toInt & 0x1f))
+      else if (ctrl(4) == alu_sra) int(a.toInt >> (b.toInt & 0x1f))
       else if (ctrl(4) == alu_xor) a ^ b
       else if (ctrl(4) == alu_or) a | b
       else if (ctrl(4) == alu_and) a & b
@@ -136,21 +133,14 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     step(1)
 
     // Simulate write back
-    val r = rnd.nextInt() & 0xffffffff
-    val lw = removeSign(r)
-    val lhu = (r >>> doffset) & 0xffff
-    val lbu = (r >>> doffset) & 0xff
-    val load = if (ctrl(8) == ld_lw) lw
-      else if (ctrl(8) == ld_lh) { 
-        val s = if ((lhu >> 15) > 0) 0xffff << 16 else 0
-        removeSign(s | lhu)
-      }
-      else if (ctrl(8) == ld_lb) {
-        val s = if ((lbu >> 7) > 0) 0xffffff << 8 else 0
-        removeSign(s | lbu)
-      }
-      else if (ctrl(8) == ld_lhu) lhu 
-      else if (ctrl(8) == ld_lbu) lbu
+    val lw = rnd.nextInt() & 0xffffffff
+    val lhu = (lw >>> doffset) & 0xffff
+    val lbu = (lw >>> doffset) & 0xff
+    val load: BigInt = if (ctrl(8) == ld_lw) int(lw)
+      else if (ctrl(8) == ld_lh) int(lhu | (if ((lhu >> 15) > 0) 0xffff << 16 else 0))
+      else if (ctrl(8) == ld_lb) int(lbu | (if ((lbu >> 7) > 0) 0xffffff << 8 else 0))
+      else if (ctrl(8) == ld_lhu) int(lhu)
+      else if (ctrl(8) == ld_lbu) int(lbu)
       else BigInt(0)
 
     poke(c.io.ctrl.inst_re, 0)
