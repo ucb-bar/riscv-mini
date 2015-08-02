@@ -187,8 +187,6 @@ object TestCommon {
                              inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
   def zimm(inst: UInt) = BigInt(rs1(inst))
 
-  private def cmp(x: UInt, y: BitPat) = (x === y).isTrue
-
   implicit def toBoolean(x: Bool) = x.isTrue
 
   def dasm(x: UInt) =
@@ -216,21 +214,21 @@ object TestCommon {
     else if (x === XORI)  "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
     else if (x === ORI)   "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
     else if (x === ANDI)  "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SLLI)  "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)
-    else if (x === SRLI)  "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)
-    else if (x === SRAI)  "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)
-    else if (x === ADD)   "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SUB)   "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SLT)   "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SLTU)  "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === XOR)   "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === OR)    "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === AND)   "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SLL)   "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SRL)   "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === SRA)   "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)
-    else if (x === CSRRW)  "CSRRW x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x)
-    else if (x === CSRRWI) "CSRRWI x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x)
+    else if (x === SLLI)  "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
+    else if (x === SRLI)  "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
+    else if (x === SRAI)  "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
+    else if (x === ADD)   "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SUB)   "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SLT)   "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SLTU)  "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === XOR)   "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === OR)    "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === AND)   "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SLL)   "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SRL)   "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === SRA)   "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
+    else if (x === CSRRW)  "CSRRW x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x))
+    else if (x === CSRRWI) "CSRRWI x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x))
     else if (x === NOP)   "NOP"
     else "????"
   def csr_addr(x: UInt) = {
