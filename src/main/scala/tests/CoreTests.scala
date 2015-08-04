@@ -2,52 +2,67 @@ package mini
 
 import Chisel._
 import TestCommon._
-import HexCommon._
 
 class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
+  implicit def bigIntToBoolean(b: BigInt) = b != 0
+  implicit def bigIntToInt(b: BigInt) = b.toInt
+
   def runTests(maxcycles: Int, verbose: Boolean) = {
-    pokeAt(c.dpath.regFile.regs, 0, 0)
+    t = 0
+    ok = true
+    for (i <- 0 until c.dpath.regFile.regs.n) {
+      if (i == 0)
+        pokeAt(c.dpath.regFile.regs, 0, i)
+      else
+        pokeAt(c.dpath.regFile.regs, int(rnd.nextInt() & 0xffffffff), i)
+    }
     poke(c.io.stall, 0)
+    var tohost = BigInt(0)
     do {
       val iaddr = peek(c.io.icache.addr)
-      val daddr = (peek(c.io.dcache.addr) >> 2) << 2
-      val data  = peek(c.io.dcache.din)
+      val daddr = peek(c.io.dcache.addr)
+      val inst  = UInt(mem.read(iaddr))
+      val dout  = mem.read(daddr)
+      val din   = peek(c.io.dcache.din)
+      val ire   = peek(c.io.icache.re)
+      val dre   = peek(c.io.dcache.re)
       val dwe   = peek(c.io.dcache.we)
-      val ire   = peek(c.io.icache.re) == 1
-      val dre   = peek(c.io.dcache.re) == 1
-
       step(1)
-
-      if (dwe > 0) {
-        writeMem(daddr, data, dwe)
-      } else if (ire) {
-        val inst = readMem(iaddr)
-        poke(c.io.icache.dout, inst)
-      } else if (dre) {
-        val data = readMem(daddr)
-        poke(c.io.dcache.dout, data)
+      if (ire) {
+        if (verbose) println("MEM[%x] -> %s".format(iaddr, dasm(inst)))
+        poke(c.io.icache.dout, inst.litValue())
+      } 
+      if (dre) {
+        if (verbose) println("MEM[%x] -> %x".format(daddr, dout))
+        poke(c.io.dcache.dout, dout)
       }
-
-      if (verbose) {
-        val pc     = peek(c.dpath.ew_pc)
-        val inst   = UInt(peek(c.dpath.ew_inst), 32)
-        val wb_en  = peek(c.ctrl.io.ctrl.wb_en)
-        val wb_val = 
-          if (wb_en == 1) peek(c.dpath.regWrite) 
-          else peekAt(c.dpath.regFile.regs, rd(inst)) 
-        println("[%h] %s -> RegFile[%d] = %h".format(
-                pc, dasm(inst), rd(inst), wb_val))
+      if (dwe) {
+        if (verbose) println("MEM[%x] <- %x".format(daddr, din))
+        mem.write(daddr, din, dwe)
       }
-    } while (peek(c.io.host.tohost) == 0 && t < maxcycles) 
+      tohost = peek(c.io.host.tohost) 
+    } while (!tohost && t < maxcycles)
 
-    val tohost = peek(c.io.host.tohost)
     val reason = if (t < maxcycles) "tohost = " + tohost else "timeout"
     ok &= tohost == 1
     println("*** %s *** (%s) after %d simulation cycles".format(
             if (ok) "PASSED" else "FAILED", reason, t))
   }
 
-  val (filename, maxcycles, verbose) = parseOpts(args)
-  loadMem(filename)
-  runTests(maxcycles, verbose)
+  val mem = new Mem
+  val (dir, tests, maxcycles, verbose) = parseOpts(args)
+  tests match {
+    case SimpleTests =>
+      mem.loadMem(bypassTest)
+      runTests(maxcycles, verbose)
+      for ((rd, expected) <- testResults(bypassTest)) {
+        val result = peekAt(c.dpath.regFile.regs, rd)
+        expect(result == expected, "RegFile[%d] = %d == %d".format(rd, result, expected))
+      }
+    case ISATests => for (test <- isaTests) {
+      mem.loadMem(dir + "/" + test)
+      runTests(maxcycles, verbose)
+    }
+    case Benchmarks =>
+  }
 }

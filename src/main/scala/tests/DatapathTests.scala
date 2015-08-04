@@ -4,6 +4,9 @@ import Chisel._
 import TestCommon._
 
 class DatapathTests(c: Datapath) extends Tester(c) {
+  implicit def bigIntToBoolean(b: BigInt) = b != 0
+  implicit def bigIntToInt(b: BigInt) = b.toInt
+
   def pokeExCtrl(ctrl: Array[BigInt], br_cond: Boolean) {
     val inst_type = if (ctrl(8) != ld_xxx || ctrl(6) == y) i_kill else i_next
     val data_re   = if (ctrl(8) != ld_xxx) y else n
@@ -44,7 +47,8 @@ class DatapathTests(c: Datapath) extends Tester(c) {
   step(1) 
   poke(c.io.stall, 0)
 
-  for ((isa, i) <- isaTest.zipWithIndex) {
+  /* Run ISA tests */
+  for ((isa, i) <- insts.zipWithIndex) {
     println("*********************")
     println("  " + dasm(isa))
     println("*********************")
@@ -56,14 +60,14 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     pokeWbCtrl(decode(UInt(0)))
     val pc = peek(c.io.icache.addr)
     step(1)
-    // Simulate fetch
+    // Emulate fetch
     poke(c.io.ctrl.inst_re, 0)
     poke(c.io.icache.dout,  isa.litValue())
     poke(c.io.dcache.dout,  0)
     pokeExCtrl(decode(UInt(0)), false)
     pokeWbCtrl(decode(UInt(0)))
     step(1) 
-    // Simulate decode & execute 
+    // Emulate decode & execute 
     val ctrl = decode(isa)
     val rs1_addr = rs1(isa)
     val rs2_addr = rs2(isa)
@@ -132,11 +136,11 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     expect(c.io.dcache.we,   dwe)
     step(1)
 
-    // Simulate write back
+    // Emulate write back
     val lw = rnd.nextInt() & 0xffffffff
     val lhu = (lw >>> doffset) & 0xffff
     val lbu = (lw >>> doffset) & 0xff
-    val load: BigInt = if (ctrl(8) == ld_lw) int(lw)
+    val load = if (ctrl(8) == ld_lw) int(lw)
       else if (ctrl(8) == ld_lh) int(lhu | (if ((lhu >> 15) > 0) 0xffff << 16 else 0))
       else if (ctrl(8) == ld_lb) int(lbu | (if ((lbu >> 7) > 0) 0xffffff << 8 else 0))
       else if (ctrl(8) == ld_lhu) int(lhu)
@@ -157,5 +161,5 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     val wb_rd_val = peekAt(c.regFile.regs, rd_addr)
     expect(wb_res == wb_rd_val, "Result Check: %d == %d".format(wb_res, wb_rd_val))
     println("")
-  }
+  } 
 }

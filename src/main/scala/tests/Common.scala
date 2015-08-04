@@ -6,7 +6,7 @@ import scala.io.Source
 import scala.util.Random
 import scala.collection.mutable.HashMap
 
-object TestCommon {
+object TestCommon extends FileSystemUtilities {
   /* Define tests */
   private def rand_fn7 = UInt(Random.nextInt(1 << 7), 7)
   private def rand_rs2 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
@@ -36,7 +36,7 @@ object TestCommon {
   val fin  = Cat(CSR.TOHOST, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val nop  = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
 
-  def isaTest = Array(
+  def insts = Array(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),
@@ -77,23 +77,6 @@ object TestCommon {
     fin
   )
 
-  val bypassTest = Array(
-    I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
-    S(Funct3.SW, 1, 0, 4),   // SW   x1, x0, 12  # Mem[12] <- 1
-    L(Funct3.LW, 2, 0, 4),   // LW   x2, x0, 12  # x2 <- 1
-    RU(Funct3.ADD, 3, 2, 2), // ADD  x3, x2, x2  # x3 <- 2
-    RS(Funct3.ADD, 4, 3, 2), // SUB  x4, x2, x3  # x4 <- 1
-    RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4
-    RU(Funct3.SLT, 6, 4, 5), // SLT  x6, x4, x5  # x6 <- 1
-    B(Funct3.BEQ, 1, 6, 8),  // BEQ  x1, x6, 8   # go to the BGE branch
-    J(Opcode.JAL, 0, 12),    // JAL  x0, 8       # skip nop, scrrw
-    B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
-    nop, nop, fin            // Finish
-  )
-  val testResults = Map(
-    bypassTest -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1))
-  )
-  
   val y      = BigInt(1)
   val n      = BigInt(0)
 
@@ -287,6 +270,102 @@ object TestCommon {
     else if (x === CSRRSI) Array(pc_4, a_xxx,  b_xxx, imm_z, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_s)
     else if (x === CSRRCI) Array(pc_4, a_xxx,  b_xxx, imm_z, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_c)
     else                  Array(pc_4,   a_xxx,  b_xxx, imm_i, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n)
+
+  abstract class Tests
+  case object SimpleTests extends Tests
+  case object ISATests extends Tests
+  case object Benchmarks extends Tests
+
+  def genTests(tests: List[String], dir: String) {
+    for (test <- tests if !(new java.io.File(dir + "/" + test).exists)) {
+      run(List("make", "-C", dir, test) mkString " ")
+    }
+  }
+
+  def parseOpts(args: Array[String]) = {
+    var tests: Tests = SimpleTests
+    var dir = ""
+    var maxcycles = 0
+    var verbose = false
+    args foreach {
+      case "+verbose" => verbose = true 
+      case "+simple" => tests = SimpleTests
+      case arg if arg.substring(0, 5) == "+isa=" =>
+        tests = ISATests
+        dir = arg.substring(5)
+        genTests(isaTests, dir)
+      case arg if arg.substring(0, 8) == "+bmark=" =>
+        tests = Benchmarks
+        dir = arg.substring(8)
+        genTests(bmarksTest, dir)
+      case arg if arg.substring(0, 12) == "+max-cycles=" =>
+        maxcycles = arg.substring(12).toInt
+      case arg => println("kiak!! => " + arg)
+    }
+    (dir, tests, maxcycles, verbose)
+  }
+  
+  val bypassTest = Array(
+    I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
+    S(Funct3.SW, 1, 0, 12),   // SW   x1, x0, 12  # Mem[12] <- 1
+    L(Funct3.LW, 2, 0, 12),   // LW   x2, x0, 12  # x2 <- 1
+    RU(Funct3.ADD, 3, 2, 2), // ADD  x3, x2, x2  # x3 <- 2
+    RS(Funct3.ADD, 4, 3, 2), // SUB  x4, x2, x3  # x4 <- 1
+    RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4
+    RU(Funct3.SLT, 6, 4, 5), // SLT  x6, x4, x5  # x6 <- 1
+    B(Funct3.BEQ, 1, 6, 8),  // BEQ  x1, x6, 8   # go to the BGE branch
+    J(Opcode.JAL, 0, 12),    // JAL  x0, 8       # skip nop, scrrw
+    B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
+    nop, nop, fin            // Finish
+  )
+  // TODO: add your tests
+  val testResults = Map(
+    bypassTest -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1))
+  )
+
+  val isaTests = List("")
+  val bmarksTest = List("")
+}
+
+class Mem(blockSize: Int = 4, size: Int = 1 << 23) {
+  private val mem = Array.fill(size){0.toByte} 
+  private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
+
+  def read(addr: Int) = {
+    val a = math.min(addr & (size - 1), size - 4)
+    ((0 until blockSize) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
+  }
+
+  def write(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) {
+    val a = addr & (size - 1)
+    for (i <- blockSize to 0 by -1 if ((mask >> i) & 0x1) > 0) {
+      mem(a+i) = (data >> (8 * i)).toByte
+    }
+  }
+
+  private val pc_start = Const.PC_START.litValue().toInt
+
+  def loadMem(test: Seq[UInt]) {
+    for((inst, i) <- test.zipWithIndex) {
+      write(pc_start + i * blockSize, inst.litValue())
+    }
+  }
+
+  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+
+  def loadMem(filename: String) {
+    val lines = Source.fromFile(filename).getLines
+    for ((line, i) <- lines.zipWithIndex) {
+      val base = (i * line.length) / 2
+      var offset = 0
+      for (k <- (line.length - 2) to 0 by -2) {
+        val addr = base+offset
+        val data = (parseNibble(line(k)) << 4) | parseNibble(line(k+1))
+        mem(pc_start + addr) = data.toByte
+        offset += 1
+      }
+    }
+  }
 }
 
 object HexCommon {
@@ -296,25 +375,6 @@ object HexCommon {
   private var readcycles = 2
   private var writecycles = 1
 
-  def parseOpts(args: Array[String]) = {
-    var filename = ""
-    var maxcycles = 0
-    var verbose = false
-    for (arg <- args) {
-      if (arg.substring(0, 8) == "+verbose") {
-        verbose = true
-      } else if (arg.substring(0, 9) == "+loadmem=") {
-        filename = arg.substring(9)
-      } else if (arg.substring(0, 12) == "+max-cycles=") {
-        maxcycles = arg.substring(12).toInt
-      } else if (arg.substring(0, 13) == "+read-cycles=") {
-        readcycles = arg.substring(13).toInt
-      } else if (arg.substring(0, 14) == "+write-cycles=") {
-        readcycles = arg.substring(14).toInt
-      } 
-    }
-    (filename, maxcycles, verbose)
-  }
 
   def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
 

@@ -20,7 +20,7 @@ class ControlTests(c: Control) extends Tester(c) {
   }
 
   poke(c.io.ctrl.stall, 0)
-  for ((isa, i) <- isaTest.zipWithIndex) {
+  for ((isa, i) <- insts.zipWithIndex) {
     println("***** %s *****".format(dasm(isa)))
     poke(c.io.ctrl.inst, isa.litValue())
     checkCtrl(decode(isa))

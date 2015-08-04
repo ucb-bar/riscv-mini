@@ -14,7 +14,7 @@ object Main {
       case "Datapath" => chiselMainTest(chiselArgs, () => Module(new Datapath)(Config.params)) {
         c => new DatapathTests(c) }
       case "Core" => chiselMainTest(chiselArgs, () => Module(new Core)(Config.params)) {
-        c => new CoreSimpleTests(c) }
+        c => new CoreTests(c, testArgs) }
       case "CoreHex" => chiselMainTest(chiselArgs, () => Module(new Core)(Config.params)) { 
         c => new CoreTests(c, testArgs) }
       case "Tile" => chiselMainTest(chiselArgs, () => Module(new Tile)(Config.params)) {

@@ -75,7 +75,7 @@ class TileTests(c: Tile, args: Array[String]) extends Tester(c, false) {
             if (ok) "PASSED" else "FAILED", reason, t))
   }
 
-  val (filename, maxcycles, verbose) = parseOpts(args)
-  loadMem(filename)
-  runTests(maxcycles, verbose)
+  // val (filename, maxcycles, verbose) = parseOpts(args)
+  // loadMem(filename)
+  // runTests(maxcycles, verbose)
 }
