@@ -2,6 +2,10 @@ import sbt._
 import Keys._
 
 object DebugBuild extends Build {
-  lazy val chisel   = Project("chisel", base=file("chisel"))
-  lazy val root     = Project("riscv-mini", base=file(".")).dependsOn(chisel)
+  override lazy val settings = super.settings ++ Seq(
+    scalaVersion := "2.11.6",
+    scalacOptions ++= Seq("-deprecation","-unchecked")
+  )
+  lazy val chisel = project
+  lazy val root   = (project in file(".")).settings(settings:_*).dependsOn(chisel)
 }
