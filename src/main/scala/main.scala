@@ -9,6 +9,8 @@ object Main {
     val res = args(0) match {
       case "ALUTop" => chiselMainTest(chiselArgs, () => Module(new ALUTop)(Config.params)){
         c => new ALUTests(c) }
+      case "CSR" => chiselMainTest(chiselArgs, () => Module(new CSR)(Config.params)){
+        c => new CSRTests(c) }
       case "Control" => chiselMainTest(chiselArgs, () => Module(new Control)(Config.params)) {
         c => new ControlTests(c) }
       case "Datapath" => chiselMainTest(chiselArgs, () => Module(new Datapath)(Config.params)) {

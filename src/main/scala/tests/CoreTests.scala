@@ -49,7 +49,7 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
             if (ok) "PASSED" else "FAILED", reason, t))
   }
 
-  val mem = new Mem
+  val mem = new MagicMem
   val (dir, tests, maxcycles, verbose) = parseOpts(args)
   tests match {
     case SimpleTests =>

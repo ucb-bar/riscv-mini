@@ -4,6 +4,7 @@ import Chisel._
 import Instructions._
 import scala.io.Source
 import scala.util.Random
+import scala.collection.immutable.ListMap
 import scala.collection.mutable.HashMap
 
 object TestCommon extends FileSystemUtilities {
@@ -33,7 +34,7 @@ object TestCommon extends FileSystemUtilities {
   private def J(op: UInt, rd: Int, i: Int) = 
     Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
 
-  val fin  = Cat(CSR.TOHOST, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
+  val fin  = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val nop  = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
 
   def insts = Array(
@@ -172,6 +173,41 @@ object TestCommon extends FileSystemUtilities {
 
   implicit def toBoolean(x: Bool) = x.isTrue
 
+  val csrNames = ListMap(
+    CSR.mcpuid    -> "mcpuid",
+    CSR.mimpid    -> "mimpid",
+    CSR.mhartid   -> "mhartid",
+    CSR.mstatus   -> "mstatus",
+    CSR.mtvec     -> "mtvec",
+    CSR.mtdeleg   -> "mtdeleg",
+    CSR.mie       -> "mie",
+    CSR.mtimecmp  -> "mtimecmp",
+    CSR.mtime     -> "mtime",
+    CSR.mtimeh    -> "mtimeh",
+    CSR.mscratch  -> "mscratch",
+    CSR.mepc      -> "mepc",
+    CSR.mcause    -> "mcause",
+    CSR.mbadaddr  -> "mbadaddr",
+    CSR.mip       -> "mip",
+    CSR.mbase     -> "mbase",
+    CSR.mbound    -> "mbound",
+    CSR.mibase    -> "mibase",
+    CSR.mibound   -> "mibound",
+    CSR.mdbase    -> "mdbase",
+    CSR.mdbound   -> "mdbound",
+    CSR.mtohost   -> "mtohost",
+    CSR.mfromhost -> "mfromhost"
+  )
+
+  def csr(x: UInt) = {
+    val inst_31_20 = Cat(inst_31(x), inst_30_25(x), inst_24_21(x), inst_20(x))
+    csrNames getOrElse (inst_31_20, inst_31_20.litValue().toString)
+  }
+
+  /* val insts = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
+    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, AND, ANDI,
+    SLT, SLTI, SLTU, SLTIU, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI) */
+
   def dasm(x: UInt) =
     if (x === AUIPC)      "AUIPC x%d, %x".format(rd(x), uimm(x)) 
     else if (x === LUI)   "LUI x%d, %x".format(rd(x), uimm(x))
@@ -210,17 +246,10 @@ object TestCommon extends FileSystemUtilities {
     else if (x === SLL)   "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
     else if (x === SRL)   "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
     else if (x === SRA)   "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === CSRRW)  "CSRRW x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x))
-    else if (x === CSRRWI) "CSRRWI x%d, %s, %d".format(rd(x), csr_addr(x), rs1(x))
+    else if (x === CSRRW)  "CSRRW x%d, %s, x%d".format(rd(x), csr(x), rs1(x))
+    else if (x === CSRRWI) "CSRRWI x%d, %s, x%d".format(rd(x), csr(x), rs1(x))
     else if (x === NOP)   "NOP"
     else "????"
-  def csr_addr(x: UInt) = {
-    val inst_31_20 = Cat(inst_31(x), inst_30_25(x), inst_24_21(x), inst_20(x))
-    if (inst_31_20 === CSR.TOHOST) "tohost"
-    else if (inst_31_20 === CSR.HARTID) "hartid"
-    else if (inst_31_20 === CSR.STATUS) "status"
-    else x.litValue().toString 
-  }
 
   def decode(x: UInt) =
     //                                                                   kill                    wb_en
@@ -300,7 +329,7 @@ object TestCommon extends FileSystemUtilities {
         genTests(bmarksTest, dir)
       case arg if arg.substring(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt
-      case arg => println("kiak!! => " + arg)
+      case _ => 
     }
     (dir, tests, maxcycles, verbose)
   }
@@ -327,7 +356,7 @@ object TestCommon extends FileSystemUtilities {
   val bmarksTest = List("")
 }
 
-class Mem(blockSize: Int = 4, size: Int = 1 << 23) {
+class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   private val mem = Array.fill(size){0.toByte} 
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
 

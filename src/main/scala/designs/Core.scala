@@ -3,9 +3,8 @@ package mini
 import Chisel._
 
 class HostIO extends CoreBundle {
-  val id = UInt(INPUT, 1)
-  val tohost = UInt(OUTPUT, instLen)
-  val status = UInt(OUTPUT, instLen)
+  val fromhost = Valid(UInt(width=instLen)).flip
+  val tohost   = UInt(OUTPUT, instLen)
 }
 
 class CacheIO extends CoreBundle {

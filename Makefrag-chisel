@@ -13,7 +13,7 @@ V_FLAGS  := $(C_FLAGS) --v
 
 VPATH = $(src_dir):$(gen_dir):$(log_dir)
 
-units = ALUTop Control Datapath
+units = ALUTop CSR Control Datapath
 v     = $(addsuffix .v,   $(units))
 cpp   = $(addsuffix .cpp, $(units))
 

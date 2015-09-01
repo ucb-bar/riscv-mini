@@ -109,15 +109,15 @@ class Datapath extends Module with CoreParams {
     
   val csr = Module(new CSR)
   csr.io.host <> io.host
-  csr.io.src  := ew_alu 
-  csr.io.addr := ew_inst(31, 20) 
-  csr.io.cmd  := io.ctrl.csr_cmd
+  csr.io.src := ew_alu 
+  csr.io.csr := ew_inst(31, 20) 
+  csr.io.cmd := io.ctrl.csr_cmd
 
   // Regfile Write
   val regWrite = MuxLookup(io.ctrl.wb_sel, ew_alu.zext, Seq(
     WB_MEM  -> load,
     WB_PC_4 -> (ew_pc + UInt(4)).zext,
-    WB_CSR  -> csr.io.data.zext) )
+    WB_CSR  -> csr.io.out.zext) )
 
   regFile.io.wen   := io.ctrl.wb_en
   regFile.io.waddr := ex_rd_addr
