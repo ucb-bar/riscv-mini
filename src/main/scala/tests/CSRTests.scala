@@ -6,7 +6,7 @@ import scala.collection.mutable.HashMap
 
 class CSRTests(c: CSR) extends Tester(c) {
   val values = HashMap[UInt, BigInt]()
-  val pc = rnd.nextInt()
+  val pc = int(rnd.nextInt() & -4)
   def nextIn = int(rnd.nextInt() & 0xffffffff)
   def nextSrc = int(rnd.nextInt() & 0x1f)
   def isRO(csr: UInt) = ((csr.litValue() >> 10) & 0x3) == 0x3 || csr == CSR.mtvec || csr == CSR.mtdeleg
@@ -61,15 +61,17 @@ class CSRTests(c: CSR) extends Tester(c) {
       expect(c.mcause, value & (BigInt(1) << (c.instLen-1) | 0xf))
     } else if (csr == CSR.mepc) {
       expect(c.mepc, value & int(-4))
-    } else if (isRO(csr) && values(csr) != value) {
-      values(CSR.mepc)    = pc
-      values(CSR.mcause)  = Cause.IllegalInst.litValue()
-      values(CSR.mstatus) = (values(CSR.mstatus) << 3) & 0xffffffff
-      expect(c.mepc,   values(CSR.mepc))
-      expect(c.mcause, values(CSR.mcause))
     } else { 
       expect(c.csrFile(csr), value)
     }
+  }
+  def expectException {
+    println("hello")
+    values(CSR.mepc)    = pc
+    values(CSR.mcause)  = Cause.IllegalInst.litValue()
+    values(CSR.mstatus) = (values(CSR.mstatus) << 3) & 0xffffffff
+    expect(c.mepc,   values(CSR.mepc))
+    expect(c.mcause, values(CSR.mcause))
   }
   override def step(n: Int) {
     super.step(n)
@@ -104,9 +106,15 @@ class CSRTests(c: CSR) extends Tester(c) {
     poke(c.io.src, src)
     poke(c.io.csr, csr.litValue())
     expectOut(csr, values(csr))
-    step(1)
-    if (!isRO(csr) && src != 0) values(csr) = in
-    expectCSR(csr, values(csr))
+    if (!isRO(csr) && src != 0) {
+      val value = in
+      step(1)
+      expectCSR(csr, value)
+      values(csr) = value
+    } else {
+      step(1)
+      expectException
+    }
   }
 
   poke(c.io.cmd, csr_s)
@@ -118,9 +126,15 @@ class CSRTests(c: CSR) extends Tester(c) {
     poke(c.io.src, src)
     poke(c.io.csr, csr.litValue())
     expectOut(csr, values(csr))
-    step(1)
-    if (!isRO(csr) && src != 0) values(csr) |= in 
-    expectCSR(csr, values(csr))
+    if (!isRO(csr) && src != 0) {
+      val value = values(csr) | in
+      step(1)
+      expectCSR(csr, value)
+      values(csr) = value
+    } else {
+      step(1)
+      expectException
+    }
   }
 
   poke(c.io.cmd, csr_c)
@@ -132,8 +146,14 @@ class CSRTests(c: CSR) extends Tester(c) {
     poke(c.io.src, src)
     poke(c.io.csr, csr.litValue())
     expectOut(csr, values(csr))
-    step(1)
-    if (!isRO(csr) && src != 0) values(csr) &= int(~in.toInt) 
-    expectCSR(csr, values(csr))
+    if (!isRO(csr) && src != 0) {
+      val value = values(csr) & int(~in.toInt) 
+      step(1)
+      expectCSR(csr, value) 
+      values(csr) = value
+    } else {
+      step(1)
+      expectException
+    }
   }
 }
