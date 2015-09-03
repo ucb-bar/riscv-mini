@@ -13,7 +13,7 @@ object TestCommon extends FileSystemUtilities {
   private def rand_rs1 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
   private def rand_fn3 = UInt(Random.nextInt(1 << 3), 3) 
   private def rand_rd  = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
-  private def rand_csr = csrRegs(Random.nextInt(csrRegs.size))
+  private def rand_csr = UInt(csrRegs(Random.nextInt(csrRegs.size)))
 
   private def reg(x: Int) = UInt(x, 5)
   private def imm(x: Int) = SInt(x, 21)
@@ -143,27 +143,28 @@ object TestCommon extends FileSystemUtilities {
   val ld_lbu = BigInt(4)
   val ld_xxx = BigInt(7)
 
-  val wb_alu  = BigInt(0)
-  val wb_mem  = BigInt(1)
-  val wb_pc_4 = BigInt(2)
-  val wb_csr  = BigInt(3)
+  val wb_alu = BigInt(0)
+  val wb_mem = BigInt(1)
+  val wb_pc4 = BigInt(2)
+  val wb_csr = BigInt(3)
 
   val csr_n = BigInt(0)
   val csr_w = BigInt(1)
   val csr_s = BigInt(2)
   val csr_c = BigInt(3)
 
-  def rs1(inst: UInt) = ((inst & (UInt(0x1f) << UInt(15))) >> UInt(15)).litValue().toInt
-  def rs2(inst: UInt) = ((inst & (UInt(0x1f) << UInt(20))) >> UInt(20)).litValue().toInt
-  def rd(inst: UInt) = ((inst & (UInt(0x1f) << UInt(7))) >> UInt(7)).litValue().toInt
+  def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
+  def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
+  def rd(inst: UInt) = ((inst.litValue() >> 7) & 0x1f).toInt
+  def csr(inst: UInt) = (inst.litValue() >> 20)
 
-  private def inst_31(inst: UInt)    = UInt(((inst & (UInt(0x1) << UInt(31))) >> UInt(31)).litValue(), 1)
-  private def inst_30_25(inst: UInt) = UInt(((inst & (UInt(0x3f) << UInt(25))) >> UInt(25)).litValue(), 6)
-  private def inst_24_21(inst: UInt) = UInt(((inst & (UInt(0xf) << UInt(21))) >> UInt(21)).litValue(), 4)
-  private def inst_20(inst: UInt)    = UInt(((inst & (UInt(0x1) << UInt(20))) >> UInt(20)).litValue(), 1)
-  private def inst_19_12(inst: UInt) = UInt(((inst & (UInt(0xff) << UInt(12))) >> UInt(12)).litValue(), 8)
-  private def inst_11_8(inst: UInt)  = UInt(((inst & (UInt(0xf) << UInt(8))) >> UInt(8)).litValue(), 4)
-  private def inst_7(inst: UInt)     = UInt(((inst & (UInt(0x1) << UInt(7))) >> UInt(7)).litValue(), 1)
+  private def inst_31(inst: UInt)    = UInt((inst.litValue() >> 31) & 0x1,  1)
+  private def inst_30_25(inst: UInt) = UInt((inst.litValue() >> 25) & 0x2f, 6)
+  private def inst_24_21(inst: UInt) = UInt((inst.litValue() >> 21) & 0xf,  4)
+  private def inst_20(inst: UInt)    = UInt((inst.litValue() >> 20) & 0x1,  1)
+  private def inst_19_12(inst: UInt) = UInt((inst.litValue() >> 12) & 0xff, 8)
+  private def inst_11_8(inst: UInt)  = UInt((inst.litValue() >> 8)  & 0xf,  4)
+  private def inst_7(inst: UInt)     = UInt((inst.litValue() >> 7)  & 0x1,  1)
 
   def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}), 
                              inst_30_25(inst), inst_24_21(inst), inst_20(inst)).litValue()
@@ -179,28 +180,17 @@ object TestCommon extends FileSystemUtilities {
 
   implicit def toBoolean(x: Bool) = x.isTrue
 
-  val csrRegs = Array(
+  val csrRegs = List(
     CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mstatus, CSR.mtvec, CSR.mtdeleg, CSR.mie,
     CSR.mtimecmp, CSR.mtime, CSR.mtimeh, CSR.mscratch, CSR.mepc, CSR.mcause, CSR.mbadaddr, CSR.mip,
     CSR.mtohost, CSR.mfromhost
-  )
+  ) map (_.litValue())
 
-  val csrNames = Array(
+  val csrNames = (csrRegs zip List(
     "mcpuid", "mimpid","mhartid", "mstatus", "mtvec", "mtdeleg", "mie",
     "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
     "mtohost", "mfromhost"
-  )
-
-  val csrMap = (csrRegs zip csrNames).toList
-
-  def csr(x: UInt) = {
-    val inst_31_20 = Cat(inst_31(x), inst_30_25(x), inst_24_21(x), inst_20(x))
-    def iter(l: List[(UInt, String)]): String = l match {
-      case Nil => inst_31_20.litValue().toString(16)
-      case (r, n) :: tail => if (r === inst_31_20) n else iter(tail)  
-    }
-    iter(csrMap)
-  }
+  )).toMap
 
   private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
     LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
@@ -244,12 +234,12 @@ object TestCommon extends FileSystemUtilities {
     (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
-    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
-    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
-    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csr(x), rs1(x)),
-    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csr(x), rs1(x)),
-    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csr(x), rs1(x))
+    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
+    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
+    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
+    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
+    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
+    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x))
   )
 
   def dasm(x: UInt) = {
@@ -262,51 +252,51 @@ object TestCommon extends FileSystemUtilities {
 
   val instCtrls = List(
     //                                                                      kill                    wb_en
-    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel   |  csr_cmd
-    //                   |       |      |      |       |            |    |       |       |           |  |
-    /* AUIPC  */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* LUI    */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* JAL    */ Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n, n),
-    /* JALR   */ Array(pc_alu, a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n, n),
-    /* BEQ    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_eq,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* BNE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ne,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* BLT    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_lt,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* BGE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ge,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* BLTU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ltu, n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* BGEU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_geu, n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
-    /* LB     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lb,  wb_mem,  y, csr_n, n),
-    /* LH     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lh,  wb_mem,  y, csr_n, n),
-    /* LW     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lw,  wb_mem,  y, csr_n, n),
-    /* LBU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lbu, wb_mem,  y, csr_n, n),
-    /* LHU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lhu, wb_mem,  y, csr_n, n),
-    /* SB     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sb,  ld_xxx, wb_alu,  n, csr_n, n),
-    /* SH     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sh,  ld_xxx, wb_alu,  n, csr_n, n),
-    /* SW     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sw,  ld_xxx, wb_alu,  n, csr_n, n),
-    /* ADDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLTI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLTIU  */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* XORI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* ORI    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* ANDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SRLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SRAI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* ADD    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SUB    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sub,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLT    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLTU   */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* XOR    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* OR     */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* AND    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
-    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_w, n),
-    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_s, n),
-    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_c, n),
-    /* CSRRWI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_w, n),
-    /* CSRRSI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_s, n),
-    /* CSRRCI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_c, n)
+    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel  |  csr_cmd
+    //                   |       |      |      |       |            |    |       |       |          |  |
+    /* AUIPC  */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* LUI    */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* JAL    */ Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc4, y, csr_n, n),
+    /* JALR   */ Array(pc_alu, a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc4, y, csr_n, n),
+    /* BEQ    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_eq,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* BNE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ne,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* BLT    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_lt,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* BGE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ge,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* BLTU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ltu, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* BGEU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_geu, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
+    /* LB     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lb,  wb_mem, y, csr_n, n),
+    /* LH     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lh,  wb_mem, y, csr_n, n),
+    /* LW     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lw,  wb_mem, y, csr_n, n),
+    /* LBU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lbu, wb_mem, y, csr_n, n),
+    /* LHU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lhu, wb_mem, y, csr_n, n),
+    /* SB     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sb,  ld_xxx, wb_alu, n, csr_n, n),
+    /* SH     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sh,  ld_xxx, wb_alu, n, csr_n, n),
+    /* SW     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sw,  ld_xxx, wb_alu, n, csr_n, n),
+    /* ADDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLTI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLTIU  */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* XORI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* ORI    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* ANDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SRLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SRAI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* ADD    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SUB    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sub,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLT    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLTU   */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* XOR    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* OR     */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* AND    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
+    /* CSRRWI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRSI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRCI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
     )
 
   def decode(x: UInt) = {
