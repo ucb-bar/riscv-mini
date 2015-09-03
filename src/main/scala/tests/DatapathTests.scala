@@ -20,6 +20,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     poke(c.io.ctrl.br_type,   ctrl(5))
     poke(c.io.ctrl.st_type,   ctrl(7))
     poke(c.io.ctrl.data_re,   data_re)
+    poke(c.io.ctrl.csr_cmd,   ctrl(11))
     println("=======================")
   }
 
@@ -30,7 +31,6 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     poke(c.io.ctrl.ld_type, ctrl(8))
     poke(c.io.ctrl.wb_sel,  ctrl(9))
     poke(c.io.ctrl.wb_en,   ctrl(10))
-    poke(c.io.ctrl.csr_cmd, ctrl(11))
     println("=======================")
   }
 

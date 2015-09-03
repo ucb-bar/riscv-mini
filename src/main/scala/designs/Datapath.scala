@@ -3,7 +3,7 @@ package mini
 import Chisel._
 
 object Const {
-  val PC_START = UInt(0x2000)
+  val PC_START = UInt(0x200)
 }
 
 class DatapathIO extends Bundle {
@@ -17,25 +17,29 @@ class DatapathIO extends Bundle {
 import Control._
 
 class Datapath extends Module with CoreParams {
-  val io = new DatapathIO
-  val alu = Module(new ALU)
+  val io      = new DatapathIO
+  val alu     = Module(new ALU)
+  val csr     = Module(new CSR)
   val brCond  = Module(new BrCond)  
   val regFile = Module(new RegFile) 
   val immGen  = Module(new ImmGenWire) 
 
   /***** Fetch / Execute Registers *****/
-  val fe_inst = RegInit(UInt(0, instLen))
+  val fe_inst = RegInit(Instructions.NOP)
   val fe_pc   = Reg(UInt())
 
   /***** Execute / Write Back Registers *****/
-  val ew_inst = RegInit(UInt(0, instLen))
-  val ew_pc  = Reg(UInt())
-  val ew_alu = Reg(UInt())
+  val ew_inst = RegInit(Instructions.NOP)
+  val ew_pc   = Reg(UInt())
+  val ew_alu  = Reg(UInt())
+  val ew_csr  = Reg(UInt())
  
   /****** Fetch *****/
-  val pc = RegInit(Const.PC_START-UInt(4)) 
-  val iaddr = Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum, pc + UInt(4))
-  val inst  = Mux(io.ctrl.inst_type === I_KILL || brCond.io.taken, Instructions.NOP, io.icache.dout)
+  val xpt   = csr.io.xptin || csr.io.xptout
+  val pc    = RegInit(Const.PC_START-UInt(4)) 
+  val iaddr = Mux(xpt, csr.io.mtvec,
+              Mux(io.ctrl.pc_sel    === PC_ALU || brCond.io.taken, alu.io.sum,pc + UInt(4)))
+  val inst  = Mux(io.ctrl.inst_type === I_KILL || brCond.io.taken || xpt, Instructions.NOP, io.icache.dout)
  
   io.icache.addr := iaddr 
   io.icache.re   := io.ctrl.inst_re
@@ -91,11 +95,22 @@ class Datapath extends Module with CoreParams {
     ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) )))
   io.dcache.din  := rs2 << woffset 
   
+  // CSR access
+  csr.io.host <> io.host
+  csr.io.in    := rs2
+  csr.io.src   := rs2_addr
+  csr.io.csr   := ew_inst(31, 20) 
+  csr.io.cmd   := io.ctrl.csr_cmd
+  csr.io.stall := io.stall
+  csr.io.pc    := fe_pc
+  csr.io.xptin := io.ctrl.xpt
+
   // Pipelining
   when(!io.stall) {
     ew_pc   := fe_pc
     ew_inst := fe_inst
     ew_alu  := alu.io.out
+    ew_csr  := csr.io.out
   }
 
   // Load
@@ -107,17 +122,11 @@ class Datapath extends Module with CoreParams {
     LD_LHU -> lshift(15, 0).zext,
     LD_LBU -> lshift(7, 0).zext) )
     
-  val csr = Module(new CSR)
-  csr.io.host <> io.host
-  csr.io.src := ew_alu 
-  csr.io.csr := ew_inst(31, 20) 
-  csr.io.cmd := io.ctrl.csr_cmd
-
   // Regfile Write
   val regWrite = MuxLookup(io.ctrl.wb_sel, ew_alu.zext, Seq(
-    WB_MEM  -> load,
-    WB_PC_4 -> (ew_pc + UInt(4)).zext,
-    WB_CSR  -> csr.io.out.zext) )
+    WB_MEM -> load,
+    WB_PC4 -> (ew_pc + UInt(4)).zext,
+    WB_CSR -> ew_csr.zext) )
 
   regFile.io.wen   := io.ctrl.wb_en
   regFile.io.waddr := ex_rd_addr

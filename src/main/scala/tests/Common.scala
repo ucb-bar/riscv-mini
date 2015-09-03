@@ -4,7 +4,6 @@ import Chisel._
 import Instructions._
 import scala.io.Source
 import scala.util.Random
-import scala.collection.immutable.ListMap
 import scala.collection.mutable.HashMap
 
 object TestCommon extends FileSystemUtilities {
@@ -14,6 +13,7 @@ object TestCommon extends FileSystemUtilities {
   private def rand_rs1 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
   private def rand_fn3 = UInt(Random.nextInt(1 << 3), 3) 
   private def rand_rd  = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
+  private def rand_csr = csrRegs(Random.nextInt(csrRegs.size))
 
   private def reg(x: Int) = UInt(x, 5)
   private def imm(x: Int) = SInt(x, 21)
@@ -75,7 +75,13 @@ object TestCommon extends FileSystemUtilities {
     Cat(Funct7.S, rand_rs2, rand_rs1, Funct3.SR, rand_rd, Opcode.RTYPE),
     Cat(Funct7.U, rand_rs2, rand_rs1, Funct3.OR, rand_rd, Opcode.RTYPE),
     Cat(Funct7.U, rand_rs2, rand_rs1, Funct3.AND, rand_rd, Opcode.RTYPE),
-    fin
+    Cat(rand_csr, rand_rs1, Funct3.CSRRW, rand_rd, Opcode.SYSTEM),
+    Cat(rand_csr, rand_rs1, Funct3.CSRRS, rand_rd, Opcode.SYSTEM),
+    Cat(rand_csr, rand_rs1, Funct3.CSRRC, rand_rd, Opcode.SYSTEM),
+    Cat(rand_csr, rand_rs1, Funct3.CSRRWI, rand_rd, Opcode.SYSTEM),
+    Cat(rand_csr, rand_rs1, Funct3.CSRRSI, rand_rd, Opcode.SYSTEM),
+    Cat(rand_csr, rand_rs1, Funct3.CSRRCI, rand_rd, Opcode.SYSTEM),
+    UInt(Random.nextInt()) // IllegalInst
   )
 
   val y      = BigInt(1)
@@ -173,132 +179,143 @@ object TestCommon extends FileSystemUtilities {
 
   implicit def toBoolean(x: Bool) = x.isTrue
 
-  val csrNames = ListMap(
-    CSR.mcpuid    -> "mcpuid",
-    CSR.mimpid    -> "mimpid",
-    CSR.mhartid   -> "mhartid",
-    CSR.mstatus   -> "mstatus",
-    CSR.mtvec     -> "mtvec",
-    CSR.mtdeleg   -> "mtdeleg",
-    CSR.mie       -> "mie",
-    CSR.mtimecmp  -> "mtimecmp",
-    CSR.mtime     -> "mtime",
-    CSR.mtimeh    -> "mtimeh",
-    CSR.mscratch  -> "mscratch",
-    CSR.mepc      -> "mepc",
-    CSR.mcause    -> "mcause",
-    CSR.mbadaddr  -> "mbadaddr",
-    CSR.mip       -> "mip",
-    CSR.mbase     -> "mbase",
-    CSR.mbound    -> "mbound",
-    CSR.mibase    -> "mibase",
-    CSR.mibound   -> "mibound",
-    CSR.mdbase    -> "mdbase",
-    CSR.mdbound   -> "mdbound",
-    CSR.mtohost   -> "mtohost",
-    CSR.mfromhost -> "mfromhost"
+  val csrRegs = Array(
+    CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mstatus, CSR.mtvec, CSR.mtdeleg, CSR.mie,
+    CSR.mtimecmp, CSR.mtime, CSR.mtimeh, CSR.mscratch, CSR.mepc, CSR.mcause, CSR.mbadaddr, CSR.mip,
+    CSR.mtohost, CSR.mfromhost
   )
+
+  val csrNames = Array(
+    "mcpuid", "mimpid","mhartid", "mstatus", "mtvec", "mtdeleg", "mie",
+    "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
+    "mtohost", "mfromhost"
+  )
+
+  val csrMap = (csrRegs zip csrNames).toList
 
   def csr(x: UInt) = {
     val inst_31_20 = Cat(inst_31(x), inst_30_25(x), inst_24_21(x), inst_20(x))
-    csrNames getOrElse (inst_31_20, inst_31_20.litValue().toString)
+    def iter(l: List[(UInt, String)]): String = l match {
+      case Nil => inst_31_20.litValue().toString(16)
+      case (r, n) :: tail => if (r === inst_31_20) n else iter(tail)  
+    }
+    iter(csrMap)
   }
 
-  /* val insts = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
-    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, AND, ANDI,
-    SLT, SLTI, SLTU, SLTIU, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI) */
+  private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
+    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
+    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
 
-  def dasm(x: UInt) =
-    if (x === AUIPC)      "AUIPC x%d, %x".format(rd(x), uimm(x)) 
-    else if (x === LUI)   "LUI x%d, %x".format(rd(x), uimm(x))
-    else if (x === JAL)   "JAL x%d, %x".format(rd(x), jimm(x))
-    else if (x === JALR)  "JALR x%d, x%d, %x".format(rd(x), rs2(x), iimm(x))
-    else if (x === BEQ)   "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === BNE)   "BNE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === BLT)   "BLT x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === BGE)   "BGE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === BLTU)  "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === BGEU)  "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x))
-    else if (x === LB)    "LB x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === LH)    "LH x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === LW)    "LW x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === LBU)   "LBU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === LHU)   "LHU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SB)    "SB x%d, x%d, %x".format(rs2(x), rs1(x), simm(x))
-    else if (x === SH)    "SH x%d, x%d, %x".format(rs2(x), rs1(x), simm(x))
-    else if (x === SW)    "SW x%d, x%d, %x".format(rs2(x), rs1(x), simm(x))
-    else if (x === ADDI)  "ADDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SLTI)  "SLTI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SLTIU) "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === XORI)  "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === ORI)   "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === ANDI)  "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SLLI)  "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SRLI)  "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === SRAI)  "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x))
-    else if (x === ADD)   "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SUB)   "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SLT)   "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SLTU)  "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === XOR)   "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === OR)    "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === AND)   "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SLL)   "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SRL)   "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === SRA)   "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x))
-    else if (x === CSRRW)  "CSRRW x%d, %s, x%d".format(rd(x), csr(x), rs1(x))
-    else if (x === CSRRWI) "CSRRWI x%d, %s, x%d".format(rd(x), csr(x), rs1(x))
-    else if (x === NOP)   "NOP"
-    else "????"
+  private val instFmts = List(
+    (x: UInt) => "AUIPC x%d, %x".format(rd(x), uimm(x)),
+    (x: UInt) => "LUI x%d, %x".format(rd(x), uimm(x)),
+    (x: UInt) => "JAL x%d, %x".format(rd(x), jimm(x)),
+    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), iimm(x)),
+    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
+    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
+    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csr(x), rs1(x)),
+    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csr(x), rs1(x)),
+    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csr(x), rs1(x)),
+    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csr(x), rs1(x))
+  )
 
-  def decode(x: UInt) =
-    //                                                                   kill                    wb_en
-    //                         pc_sel   A_sel   B_sel   alu_op     br_type |  st_type ld_type wb_sel |  csr_cmd
-    //                           |        |       |      |          |      |  |       |       |      |  |
-    if (x === AUIPC)     Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === LUI)  Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === JAL)  Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n)
-    else if (x === JALR) Array(pc_alu, a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n)
-    else if (x === BEQ)  Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_eq,  n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === BNE)  Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ne,  n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === BLT)  Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_lt,  n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === BGE)  Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ge,  n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === BLTU) Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ltu, n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === BGEU) Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_geu, n, st_xxx, ld_xxx, wb_alu, n, csr_n)
-    else if (x === LB)   Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lb,  wb_mem, y, csr_n)
-    else if (x === LH)   Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lh,  wb_mem, y, csr_n)
-    else if (x === LW)   Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lw,  wb_mem, y, csr_n)
-    else if (x === LBU)  Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lbu, wb_mem, y, csr_n)
-    else if (x === LHU)  Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lhu, wb_mem, y, csr_n)
-    else if (x === SB)   Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sb,  ld_xxx, wb_alu, n, csr_n)
-    else if (x === SH)   Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sh,  ld_xxx, wb_alu, n, csr_n)
-    else if (x === SW)   Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sw,  ld_xxx, wb_alu, n, csr_n)
-    else if (x === ADDI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLTI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLTIU) Array(pc_4,  a_rs1,  b_imm, imm_i, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === XORI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === ORI)  Array(pc_4,   a_rs1,  b_imm, imm_i, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === ANDI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLLI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SRLI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SRAI) Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === ADD)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SUB)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sub,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLT)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLTU) Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === XOR)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === OR)   Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === AND)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SLL)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SRL)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === SRA)  Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n)
-    else if (x === CSRRW) Array(pc_4,  a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_w)
-    else if (x === CSRRS) Array(pc_4,  a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_s)
-    else if (x === CSRRC) Array(pc_4,  a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_c)
-    else if (x === CSRRWI) Array(pc_4, a_xxx,  b_xxx, imm_z, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_w)
-    else if (x === CSRRSI) Array(pc_4, a_xxx,  b_xxx, imm_z, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_s)
-    else if (x === CSRRCI) Array(pc_4, a_xxx,  b_xxx, imm_z, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_c)
-    else                  Array(pc_4,   a_xxx,  b_xxx, imm_i, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n)
+  def dasm(x: UInt) = {
+    def iter(l: List[(BitPat, UInt => String)]): String = l match {
+      case Nil => if (x === NOP) "NOP" else "???"
+      case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
+    }
+    iter(instPats zip instFmts)
+  }
+
+  val instCtrls = List(
+    //                                                                      kill                    wb_en
+    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel   |  csr_cmd
+    //                   |       |      |      |       |            |    |       |       |           |  |
+    /* AUIPC  */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* LUI    */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* JAL    */ Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n, n),
+    /* JALR   */ Array(pc_alu, a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc_4, y, csr_n, n),
+    /* BEQ    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_eq,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* BNE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ne,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* BLT    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_lt,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* BGE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ge,  n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* BLTU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ltu, n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* BGEU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_geu, n, st_xxx, ld_xxx, wb_alu,  n, csr_n, n),
+    /* LB     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lb,  wb_mem,  y, csr_n, n),
+    /* LH     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lh,  wb_mem,  y, csr_n, n),
+    /* LW     */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lw,  wb_mem,  y, csr_n, n),
+    /* LBU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lbu, wb_mem,  y, csr_n, n),
+    /* LHU    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_lhu, wb_mem,  y, csr_n, n),
+    /* SB     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sb,  ld_xxx, wb_alu,  n, csr_n, n),
+    /* SH     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sh,  ld_xxx, wb_alu,  n, csr_n, n),
+    /* SW     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sw,  ld_xxx, wb_alu,  n, csr_n, n),
+    /* ADDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLTI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLTIU  */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* XORI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* ORI    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* ANDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SRLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SRAI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* ADD    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SUB    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sub,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLT    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLTU   */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* XOR    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* OR     */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* AND    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu,  y, csr_n, n),
+    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_w, n),
+    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_s, n),
+    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_c, n),
+    /* CSRRWI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_w, n),
+    /* CSRRSI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_s, n),
+    /* CSRRCI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr,  y, csr_c, n)
+    )
+
+  def decode(x: UInt) = {
+    def iter(l: List[(BitPat, Array[BigInt])]): Array[BigInt] = l match {
+      case Nil => Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
+      case (p, s) :: tail => if (x === p) s else iter(tail)  
+    }
+    iter(instPats zip instCtrls)
+  }
 
   abstract class Tests
   case object SimpleTests extends Tests
@@ -336,8 +353,8 @@ object TestCommon extends FileSystemUtilities {
   
   val bypassTest = Array(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
-    S(Funct3.SW, 1, 0, 12),   // SW   x1, x0, 12  # Mem[12] <- 1
-    L(Funct3.LW, 2, 0, 12),   // LW   x2, x0, 12  # x2 <- 1
+    S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
+    L(Funct3.LW, 2, 0, 12),  // LW   x2, x0, 12  # x2 <- 1
     RU(Funct3.ADD, 3, 2, 2), // ADD  x3, x2, x2  # x3 <- 2
     RS(Funct3.ADD, 4, 3, 2), // SUB  x4, x2, x3  # x4 <- 1
     RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4

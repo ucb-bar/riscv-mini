@@ -9,6 +9,10 @@ object CSR {
   val S = UInt(2, 2)
   val C = UInt(3, 2)
 
+  // Supports machine & user modes
+  val PRV_M = UInt(0x0, 2)
+  val PRV_U = UInt(0x3, 2)
+
   // Machine-level CSR addrs
   // Machine Information Registers
   val mcpuid   = UInt(0xf00, 12)
@@ -29,16 +33,15 @@ object CSR {
   val mcause   = UInt(0x342, 12)
   val mbadaddr = UInt(0x343, 12)
   val mip      = UInt(0x344, 12)
-  // Machine Protection and Translation
-  val mbase    = UInt(0x380, 12)
-  val mbound   = UInt(0x381, 12)
-  val mibase   = UInt(0x382, 12)
-  val mibound  = UInt(0x383, 12)
-  val mdbase   = UInt(0x384, 12)
-  val mdbound  = UInt(0x385, 12)
   // Hachine HITF
   val mtohost   = UInt(0x780, 12)
   val mfromhost = UInt(0x781, 12)
+}
+
+object Cause {
+  val InstAddrMisaligned = UInt(0x0)
+  val IllegalInst        = UInt(0x2)
+  val LoadAddrMisaligned = UInt(0x4)
 }
 
 class CSRIO extends CoreBundle {
@@ -48,6 +51,12 @@ class CSRIO extends CoreBundle {
   val in   = UInt(INPUT, instLen)
   val out  = UInt(OUTPUT, instLen)
 
+  val stall  = Bool(INPUT)
+  val pc     = UInt(INPUT, instLen)
+  val xptin  = Bool(INPUT)
+  val xptout = Bool(OUTPUT)
+  val mtvec  = UInt(OUTPUT, instLen)
+ 
   val host = new HostIO
 }
 
@@ -61,24 +70,24 @@ class CSR extends Module with CoreParams {
   val mhartid = UInt(0, instLen) // only one hart
 
   // interrupt enable stack
-  val PRV0 = RegInit(UInt(0, 2))
-  val PRV1 = RegInit(UInt(0, 2))
+  val PRV0 = RegInit(CSR.PRV_M)
+  val PRV1 = RegInit(CSR.PRV_M)
   val PRV2 = UInt(0, 2)
   val PRV3 = UInt(0, 2)
-  val IE0 = RegInit(Bool(true))
-  val IE1 = RegInit(Bool(true))
+  val IE0 = RegInit(Bool(false))
+  val IE1 = RegInit(Bool(false))
   val IE2 = Bool(false)
   val IE3 = Bool(false)
   // virtualization management field
-  val VM = RegInit(UInt(0, 5)) 
+  val VM = UInt(0, 5)
   // memory privilege
-  val MPRV = RegInit(Bool(true))
+  val MPRV = Bool(false)
   // extention context status
   val XS = UInt(0, 2)
   val FS = UInt(0, 2)
   val SD = UInt(0, 1)
   val mstatus = Cat(SD, UInt(0, instLen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV0, IE0)
-  val mtvec   = UInt(0x200, instLen)
+  val mtvec   = UInt(0x100, instLen)
   val mtdeleg = UInt(0x0,   instLen)
   
   // interrupt registers
@@ -104,17 +113,8 @@ class CSR extends Module with CoreParams {
   val mscratch = Reg(UInt(width=instLen))
 
   val mepc = Reg(UInt(width=instLen))
-  val Interrupt = RegInit(Bool(false))
-  val Exception = RegInit(UInt(0, 4))
-  val mcause = Cat(Interrupt, UInt(0, instLen-5), Exception)
+  val mcause = RegInit(UInt(0, instLen))
   val mbadaddr = Reg(UInt(width=instLen))
-
-  val mbase = Reg(UInt(width=instLen))
-  val mbound = Reg(UInt(width=instLen))
-  val mibase = Reg(UInt(width=instLen))
-  val mibound = Reg(UInt(width=instLen))
-  val mdbase = Reg(UInt(width=instLen))
-  val mdbound = Reg(UInt(width=instLen))
 
   val mtohost = RegInit(UInt(0, instLen))
   val mfromhost = Reg(UInt(width=instLen))
@@ -139,12 +139,6 @@ class CSR extends Module with CoreParams {
     CSR.mcause    -> mcause,
     CSR.mbadaddr  -> mbadaddr,
     CSR.mip       -> mip,
-    CSR.mbase     -> mbase,
-    CSR.mbound    -> mbound,
-    CSR.mibase    -> mibase,
-    CSR.mibound   -> mibound,
-    CSR.mdbase    -> mdbase,
-    CSR.mdbound   -> mdbound,
     CSR.mtohost   -> mtohost,
     CSR.mfromhost -> mfromhost)
   val csr = Lookup(io.csr, UInt(0), csrFile.toSeq)
@@ -155,47 +149,49 @@ class CSR extends Module with CoreParams {
   val wen = (io.cmd != CSR.N && io.src.orR)
   val wdata = MuxLookup(io.cmd, UInt(0), Seq(
     CSR.W -> io.in,
-    CSR.C -> (io.out & io.in),
-    CSR.S -> (io.out & ~io.in)
+    CSR.S -> (io.out | io.in),
+    CSR.C -> (io.out & ~io.in)
   ))
+  io.mtvec  := mtvec
+  io.xptout := !isM || (wen && isRO)
 
-  when(!isM || (wen && isRO)) {
-    Interrupt := Bool(true)
-    Exception := UInt(2)
-  }.elsewhen(wen) {
-    when(io.csr === CSR.mstatus) { 
-      VM   := wdata(21, 17)
-      MPRV := wdata(16)
-      PRV1 := wdata(5, 4)
-      IE1  := wdata(3)
-      PRV0 := wdata(2, 1)
-      IE0  := wdata(0)
+  // Timer
+  mtime := mtime + UInt(1)
+  when(mtime.andR) { mtimeh := mtimeh + UInt(1) }
+
+  when(!io.stall) {
+    when(io.xptin || io.xptout) {
+      mepc   := io.pc & SInt(-4)
+      mcause := Cause.IllegalInst
+      // Push interrupt enable stack
+      PRV0  := CSR.PRV_M
+      IE0   := Bool(false)
+      PRV1  := PRV0
+      IE1   := IE0 
+    }.elsewhen(wen) {
+      when(io.csr === CSR.mstatus) { 
+        PRV1 := wdata(5, 4)
+        IE1  := wdata(3)
+        PRV0 := wdata(2, 1)
+        IE0  := wdata(0)
+      }
+      .elsewhen(io.csr === CSR.mip) {
+        MTIP := wdata(7)
+        MSIP := wdata(3)
+      }
+      .elsewhen(io.csr === CSR.mie) {
+        MTIE := wdata(7)
+        MSIE := wdata(3)
+      }
+      .elsewhen(io.csr === CSR.mtime) { mtime := wdata }
+      .elsewhen(io.csr === CSR.mtimeh) { mtimeh := wdata }
+      .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
+      .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
+      .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
+      .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (instLen-1) | 0xf) }
+      .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
+      .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
+      .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
     }
-    .elsewhen(io.csr === CSR.mip) {
-      MTIP := wdata(7)
-      MSIP := wdata(3)
-    }
-    .elsewhen(io.csr === CSR.mie) {
-      MTIE := wdata(7)
-      MSIE := wdata(3)
-    }
-    .elsewhen(io.csr === CSR.mtime) { mtime := wdata }
-    .elsewhen(io.csr === CSR.mtimeh) { mtimeh := wdata }
-    .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
-    .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
-    .elsewhen(io.csr === CSR.mepc) { mepc := wdata }
-    .elsewhen(io.csr === CSR.mcause) {
-      Interrupt := wdata(instLen-1)
-      Exception := wdata(3, 0)
-    }
-    .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
-    .elsewhen(io.csr === CSR.mbase) { mbase := wdata }
-    .elsewhen(io.csr === CSR.mbound) { mbound := wdata }
-    .elsewhen(io.csr === CSR.mibase) { mibase := wdata }
-    .elsewhen(io.csr === CSR.mibound) { mibound := wdata }
-    .elsewhen(io.csr === CSR.mdbase) { mdbase := wdata }
-    .elsewhen(io.csr === CSR.mdbound) { mdbound := wdata }
-    .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
-    .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
   }
 }
