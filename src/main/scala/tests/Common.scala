@@ -14,6 +14,7 @@ object TestCommon extends FileSystemUtilities {
   private def rand_fn3 = UInt(Random.nextInt(1 << 3), 3) 
   private def rand_rd  = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
   private def rand_csr = UInt(csrRegs(Random.nextInt(csrRegs.size)))
+  private def rand_inst = UInt(Random.nextInt())
 
   private def reg(x: Int) = UInt(x, 5)
   private def imm(x: Int) = SInt(x, 21)
@@ -81,7 +82,7 @@ object TestCommon extends FileSystemUtilities {
     Cat(rand_csr, rand_rs1, Funct3.CSRRWI, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRSI, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRCI, rand_rd, Opcode.SYSTEM),
-    UInt(Random.nextInt()) // IllegalInst
+    rand_inst
   )
 
   val y      = BigInt(1)
@@ -155,11 +156,11 @@ object TestCommon extends FileSystemUtilities {
 
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
-  def rd(inst: UInt) = ((inst.litValue() >> 7) & 0x1f).toInt
-  def csr(inst: UInt) = (inst.litValue() >> 20)
+  def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
+  def csr(inst: UInt) =  (inst.litValue() >> 20)
 
   private def inst_31(inst: UInt)    = UInt((inst.litValue() >> 31) & 0x1,  1)
-  private def inst_30_25(inst: UInt) = UInt((inst.litValue() >> 25) & 0x2f, 6)
+  private def inst_30_25(inst: UInt) = UInt((inst.litValue() >> 25) & 0x3f, 6)
   private def inst_24_21(inst: UInt) = UInt((inst.litValue() >> 21) & 0xf,  4)
   private def inst_20(inst: UInt)    = UInt((inst.litValue() >> 20) & 0x1,  1)
   private def inst_19_12(inst: UInt) = UInt((inst.litValue() >> 12) & 0xff, 8)
@@ -191,6 +192,8 @@ object TestCommon extends FileSystemUtilities {
     "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
     "mtohost", "mfromhost"
   )).toMap
+
+  def isRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue() 
 
   private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
     LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
@@ -244,16 +247,16 @@ object TestCommon extends FileSystemUtilities {
 
   def dasm(x: UInt) = {
     def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => if (x === NOP) "NOP" else "???"
+      case Nil => if (x === NOP) "NOP" else "???(%s)".format(x.litValue().toString(16))
       case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
     }
     iter(instPats zip instFmts)
   }
 
   val instCtrls = List(
-    //                                                                      kill                    wb_en
-    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel  |  csr_cmd
-    //                   |       |      |      |       |            |    |       |       |          |  |
+    //                                                                      kill                    wb_en   illiegal?
+    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel  |  csr_cmd _|
+    //                   |       |      |      |       |            |    |       |       |          |  |      |
     /* AUIPC  */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* LUI    */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* JAL    */ Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc4, y, csr_n, n),
@@ -291,12 +294,12 @@ object TestCommon extends FileSystemUtilities {
     /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
-    /* CSRRWI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRSI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRCI */ Array(pc_4,   a_rs1,  b_xxx, imm_z, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
+    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
+    /* CSRRWI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRSI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRCI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
     )
 
   def decode(x: UInt) = {
@@ -341,7 +344,7 @@ object TestCommon extends FileSystemUtilities {
     (dir, tests, maxcycles, verbose)
   }
   
-  val bypassTest = Array(
+  val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
     L(Funct3.LW, 2, 0, 12),  // LW   x2, x0, 12  # x2 <- 1
@@ -354,9 +357,19 @@ object TestCommon extends FileSystemUtilities {
     B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
     nop, nop, fin            // Finish
   )
-  // TODO: add your tests
+  val exceptionTest = List(
+    I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
+    I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 2
+    I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 3
+    rand_inst,               // excpetion
+    I(Funct3.ADD, 1, 1, 1),  // ADDI x1, x1, 1   # x1 <- 2
+    I(Funct3.ADD, 2, 1, 1),  // ADDI x1, x1, 1   # x1 <- 3
+    I(Funct3.ADD, 3, 2, 1),  // ADDI x1, x1, 1   # x1 <- 4
+    fin                      // fin
+  )
   val testResults = Map(
-    bypassTest -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1))
+    bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
+    exceptionTest -> Array((1, 1), (2, 2), (3, 3))
   )
 
   val isaTests = List("")
@@ -380,8 +393,10 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 
   private val pc_start = Const.PC_START.litValue().toInt
+  private val pc_evec  = Const.PC_EVEC.litValue().toInt
 
   def loadMem(test: Seq[UInt]) {
+    write(pc_evec, TestCommon.fin.litValue())
     for((inst, i) <- test.zipWithIndex) {
       write(pc_start + i * blockSize, inst.litValue())
     }

@@ -136,14 +136,14 @@ class Control extends Module {
     SRA   -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_SRA   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     OR    -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_OR    , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     AND   -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_AND   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
-    CSRRW -> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
-    CSRRS -> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
-    CSRRC -> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
-    CSRRWI-> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
-    CSRRSI-> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
-    CSRRCI-> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
-    CSRRCI-> List(PC_4  , A_RS1,  B_XXX, IMM_Z, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
-    NOP   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
+    CSRRW -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
+    CSRRS -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
+    CSRRC -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
+    CSRRWI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
+    CSRRSI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
+    CSRRCI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
+    NOP   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
+    ZERO  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
   ))
   val rs1_addr = io.ctrl.inst(19, 15)
   val rs2_addr = io.ctrl.inst(24, 20)
@@ -151,7 +151,6 @@ class Control extends Module {
   val ld_type  = Reg(ctrlSignals(8))
   val wb_sel   = Reg(ctrlSignals(9))
   val wb_en    = RegInit(Bool(false))
-  val xpt      = RegInit(Bool(false))
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
@@ -164,15 +163,15 @@ class Control extends Module {
   io.ctrl.imm_sel := ctrlSignals(3)
   io.ctrl.alu_op  := ctrlSignals(4)
   io.ctrl.br_type := ctrlSignals(5)
-  io.ctrl.st_type := Mux(xpt, ST_XXX, ctrlSignals(7))
-  io.ctrl.csr_cmd := Mux(xpt, CSR.N,  ctrlSignals(11))
+  io.ctrl.st_type := ctrlSignals(7)
+  io.ctrl.csr_cmd := ctrlSignals(11)
+  io.ctrl.xpt     := ctrlSignals(12).toBool
 
   when(!io.ctrl.stall) {
     st_type := io.ctrl.st_type
     ld_type := ctrlSignals(8)
     wb_sel  := ctrlSignals(9)
-    wb_en   := Mux(xpt, N, ctrlSignals(10).toBool)
-    xpt     := ctrlSignals(12).toBool
+    wb_en   := ctrlSignals(10).toBool
   }
 
   // D$ signals
@@ -182,7 +181,4 @@ class Control extends Module {
   io.ctrl.ld_type := ld_type
   io.ctrl.wb_en   := wb_en 
   io.ctrl.wb_sel  := wb_sel
-
-  // Illegal Instuction Excpetion
-  io.ctrl.xpt     := xpt
 }

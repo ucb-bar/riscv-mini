@@ -18,7 +18,8 @@ class ImmGenWire extends Module {
   val Jimm = Cat(io.inst(31), io.inst(19, 12), io.inst(20), io.inst(30, 25), io.inst(24, 21), UInt(0, 1)).toSInt
   val Zimm = io.inst(19, 15).zext
 
-  io.out := MuxLookup(io.sel, Zimm, Seq(IMM_I -> Iimm, IMM_S -> Simm, IMM_B -> Bimm, IMM_U -> Uimm, IMM_J -> Jimm))
+  io.out := MuxLookup(io.sel, UInt(0), 
+    Seq(IMM_I -> Iimm, IMM_S -> Simm, IMM_B -> Bimm, IMM_U -> Uimm, IMM_J -> Jimm, IMM_Z -> Zimm))
 }
 
 class ImmGenMux extends Module {

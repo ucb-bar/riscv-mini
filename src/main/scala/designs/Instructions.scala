@@ -61,4 +61,5 @@ object Instructions {
   def CSRRCI = BitPat("b?????????????????111?????1110011")
 
   def NOP    = UInt("b00000000000000000000000000010011")
+  def ZERO   = UInt("b00000000000000000000000000000000")
 }

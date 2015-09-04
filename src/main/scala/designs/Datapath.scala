@@ -3,7 +3,8 @@ package mini
 import Chisel._
 
 object Const {
-  val PC_START = UInt(0x200)
+  val PC_START = UInt(0x200, 32)
+  val PC_EVEC  = UInt(0x100, 32)
 }
 
 class DatapathIO extends Bundle {
@@ -35,11 +36,11 @@ class Datapath extends Module with CoreParams {
   val ew_csr  = Reg(UInt())
  
   /****** Fetch *****/
-  val xpt   = csr.io.xptin || csr.io.xptout
+  val xpt_cond = csr.io.xptin || csr.io.xptout
   val pc    = RegInit(Const.PC_START-UInt(4)) 
-  val iaddr = Mux(xpt, csr.io.mtvec,
-              Mux(io.ctrl.pc_sel    === PC_ALU || brCond.io.taken, alu.io.sum,pc + UInt(4)))
-  val inst  = Mux(io.ctrl.inst_type === I_KILL || brCond.io.taken || xpt, Instructions.NOP, io.icache.dout)
+  val iaddr = Mux(xpt_cond, csr.io.mtvec,
+              Mux(io.ctrl.pc_sel    === PC_ALU || brCond.io.taken, alu.io.sum, pc + UInt(4)))
+  val inst  = Mux(io.ctrl.inst_type === I_KILL || brCond.io.taken || xpt_cond, Instructions.NOP, io.icache.dout)
  
   io.icache.addr := iaddr 
   io.icache.re   := io.ctrl.inst_re
@@ -89,7 +90,7 @@ class Datapath extends Module with CoreParams {
   val woffset = alu.io.sum(1) << UInt(4) | alu.io.sum(0) << UInt(3)
   io.dcache.re   := io.ctrl.data_re 
   io.dcache.addr := Mux(io.stall, ew_alu, alu.io.sum)
-  io.dcache.we   := Mux(io.stall, UInt("b0000"), MuxLookup(io.ctrl.st_type, UInt("b0000"), Seq(
+  io.dcache.we   := Mux(io.stall || xpt_cond, UInt("b0000"), MuxLookup(io.ctrl.st_type, UInt("b0000"), Seq(
     ST_SW -> UInt("b1111"),
     ST_SH -> (UInt("b11") << alu.io.sum(1,0)),
     ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) )))
@@ -97,9 +98,9 @@ class Datapath extends Module with CoreParams {
   
   // CSR access
   csr.io.host <> io.host
-  csr.io.in    := rs2
-  csr.io.src   := rs2_addr
-  csr.io.csr   := ew_inst(31, 20) 
+  csr.io.in    := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
+  csr.io.src   := rs1_addr
+  csr.io.csr   := fe_inst(31, 20) 
   csr.io.cmd   := io.ctrl.csr_cmd
   csr.io.stall := io.stall
   csr.io.pc    := fe_pc
@@ -128,7 +129,7 @@ class Datapath extends Module with CoreParams {
     WB_PC4 -> (ew_pc + UInt(4)).zext,
     WB_CSR -> ew_csr.zext) )
 
-  regFile.io.wen   := io.ctrl.wb_en
+  regFile.io.wen   := io.ctrl.wb_en && !RegNext(xpt_cond)
   regFile.io.waddr := ex_rd_addr
   regFile.io.wdata := regWrite
 }

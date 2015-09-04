@@ -87,7 +87,7 @@ class CSR extends Module with CoreParams {
   val FS = UInt(0, 2)
   val SD = UInt(0, 1)
   val mstatus = Cat(SD, UInt(0, instLen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV0, IE0)
-  val mtvec   = UInt(0x100, instLen)
+  val mtvec   = Const.PC_EVEC
   val mtdeleg = UInt(0x0,   instLen)
   
   // interrupt registers
@@ -153,7 +153,7 @@ class CSR extends Module with CoreParams {
     CSR.C -> (io.out & ~io.in)
   ))
   io.mtvec  := mtvec
-  io.xptout := !isM || (wen && isRO)
+  io.xptout := (!isM && io.cmd != CSR.N) || (wen && isRO)
 
   // Timer
   mtime := mtime + UInt(1)

@@ -57,7 +57,16 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
       runTests(maxcycles, verbose)
       for ((rd, expected) <- testResults(bypassTest)) {
         val result = peekAt(c.dpath.regFile.regs, rd)
-        expect(result == expected, "RegFile[%d] = %d == %d".format(rd, result, expected))
+        println("[%s] RegFile[%d] = %d == %d".format(
+                if (result == expected) "PASS" else "FAIL", rd, result, expected))
+      }
+      reset(5)
+      mem.loadMem(exceptionTest)
+      runTests(maxcycles, verbose)
+      for ((rd, expected) <- testResults(exceptionTest)) {
+        val result = peekAt(c.dpath.regFile.regs, rd)
+        println("[%s] RegFile[%d] = %d == %d".format(
+                if (result == expected) "PASS" else "FAIL", rd, result, expected))
       }
     case ISATests => for (test <- isaTests) {
       mem.loadMem(dir + "/" + test)

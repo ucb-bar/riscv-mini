@@ -10,7 +10,6 @@ class CSRTests(c: CSR) extends Tester(c) {
   val pc = int(rnd.nextInt() & -4)
   def nextIn = int(rnd.nextInt() & 0xffffffff)
   def nextSrc = int(rnd.nextInt() & 0x1f)
-  def isRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue()
   def pokeCSR(csr: BigInt, value: BigInt) {
     if (csr == CSR.mstatus.litValue()) {
       poke(c.PRV1, (value >> 4) & 0x3)
