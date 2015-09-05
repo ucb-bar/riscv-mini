@@ -4,14 +4,15 @@ import Chisel._
 import scala.collection.immutable.ListMap
 
 object CSR {
-  val N = UInt(0, 2)
-  val W = UInt(1, 2)
-  val S = UInt(2, 2)
-  val C = UInt(3, 2)
+  val N = UInt(0, 3)
+  val W = UInt(1, 3)
+  val S = UInt(2, 3)
+  val C = UInt(3, 3)
+  val P = UInt(4, 3)
 
   // Supports machine & user modes
-  val PRV_M = UInt(0x0, 2)
-  val PRV_U = UInt(0x3, 2)
+  val PRV_U = UInt(0x0, 2)
+  val PRV_M = UInt(0x3, 2)
 
   // Machine-level CSR addrs
   // Machine Information Registers
@@ -41,22 +42,24 @@ object CSR {
 object Cause {
   val InstAddrMisaligned = UInt(0x0)
   val IllegalInst        = UInt(0x2)
+  val Breakpoint         = UInt(0x3)
   val LoadAddrMisaligned = UInt(0x4)
+  val Ecall              = UInt(0x8)
 }
 
 class CSRIO extends CoreBundle {
-  val cmd  = UInt(INPUT, 2)
+  val cmd  = UInt(INPUT, 3)
   val csr  = UInt(INPUT, 12)
   val src  = UInt(INPUT, 5)
   val in   = UInt(INPUT, instLen)
   val out  = UInt(OUTPUT, instLen)
-
-  val stall  = Bool(INPUT)
-  val pc     = UInt(INPUT, instLen)
-  val xptin  = Bool(INPUT)
-  val xptout = Bool(OUTPUT)
-  val mtvec  = UInt(OUTPUT, instLen)
- 
+  // Excpetion
+  val pc   = UInt(INPUT, instLen)
+  val expt = Bool(OUTPUT)
+  val eret = Bool(OUTPUT)
+  val evec = UInt(OUTPUT, instLen)
+  val illegal_inst = Bool(INPUT)
+  // HTIF
   val host = new HostIO
 }
 
@@ -64,18 +67,18 @@ class CSR extends Module with CoreParams {
   val io = new CSRIO
 
   val mcpuid  = Cat(UInt(0, 2) /* RV32I */, UInt(0, instLen-28), 
-                   UInt(1 << ('I' - 'A') /* Base ISA */| 
-                        1 << ('U' - 'A') /* User Mode */, 26))
+                    UInt(1 << ('I' - 'A') /* Base ISA */| 
+                         1 << ('U' - 'A') /* User Mode */, 26))
   val mimpid  = UInt(0, instLen) // not implemented
   val mhartid = UInt(0, instLen) // only one hart
 
   // interrupt enable stack
-  val PRV0 = RegInit(CSR.PRV_M)
-  val PRV1 = RegInit(CSR.PRV_M)
+  val PRV  = RegInit(CSR.PRV_U)
+  val PRV1 = UInt(0, 2)
   val PRV2 = UInt(0, 2)
   val PRV3 = UInt(0, 2)
-  val IE0 = RegInit(Bool(false))
-  val IE1 = RegInit(Bool(false))
+  val IE  = RegInit(Bool(true))
+  val IE1 = Bool(false)
   val IE2 = Bool(false)
   val IE3 = Bool(false)
   // virtualization management field
@@ -86,9 +89,9 @@ class CSR extends Module with CoreParams {
   val XS = UInt(0, 2)
   val FS = UInt(0, 2)
   val SD = UInt(0, 1)
-  val mstatus = Cat(SD, UInt(0, instLen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV0, IE0)
+  val mstatus = Cat(SD, UInt(0, instLen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
   val mtvec   = Const.PC_EVEC
-  val mtdeleg = UInt(0x0,   instLen)
+  val mtdeleg = UInt(0x0, instLen)
   
   // interrupt registers
   val MTIP = RegInit(Bool(false))
@@ -144,54 +147,58 @@ class CSR extends Module with CoreParams {
   val csr = Lookup(io.csr, UInt(0), csrFile.toSeq)
   io.out := csr.zext
 
-  val isM  = io.csr(9, 8).andR
-  val isRO = io.csr(11, 10).andR || io.csr === CSR.mtvec || io.csr === CSR.mtdeleg
-  val wen = (io.cmd != CSR.N && io.src.orR)
-  val wdata = MuxLookup(io.cmd, UInt(0), Seq(
+  val privValid = io.csr(9, 8) <= PRV
+  val privInst  = io.cmd === CSR.P
+  val isEcall   = privInst && !io.csr(0) && !io.csr(8)
+  val isEbreak  = privInst && io.csr(0)  && !io.csr(8)
+  val isEret    = privInst && !io.csr(0) && io.csr(8)
+  val csrValid  = csrFile map (_._1 === io.csr) reduce (_ || _)
+  val csrRO     = io.csr(11, 10).andR || io.csr === CSR.mtvec || io.csr === CSR.mtdeleg
+  val wen       = io.cmd(1, 0).orR && io.src.orR
+  val wdata     = MuxLookup(io.cmd, UInt(0), Seq(
     CSR.W -> io.in,
     CSR.S -> (io.out | io.in),
     CSR.C -> (io.out & ~io.in)
   ))
-  io.mtvec  := mtvec
-  io.xptout := (!isM && io.cmd != CSR.N) || (wen && isRO)
+  io.expt := io.illegal_inst || io.cmd(1, 0).orR && (!csrValid || !privValid || (io.src.orR && csrRO)) ||
+             (privInst && !privValid) || isEcall || isEbreak
+  io.eret := isEret
+  io.evec := Mux(io.eret, mepc, mtvec + (PRV << UInt(6)))
 
   // Timer
   mtime := mtime + UInt(1)
   when(mtime.andR) { mtimeh := mtimeh + UInt(1) }
 
-  when(!io.stall) {
-    when(io.xptin || io.xptout) {
-      mepc   := io.pc & SInt(-4)
-      mcause := Cause.IllegalInst
-      // Push interrupt enable stack
-      PRV0  := CSR.PRV_M
-      IE0   := Bool(false)
-      PRV1  := PRV0
-      IE1   := IE0 
-    }.elsewhen(wen) {
-      when(io.csr === CSR.mstatus) { 
-        PRV1 := wdata(5, 4)
-        IE1  := wdata(3)
-        PRV0 := wdata(2, 1)
-        IE0  := wdata(0)
-      }
-      .elsewhen(io.csr === CSR.mip) {
-        MTIP := wdata(7)
-        MSIP := wdata(3)
-      }
-      .elsewhen(io.csr === CSR.mie) {
-        MTIE := wdata(7)
-        MSIE := wdata(3)
-      }
-      .elsewhen(io.csr === CSR.mtime) { mtime := wdata }
-      .elsewhen(io.csr === CSR.mtimeh) { mtimeh := wdata }
-      .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
-      .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
-      .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
-      .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (instLen-1) | 0xf) }
-      .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
-      .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
-      .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
+  when(io.expt) {
+    mepc   := io.pc & SInt(-4)
+    mcause := Mux(isEcall,  Cause.Ecall + PRV,
+              Mux(isEbreak, Cause.Breakpoint, Cause.IllegalInst))
+    PRV := CSR.PRV_M
+    IE  := Bool(false)
+  }.elsewhen(io.eret) {
+    PRV := CSR.PRV_U
+    IE  := Bool(true)
+  }.elsewhen(wen) {
+    when(io.csr === CSR.mstatus) { 
+      PRV := wdata(2, 1)
+      IE  := wdata(0)
     }
+    .elsewhen(io.csr === CSR.mip) {
+      MTIP := wdata(7)
+      MSIP := wdata(3)
+    }
+    .elsewhen(io.csr === CSR.mie) {
+      MTIE := wdata(7)
+      MSIE := wdata(3)
+    }
+    .elsewhen(io.csr === CSR.mtime) { mtime := wdata }
+    .elsewhen(io.csr === CSR.mtimeh) { mtimeh := wdata }
+    .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
+    .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
+    .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
+    .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (instLen-1) | 0xf) }
+    .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
+    .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
+    .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
   }
 }

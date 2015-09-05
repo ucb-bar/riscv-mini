@@ -6,6 +6,7 @@ import TestCommon._
 class DatapathTests(c: Datapath) extends Tester(c) {
   implicit def bigIntToBoolean(b: BigInt) = b != 0
   implicit def bigIntToInt(b: BigInt) = b.toInt
+  implicit def uintToBigInt(x: UInt) = x.litValue()
 
   def pokeExCtrl(ctrl: Array[BigInt], br_cond: Boolean) {
     val inst_type = if (ctrl(8) != ld_xxx || ctrl(6) == y) i_kill else i_next
@@ -47,9 +48,11 @@ class DatapathTests(c: Datapath) extends Tester(c) {
   poke(c.io.stall, 0)
 
   /* Run ISA tests */
+  var prv = CSR.PRV_U.litValue()
+  var epc = BigInt(0)
   for ((inst, i) <- insts.zipWithIndex) {
     println("*********************")
-    println("  " + dasm(inst))
+    println("  %s (0x%s)".format(dasm(inst), inst.litValue().toString(16)))
     println("*********************")
 
     poke(c.io.ctrl.inst_re, 1)
@@ -61,8 +64,8 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     step(1)
     // Emulate fetch
     poke(c.io.ctrl.inst_re, 0)
-    poke(c.io.icache.dout,  inst.litValue())
-    poke(c.io.dcache.dout,  0)
+    poke(c.io.icache.dout, inst)
+    poke(c.io.dcache.dout, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
     pokeWbCtrl(decode(Instructions.NOP))
     step(1) 
@@ -105,15 +108,19 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     val csr_addr = csr(inst)
     val csr_file = c.csr.csrFile map { case (k, v) => (k.litValue(), v) }
     val csr_out  = if (csr_file contains csr_addr) peek(csr_file(csr_addr)) else BigInt(0)
-    val xpt_cond = (ctrl(11) != csr_n) && isRO(csr_addr) && rs1_val != 0 || ctrl(12)
-    val npc = if (xpt_cond) BigInt(0x100)
+    val eret = ctrl(11) == csr_p && csr_addr == Funct12.ERET.litValue()
+    val expt = ctrl(11) == csr_p && csr_addr != Funct12.ERET.litValue() || ctrl(12) ||
+              (ctrl(11) & 0x3) && (!csrVal(csr_addr) || !csrPrv(csr_addr, prv) || (csrRO(csr_addr) && rs1_addr != 0))
+    val npc = if (expt && prv) BigInt(pc_mtvec)
+      else if (expt) BigInt(pc_utvec)
+      else if (eret) epc
       else if (br_cond) alu_out
       else if (ctrl(0) == pc_4) pc + 4
       else if (ctrl(0) == pc_alu) alu_out
       else pc
     val doffset = (8 * (alu_sum.toInt & 0x3)) & 0x1f
     val din = (rs2_val << doffset) & 0xffffffff
-    val dwe = if (xpt_cond) BigInt(0)
+    val dwe = if (expt) BigInt(0)
       else if (ctrl(7) == st_sw) BigInt(0xf)
       else if (ctrl(7) == st_sh) (BigInt(0x3) << (alu_out.toInt & 0x3)) & 0xf
       else if (ctrl(7) == st_sb) (BigInt(0x1) << (alu_out.toInt & 0x3)) & 0xf
@@ -155,7 +162,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     step(1)
 
     // Check the results
-    val wb_res = if (!ctrl(10) || xpt_cond) rd_val
+    val wb_res = if (!ctrl(10) || expt) rd_val
       else if (ctrl(9) == wb_alu) alu_out
       else if (ctrl(9) == wb_mem) load
       else if (ctrl(9) == wb_pc4) pc + 4
@@ -163,6 +170,11 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else rd_val
     val wb_rd_val = peekAt(c.regFile.regs, rd_addr)
     expect(wb_res == wb_rd_val, "Result Check: %d == %d".format(wb_res, wb_rd_val))
-    println("")
+    if (expt) {
+      prv = CSR.PRV_M
+      epc = pc
+    } else if (eret) {
+      prv = CSR.PRV_U
+    }
   } 
 }

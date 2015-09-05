@@ -77,7 +77,7 @@ class ControlSignals extends CoreBundle {
   val ld_type   = UInt(OUTPUT, 3)
   val wb_sel    = UInt(OUTPUT, 2) 
   val wb_en     = Bool(OUTPUT)
-  val csr_cmd   = UInt(OUTPUT, 2)
+  val csr_cmd   = UInt(OUTPUT, 3)
   val xpt       = Bool(OUTPUT)
  
   val inst       = UInt(INPUT, instLen)
@@ -142,6 +142,12 @@ class Control extends Module {
     CSRRWI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
     CSRRSI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
     CSRRCI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
+    FENCE -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
+    FENCEI-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
+    ECALL -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
+    EBREAK-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
+    ERET  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
+    WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     NOP   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     ZERO  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
   ))

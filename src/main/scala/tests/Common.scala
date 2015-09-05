@@ -13,7 +13,7 @@ object TestCommon extends FileSystemUtilities {
   private def rand_rs1 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
   private def rand_fn3 = UInt(Random.nextInt(1 << 3), 3) 
   private def rand_rd  = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
-  private def rand_csr = UInt(csrRegs(Random.nextInt(csrRegs.size)))
+  private def rand_csr = UInt(csrRegs(Random.nextInt(csrRegs.size-1)))
   private def rand_inst = UInt(Random.nextInt())
 
   private def reg(x: Int) = UInt(x, 5)
@@ -34,9 +34,12 @@ object TestCommon extends FileSystemUtilities {
     Cat(imm(i), reg(rd), op)
   private def J(op: UInt, rd: Int, i: Int) = 
     Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
+  private def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 
-  val fin  = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
-  val nop  = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
+  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
+  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
+  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
 
   def insts = Array(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
@@ -76,13 +79,14 @@ object TestCommon extends FileSystemUtilities {
     Cat(Funct7.S, rand_rs2, rand_rs1, Funct3.SR, rand_rd, Opcode.RTYPE),
     Cat(Funct7.U, rand_rs2, rand_rs1, Funct3.OR, rand_rd, Opcode.RTYPE),
     Cat(Funct7.U, rand_rs2, rand_rs1, Funct3.AND, rand_rd, Opcode.RTYPE),
+    fence, FENCEI,
     Cat(rand_csr, rand_rs1, Funct3.CSRRW, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRS, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRC, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRWI, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRSI, rand_rd, Opcode.SYSTEM),
     Cat(rand_csr, rand_rs1, Funct3.CSRRCI, rand_rd, Opcode.SYSTEM),
-    rand_inst
+    ECALL, EBREAK, ERET, nop, rand_inst
   )
 
   val y      = BigInt(1)
@@ -153,6 +157,7 @@ object TestCommon extends FileSystemUtilities {
   val csr_w = BigInt(1)
   val csr_s = BigInt(2)
   val csr_c = BigInt(3)
+  val csr_p = BigInt(4)
 
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
@@ -182,22 +187,24 @@ object TestCommon extends FileSystemUtilities {
   implicit def toBoolean(x: Bool) = x.isTrue
 
   val csrRegs = List(
-    CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mstatus, CSR.mtvec, CSR.mtdeleg, CSR.mie,
+    CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mtvec, CSR.mtdeleg, CSR.mie,
     CSR.mtimecmp, CSR.mtime, CSR.mtimeh, CSR.mscratch, CSR.mepc, CSR.mcause, CSR.mbadaddr, CSR.mip,
-    CSR.mtohost, CSR.mfromhost
+    CSR.mtohost, CSR.mfromhost, CSR.mstatus
   ) map (_.litValue())
 
   val csrNames = (csrRegs zip List(
-    "mcpuid", "mimpid","mhartid", "mstatus", "mtvec", "mtdeleg", "mie",
+    "mcpuid", "mimpid","mhartid", "mtvec", "mtdeleg", "mie",
     "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
-    "mtohost", "mfromhost"
+    "mtohost", "mfromhost", "mstatus"
   )).toMap
 
-  def isRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue() 
+  def csrPrv(csr: BigInt, prv: BigInt) = ((csr >> 8) & 0x3) <= prv
+  def csrVal(csr: BigInt) = csrRegs exists (_ == csr)
+  def csrRO (csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue() 
 
   private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
     LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
-    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
+    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
 
   private val instFmts = List(
     (x: UInt) => "AUIPC x%d, %x".format(rd(x), uimm(x)),
@@ -237,6 +244,7 @@ object TestCommon extends FileSystemUtilities {
     (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "FENCE",
     (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
     (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
     (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
@@ -247,7 +255,12 @@ object TestCommon extends FileSystemUtilities {
 
   def dasm(x: UInt) = {
     def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => if (x === NOP) "NOP" else "???(%s)".format(x.litValue().toString(16))
+      case Nil if x === FENCEI => "FENCEI"
+      case Nil if x === ECALL  => "ECALL"
+      case Nil if x === EBREAK => "EBREAK"
+      case Nil if x === ERET   => "ERET"
+      case Nil if x === NOP    => "NOP"
+      case Nil => "???(%s)".format(x.litValue().toString(16))
       case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
     }
     iter(instPats zip instFmts)
@@ -294,6 +307,7 @@ object TestCommon extends FileSystemUtilities {
     /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
+    /* FENCE  */ Array(pc_4,   a_xxx,  b_xxx, imm_x, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
     /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
     /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
     /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
@@ -304,11 +318,20 @@ object TestCommon extends FileSystemUtilities {
 
   def decode(x: UInt) = {
     def iter(l: List[(BitPat, Array[BigInt])]): Array[BigInt] = l match {
-      case Nil => Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
+      case Nil if x === FENCEI || x === NOP =>
+        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
+      case Nil if x === ECALL || x === EBREAK || x === ERET => 
+        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
+      case Nil => 
+        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
       case (p, s) :: tail => if (x === p) s else iter(tail)  
     }
     iter(instPats zip instCtrls)
   }
+
+  val pc_start = Const.PC_START.litValue().toInt
+  val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
+  val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
 
   abstract class Tests
   case object SimpleTests extends Tests
@@ -358,6 +381,7 @@ object TestCommon extends FileSystemUtilities {
     nop, nop, fin            // Finish
   )
   val exceptionTest = List(
+    fence,
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 2
     I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 3
@@ -377,6 +401,8 @@ object TestCommon extends FileSystemUtilities {
 }
 
 class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
+  import TestCommon._
+  implicit def toBigInt(x: UInt) = x.litValue()
   private val mem = Array.fill(size){0.toByte} 
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
 
@@ -392,13 +418,11 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
     }
   }
 
-  private val pc_start = Const.PC_START.litValue().toInt
-  private val pc_evec  = Const.PC_EVEC.litValue().toInt
-
   def loadMem(test: Seq[UInt]) {
-    write(pc_evec, TestCommon.fin.litValue())
+    write(pc_mtvec, fin)
+    write(pc_utvec, fin)
     for((inst, i) <- test.zipWithIndex) {
-      write(pc_start + i * blockSize, inst.litValue())
+      write(pc_start + i * blockSize, inst)
     }
   }
 
