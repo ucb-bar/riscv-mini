@@ -58,7 +58,10 @@ class CSRIO extends CoreBundle {
   val expt = Bool(OUTPUT)
   val eret = Bool(OUTPUT)
   val evec = UInt(OUTPUT, instLen)
-  val illegal_inst = Bool(INPUT)
+  val illegal_inst  = Bool(INPUT)
+  val iaddr_invalid = Bool(INPUT)
+  val daddr_invalid = Bool(INPUT)
+  val addr = UInt(INPUT, instLen)
   // HTIF
   val host = new HostIO
 }
@@ -73,12 +76,12 @@ class CSR extends Module with CoreParams {
   val mhartid = UInt(0, instLen) // only one hart
 
   // interrupt enable stack
-  val PRV  = RegInit(CSR.PRV_U)
-  val PRV1 = UInt(0, 2)
+  val PRV  = RegInit(CSR.PRV_M)
+  val PRV1 = RegInit(CSR.PRV_M)
   val PRV2 = UInt(0, 2)
   val PRV3 = UInt(0, 2)
-  val IE  = RegInit(Bool(true))
-  val IE1 = Bool(false)
+  val IE  = RegInit(Bool(false))
+  val IE1 = RegInit(Bool(false))
   val IE2 = Bool(false)
   val IE3 = Bool(false)
   // virtualization management field
@@ -116,7 +119,7 @@ class CSR extends Module with CoreParams {
   val mscratch = Reg(UInt(width=instLen))
 
   val mepc = Reg(UInt(width=instLen))
-  val mcause = RegInit(UInt(0, instLen))
+  val mcause = Reg(UInt(width=instLen))
   val mbadaddr = Reg(UInt(width=instLen))
 
   val mtohost = RegInit(UInt(0, instLen))
@@ -150,8 +153,8 @@ class CSR extends Module with CoreParams {
   val privValid = io.csr(9, 8) <= PRV
   val privInst  = io.cmd === CSR.P
   val isEcall   = privInst && !io.csr(0) && !io.csr(8)
-  val isEbreak  = privInst && io.csr(0)  && !io.csr(8)
-  val isEret    = privInst && !io.csr(0) && io.csr(8)
+  val isEbreak  = privInst &&  io.csr(0) && !io.csr(8)
+  val isEret    = privInst && !io.csr(0) &&  io.csr(8)
   val csrValid  = csrFile map (_._1 === io.csr) reduce (_ || _)
   val csrRO     = io.csr(11, 10).andR || io.csr === CSR.mtvec || io.csr === CSR.mtdeleg
   val wen       = io.cmd(1, 0).orR && io.src.orR
@@ -160,7 +163,8 @@ class CSR extends Module with CoreParams {
     CSR.S -> (io.out | io.in),
     CSR.C -> (io.out & ~io.in)
   ))
-  io.expt := io.illegal_inst || io.cmd(1, 0).orR && (!csrValid || !privValid || (io.src.orR && csrRO)) ||
+  io.expt := io.illegal_inst || io.iaddr_invalid || io.daddr_invalid ||
+             io.cmd(1, 0).orR && (!csrValid || !privValid || (io.src.orR && csrRO)) ||
              (privInst && !privValid) || isEcall || isEbreak
   io.eret := isEret
   io.evec := Mux(io.eret, mepc, mtvec + (PRV << UInt(6)))
@@ -171,17 +175,26 @@ class CSR extends Module with CoreParams {
 
   when(io.expt) {
     mepc   := io.pc & SInt(-4)
-    mcause := Mux(isEcall,  Cause.Ecall + PRV,
-              Mux(isEbreak, Cause.Breakpoint, Cause.IllegalInst))
-    PRV := CSR.PRV_M
-    IE  := Bool(false)
+    mcause := Mux(io.iaddr_invalid, Cause.InstAddrMisaligned,
+              Mux(io.daddr_invalid, Cause.LoadAddrMisaligned,
+              Mux(isEcall,          Cause.Ecall + PRV,
+              Mux(isEbreak,         Cause.Breakpoint, Cause.IllegalInst))))
+    PRV  := CSR.PRV_M
+    IE   := Bool(false)
+    PRV1 := PRV
+    IE1  := IE
+    when(io.iaddr_invalid || io.daddr_invalid) { mbadaddr := io.addr }
   }.elsewhen(io.eret) {
-    PRV := CSR.PRV_U
-    IE  := Bool(true)
+    PRV  := PRV1
+    IE   := IE1
+    PRV1 := CSR.PRV_U
+    IE1  := Bool(true)
   }.elsewhen(wen) {
     when(io.csr === CSR.mstatus) { 
-      PRV := wdata(2, 1)
-      IE  := wdata(0)
+      PRV1 := wdata(5, 4)
+      IE1  := wdata(3)
+      PRV  := wdata(2, 1)
+      IE   := wdata(0)
     }
     .elsewhen(io.csr === CSR.mip) {
       MTIP := wdata(7)

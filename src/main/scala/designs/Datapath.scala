@@ -3,8 +3,8 @@ package mini
 import Chisel._
 
 object Const {
-  val PC_START = UInt(0x200, 32)
-  val PC_EVEC  = UInt(0x100, 32)
+  val PC_START = UInt(0x200)
+  val PC_EVEC  = UInt(0x100)
 }
 
 class DatapathIO extends Bundle {
@@ -30,20 +30,25 @@ class Datapath extends Module with CoreParams {
   val fe_pc   = Reg(UInt())
 
   /***** Execute / Write Back Registers *****/
-  val ew_inst = RegInit(Instructions.NOP)
+  val ew_inst = Reg(UInt())
   val ew_pc   = Reg(UInt())
   val ew_alu  = Reg(UInt())
   val ew_csr  = Reg(UInt())
+  val ew_expt = RegInit(Bool(false))
  
   /****** Fetch *****/
-  val pc    = RegInit(Const.PC_START-UInt(4)) 
+  val load_stall = Bool()
+  val started    = RegNext(reset)
+  val pc    = RegInit(Const.PC_START - UInt(4, instLen)) 
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
-              Mux(io.ctrl.pc_sel    === PC_ALU || brCond.io.taken, alu.io.sum, pc + UInt(4)))
-  val inst  = Mux(io.ctrl.inst_type === I_KILL || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.dout)
+              Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
+              Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))
+  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || load_stall || csr.io.expt, 
+                  Instructions.NOP, io.icache.dout)
  
   io.icache.addr := iaddr 
-  io.icache.re   := io.ctrl.inst_re
-  pc             := Mux(io.icache.re && !io.dcache.we.orR, iaddr, pc)
+  io.icache.re   := io.ctrl.inst_re 
+  pc             := Mux(io.ctrl.inst_re, iaddr, pc)
  
   // Pipelining
   when (!io.stall) {
@@ -68,13 +73,15 @@ class Datapath extends Module with CoreParams {
   immGen.io.sel  := io.ctrl.imm_sel
 
   // bypass
-  val rs1NotZero = rs1_addr.orR
-  val rs2NotZero = rs2_addr.orR 
-  val alutype = io.ctrl.wb_en && io.ctrl.wb_sel === WB_ALU
   val ex_rd_addr = ew_inst(11, 7)
-  val rs1 = Mux(alutype && rs1NotZero && (rs1_addr === ex_rd_addr), ew_alu, regFile.io.rdata1)
-  val rs2 = Mux(alutype && rs2NotZero && (rs2_addr === ex_rd_addr), ew_alu, regFile.io.rdata2) 
-  
+  val rs1hazard = io.ctrl.wb_en && rs1_addr.orR && (rs1_addr === ex_rd_addr)
+  val rs2hazard = io.ctrl.wb_en && rs2_addr.orR && (rs2_addr === ex_rd_addr)
+  val rs1 = Mux(io.ctrl.wb_sel === WB_ALU && rs1hazard, ew_alu,
+            Mux(io.ctrl.wb_sel === WB_CSR && rs1hazard, ew_csr, regFile.io.rdata1))
+  val rs2 = Mux(io.ctrl.wb_sel === WB_ALU && rs2hazard, ew_alu,
+            Mux(io.ctrl.wb_sel === WB_CSR && rs2hazard, ew_csr, regFile.io.rdata2))
+  load_stall := io.ctrl.data_re && io.ctrl.wb_en && (rs1hazard || rs2hazard)
+ 
   // ALU operations
   alu.io.A := Mux(io.ctrl.A_sel === A_RS1, rs1, fe_pc)
   alu.io.B := Mux(io.ctrl.B_sel === B_RS2, rs2, immGen.io.out)
@@ -88,7 +95,7 @@ class Datapath extends Module with CoreParams {
   // D$ access
   val woffset = alu.io.sum(1) << UInt(4) | alu.io.sum(0) << UInt(3)
   io.dcache.re   := io.ctrl.data_re 
-  io.dcache.addr := Mux(io.stall, ew_alu, alu.io.sum)
+  io.dcache.addr := Mux(io.stall, ew_alu, alu.io.sum) & SInt(-4)
   io.dcache.we   := Mux(io.stall || csr.io.expt, UInt("b0000"), MuxLookup(io.ctrl.st_type, UInt("b0000"), Seq(
     ST_SW -> UInt("b1111"),
     ST_SH -> (UInt("b11") << alu.io.sum(1,0)),
@@ -97,11 +104,14 @@ class Datapath extends Module with CoreParams {
   
   // CSR access
   csr.io.in  := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
-  csr.io.src := rs1_addr
+  csr.io.src := rs1_addr 
   csr.io.csr := fe_inst(31, 20) 
   csr.io.cmd := io.ctrl.csr_cmd
   csr.io.pc  := fe_pc
-  csr.io.illegal_inst := io.ctrl.xpt
+  csr.io.illegal_inst  := io.ctrl.xpt 
+  csr.io.iaddr_invalid := Bool(false)
+  csr.io.daddr_invalid := Bool(false) 
+  csr.io.addr := Mux(csr.io.iaddr_invalid, iaddr, io.dcache.addr)
   csr.io.host <> io.host
 
   // Pipelining
@@ -110,6 +120,7 @@ class Datapath extends Module with CoreParams {
     ew_inst := fe_inst
     ew_alu  := alu.io.out
     ew_csr  := csr.io.out
+    ew_expt := csr.io.expt
   }
 
   // Load
@@ -127,7 +138,7 @@ class Datapath extends Module with CoreParams {
     WB_PC4 -> (ew_pc + UInt(4)).zext,
     WB_CSR -> ew_csr.zext) )
 
-  regFile.io.wen   := io.ctrl.wb_en && !RegNext(csr.io.expt)
+  regFile.io.wen   := io.ctrl.wb_en && !ew_expt
   regFile.io.waddr := ex_rd_addr
   regFile.io.wdata := regWrite
 }

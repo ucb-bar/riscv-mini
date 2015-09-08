@@ -69,9 +69,11 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
                 if (result == expected) "PASS" else "FAIL", rd, result, expected))
       }
     case ISATests => for (test <- isaTests) {
+      reset(5)
+      println("\n***** ISA Test: %s ******".format(test))
       mem.loadMem(dir + "/" + test)
       runTests(maxcycles, verbose)
     }
-    case Benchmarks =>
+    case Benchmarks => 
   }
 }

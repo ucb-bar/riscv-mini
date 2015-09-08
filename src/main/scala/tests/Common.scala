@@ -94,9 +94,8 @@ object TestCommon extends FileSystemUtilities {
 
   val pc_4   = BigInt(0)
   val pc_alu = BigInt(1)
-
-  val i_next = BigInt(0)
-  val i_kill = BigInt(1)
+  val pc_0   = BigInt(2)
+  val pc_xxx = BigInt(3)
 
   val a_rs1  = BigInt(0)
   val a_pc   = BigInt(1)
@@ -255,15 +254,15 @@ object TestCommon extends FileSystemUtilities {
 
   def dasm(x: UInt) = {
     def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil if x === FENCEI => "FENCEI"
-      case Nil if x === ECALL  => "ECALL"
-      case Nil if x === EBREAK => "EBREAK"
-      case Nil if x === ERET   => "ERET"
-      case Nil if x === NOP    => "NOP"
       case Nil => "???(%s)".format(x.litValue().toString(16))
       case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
     }
-    iter(instPats zip instFmts)
+    if (x === FENCEI) "FENCEI"
+    else if (x === ECALL) "ECALL"
+    else if (x === EBREAK) "EBREAK"
+    else if (x === ERET) "ERET"
+    else if (x === NOP) "NOP"
+    else iter(instPats zip instFmts)
   }
 
   val instCtrls = List(
@@ -318,15 +317,16 @@ object TestCommon extends FileSystemUtilities {
 
   def decode(x: UInt) = {
     def iter(l: List[(BitPat, Array[BigInt])]): Array[BigInt] = l match {
-      case Nil if x === FENCEI || x === NOP =>
-        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
-      case Nil if x === ECALL || x === EBREAK || x === ERET => 
-        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
-      case Nil => 
-        Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
+      case Nil => Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
       case (p, s) :: tail => if (x === p) s else iter(tail)  
     }
-    iter(instPats zip instCtrls)
+    if (x === FENCEI)
+      Array(pc_0, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
+    else if (x === ERET)
+      Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
+    else if (x === ECALL || x === EBREAK)
+      Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
+    else iter(instPats zip instCtrls)
   }
 
   val pc_start = Const.PC_START.litValue().toInt
@@ -339,8 +339,8 @@ object TestCommon extends FileSystemUtilities {
   case object Benchmarks extends Tests
 
   def genTests(tests: List[String], dir: String) {
-    for (test <- tests if !(new java.io.File(dir + "/" + test).exists)) {
-      run(List("make", "-C", dir, test) mkString " ")
+    for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
+      run(List("make", "-C", dir, test + ".hex") mkString " ")
     }
   }
 
@@ -396,8 +396,54 @@ object TestCommon extends FileSystemUtilities {
     exceptionTest -> Array((1, 1), (2, 2), (3, 3))
   )
 
-  val isaTests = List("")
-  val bmarksTest = List("")
+  val isaTests = List(
+    "rv32ui-p-simple",
+    "rv32ui-p-add",
+    "rv32ui-p-addi",
+    "rv32ui-p-auipc",
+    "rv32ui-p-fence_i",
+    "rv32ui-p-sb",
+    "rv32ui-p-sh",
+    "rv32ui-p-sw",
+    "rv32ui-p-and",
+    "rv32ui-p-andi",
+    "rv32ui-p-beq",
+    "rv32ui-p-bge",
+    "rv32ui-p-bgeu",
+    "rv32ui-p-blt",
+    "rv32ui-p-bltu",
+    "rv32ui-p-bne",
+    "rv32ui-p-j",
+    "rv32ui-p-jal",
+    "rv32ui-p-jalr",
+    "rv32ui-p-lb",
+    "rv32ui-p-lbu",
+    "rv32ui-p-lh",
+    "rv32ui-p-lhu",
+    "rv32ui-p-lui",
+    "rv32ui-p-lw",
+    "rv32ui-p-or",
+    "rv32ui-p-ori",
+    "rv32ui-p-sll",
+    "rv32ui-p-slli",
+    "rv32ui-p-slt",
+    "rv32ui-p-slti",
+    "rv32ui-p-sra",
+    "rv32ui-p-srai",
+    "rv32ui-p-sub",
+    "rv32ui-p-xor",
+    "rv32ui-p-xori",
+
+    "rv32mi-p-sbreak",
+    "rv32mi-p-scall",
+    // TODO: "rv32mi-p-ma_fetch", 
+    // TODO: "rv32mi-p-ma_addr", 
+    // TODO: "rv32mi-p-csr",
+    // TODO: "rv32mi-p-timer",
+    "rv32mi-p-illegal"
+  ) 
+  val bmarksTest = List(
+  )
 }
 
 class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
@@ -428,15 +474,15 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
 
   def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
 
-  def loadMem(filename: String) {
-    val lines = Source.fromFile(filename).getLines
+  def loadMem(testname: String) {
+    val lines = Source.fromFile(testname + ".hex").getLines
     for ((line, i) <- lines.zipWithIndex) {
       val base = (i * line.length) / 2
       var offset = 0
       for (k <- (line.length - 2) to 0 by -2) {
         val addr = base+offset
         val data = (parseNibble(line(k)) << 4) | parseNibble(line(k+1))
-        mem(pc_start + addr) = data.toByte
+        mem(addr) = data.toByte
         offset += 1
       }
     }

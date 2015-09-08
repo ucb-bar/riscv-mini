@@ -7,8 +7,10 @@ object Control {
   val N = Bool(false)
 
   // pc_sel
-  val PC_4   = UInt(0, 1)
-  val PC_ALU = UInt(1, 1)
+  val PC_4   = UInt(0, 2)
+  val PC_ALU = UInt(1, 2)
+  val PC_0   = UInt(2, 2)
+  val PC_XXX = UInt(3, 2)
 
   // A_sel
   val A_RS1  = UInt(0, 1)
@@ -38,10 +40,6 @@ object Control {
   val BR_NE  = UInt(6, 3)
   val BR_XXX = UInt(7, 3)
 
-  // inst_type
-  val I_NEXT = UInt(0, 1)
-  val I_KILL = UInt(1, 1)
-
   // st_type
   val ST_SW  = UInt(0, 2)
   val ST_SH  = UInt(1, 2)
@@ -64,9 +62,9 @@ object Control {
 }
 
 class ControlSignals extends CoreBundle {
-  val pc_sel    = UInt(OUTPUT, 1) 
+  val pc_sel    = UInt(OUTPUT, 2) 
   val inst_re   = Bool(OUTPUT)
-  val inst_type = UInt(OUTPUT, 1)
+  val inst_kill = Bool(OUTPUT)
   val A_sel     = UInt(OUTPUT, 1)
   val B_sel     = UInt(OUTPUT, 1)
   val imm_sel   = UInt(OUTPUT, 3)
@@ -95,10 +93,11 @@ import Control._
 class Control extends Module {
   val io = new ControlIO
   val ctrlSignals = ListLookup(io.ctrl.inst,
-    //                                                                kill                     wb_en  illegal?
-    //            pc_sel  A_sel   B_sel  imm_sel   alu_op    br_type   | st_type ld_type wb_sel| csr_cmd |
-    //              |       |       |     |          |            |    |    |     |       |    |  |      |
+    //                                                            kill                        wb_en  illegal?
+    //            pc_sel  A_sel   B_sel  imm_sel   alu_op   br_type |  st_type ld_type wb_sel  | csr_cmd |
+    //              |       |       |     |          |          |   |     |       |       |    |  |      |
              List(PC_4,   A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, Y), Array(
+    // NOP   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     LUI   -> List(PC_4  , A_PC,   B_IMM, IMM_U, ALU_COPY_B, BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     AUIPC -> List(PC_4  , A_PC,   B_IMM, IMM_U, ALU_ADD   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     JAL   -> List(PC_ALU, A_PC,   B_IMM, IMM_J, ALU_ADD   , BR_XXX, Y, ST_XXX, LD_XXX, WB_PC4, Y, CSR.N, N),
@@ -136,32 +135,30 @@ class Control extends Module {
     SRA   -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_SRA   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     OR    -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_OR    , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     AND   -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_AND   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
+    FENCE -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
+    FENCEI-> List(PC_0  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     CSRRW -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
     CSRRS -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
     CSRRC -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
     CSRRWI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
     CSRRSI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
     CSRRCI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
-    FENCE -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
-    FENCEI-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     ECALL -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     EBREAK-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
-    ERET  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
-    WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
-    NOP   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
-    ZERO  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
+    ERET  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
+    WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
   ))
-  val rs1_addr = io.ctrl.inst(19, 15)
-  val rs2_addr = io.ctrl.inst(24, 20)
-  val st_type  = Reg(io.ctrl.st_type)
-  val ld_type  = Reg(ctrlSignals(8))
-  val wb_sel   = Reg(ctrlSignals(9))
-  val wb_en    = RegInit(Bool(false))
+  val rs1_addr    = io.ctrl.inst(19, 15)
+  val rs2_addr    = io.ctrl.inst(24, 20)
+  val st_type     = Reg(io.ctrl.st_type)
+  val ld_type     = Reg(ctrlSignals(8))
+  val wb_sel      = Reg(ctrlSignals(9))
+  val wb_en       = RegInit(Bool(false))
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
-  io.ctrl.inst_re   := !io.ctrl.stall && !io.ctrl.data_re
-  io.ctrl.inst_type := Mux(ctrlSignals(8) != LD_XXX || ctrlSignals(6).toBool, I_KILL, I_NEXT)
+  io.ctrl.inst_re   := !io.ctrl.stall && !io.ctrl.data_re 
+  io.ctrl.inst_kill := ctrlSignals(6).toBool 
 
   // Control signals for Execute
   io.ctrl.A_sel   := ctrlSignals(1)

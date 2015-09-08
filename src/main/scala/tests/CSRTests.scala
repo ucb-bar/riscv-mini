@@ -15,8 +15,10 @@ class CSRTests(c: CSR) extends Tester(c) {
   def nextSrc = int(rnd.nextInt() & 0x1f)
   def pokeCSR(csr: BigInt, value: BigInt) {
     if (csr == CSR.mstatus.litValue()) {
-      poke(c.PRV, (value >> 1) & 0x3)
-      poke(c.IE,  (value >> 0) & 0x1)
+      poke(c.PRV1, (value >> 4) & 0x3)
+      poke(c.IE1,  (value >> 3) & 0x1)
+      poke(c.PRV,  (value >> 1) & 0x3)
+      poke(c.IE,   (value >> 0) & 0x1)
     } else if (csr == CSR.mip.litValue()) {
       poke(c.MTIP, (value >> 7) & 0x1)
       poke(c.MSIP, (value >> 3) & 0x1)
@@ -33,7 +35,7 @@ class CSRTests(c: CSR) extends Tester(c) {
   }
   def expectOut(csr: BigInt, value: BigInt) {
     if (csr == CSR.mstatus.litValue()) {
-      expect(c.io.out, value & (0x3 << 1 | 0x1))
+      expect(c.io.out, value & (0x3 << 4 | 0x1 << 3 | 0x3 << 1 | 0x1))
     } else if (csr == CSR.mip.litValue()) {
       expect(c.io.out, value & (0x1 << 7 | 0x1 << 3))
     } else if (csr == CSR.mie.litValue()) {
@@ -48,10 +50,14 @@ class CSRTests(c: CSR) extends Tester(c) {
   }
   def expectCSR(csr: BigInt, value: BigInt) {
     if (csr == CSR.mstatus.litValue()) {
-      expect(c.PRV, (value >> 1) & 0x3)
-      expect(c.IE,  (value >> 0) & 0x1)
+      expect(c.PRV1, (value >> 4) & 0x3)
+      expect(c.IE1,  (value >> 3) & 0x1)
+      expect(c.PRV,  (value >> 1) & 0x3)
+      expect(c.IE,   (value >> 0) & 0x1)
       // return to M mode
-      values(CSR.mstatus) = CSR.PRV_M << 1
+      values(CSR.mstatus) = CSR.PRV_M << 4 | CSR.PRV_M << 1
+      poke(c.PRV1, CSR.PRV_M)
+      poke(c.IE1, 0)
       poke(c.PRV, CSR.PRV_M)
       poke(c.IE, 0)
     } else if (csr == CSR.mip.litValue()) {
@@ -75,21 +81,25 @@ class CSRTests(c: CSR) extends Tester(c) {
     expect(c.io.evec, evec)
     values(CSR.mepc) = pc & int(-4)
     values(CSR.mcause) = cause 
-    values(CSR.mstatus) = CSR.PRV_M << 1
     step(1)
-    expect(c.mepc, values(CSR.mepc))
+    expect(c.mepc,   values(CSR.mepc))
     expect(c.mcause, values(CSR.mcause))
-    expect(c.PRV, CSR.PRV_M)
-    expect(c.IE, 0)
+    expect(c.PRV1,  (values(CSR.mstatus) >> 1) & 0x3)
+    expect(c.IE1,    values(CSR.mstatus) & 0x1)
+    expect(c.PRV,    CSR.PRV_M)
+    expect(c.IE,     0)
+    values(CSR.mstatus) = (values(CSR.mstatus) & 0x7) << 3 | CSR.PRV_M << 1
   }
   def expectEret {
     expect(c.io.expt, 0)
     expect(c.io.eret, 1)
     expect(c.io.evec, values(CSR.mepc))
-    values(CSR.mstatus) = (CSR.PRV_U << 1) | BigInt(1)
     step(1)
-    expect(c.PRV, CSR.PRV_U)
-    expect(c.IE, 1)
+    expect(c.PRV, (values(CSR.mstatus) >> 4) & 0x3)
+    expect(c.IE,  (values(CSR.mstatus) >> 3) & 0x1)
+    expect(c.PRV1, CSR.PRV_U)
+    expect(c.IE1,  1)
+    values(CSR.mstatus) = (values(CSR.mstatus) >> 3) & 0x7 | CSR.PRV_U << 4 | 1 << 3
   }
   override def step(n: Int) {
     super.step(n)
@@ -98,6 +108,9 @@ class CSRTests(c: CSR) extends Tester(c) {
 
   poke(c.io.pc, pc)
   poke(c.io.illegal_inst, 0)
+  poke(c.io.iaddr_invalid, 0)
+  poke(c.io.daddr_invalid, 0)
+  poke(c.io.addr, 0)
   csrNames foreach { case (csr, name) => 
     val value = if (!csrRO(csr)) nextIn else peek(csrFile(csr))
     pokeCSR(csr, values getOrElseUpdate (csr, value)) 
