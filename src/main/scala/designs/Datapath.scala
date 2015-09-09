@@ -15,8 +15,6 @@ class DatapathIO extends Bundle {
   val ctrl = (new ControlSignals).flip
 }
 
-import Control._
-
 class Datapath extends Module with CoreParams {
   val io      = new DatapathIO
   val alu     = Module(new ALU)
@@ -24,6 +22,8 @@ class Datapath extends Module with CoreParams {
   val immGen  = params(BuildImmGen)()
   val brCond  = params(BuildBrCond)()
   val regFile = Module(new RegFile) 
+
+  import Control._
 
   /***** Fetch / Execute Registers *****/
   val fe_inst = RegInit(Instructions.NOP)
@@ -37,21 +37,19 @@ class Datapath extends Module with CoreParams {
   val ew_expt = RegInit(Bool(false))
  
   /****** Fetch *****/
-  val load_stall = Wire(Bool())
-  val started    = RegNext(reset)
+  val started = RegNext(reset)
   val pc    = RegInit(Const.PC_START - UInt(4, xlen)) 
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
               Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
               Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))
-  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || load_stall || csr.io.expt || !io.icache.re, 
-                  Instructions.NOP, io.icache.dout)
+  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.dout)
  
   io.icache.addr := iaddr 
   io.icache.re   := io.ctrl.inst_re 
   pc             := Mux(io.ctrl.inst_re, iaddr, pc)
  
   // Pipelining
-  when (!io.stall) {
+  when (!io.ctrl.stall) {
     fe_pc   := pc
     fe_inst := inst
   }
@@ -59,7 +57,7 @@ class Datapath extends Module with CoreParams {
   /****** Execute *****/
   // Decode
   io.ctrl.inst  := fe_inst
-  io.ctrl.stall := io.stall
+  io.ctrl.stall := io.stall 
 
   // regFile read
   val rd_addr  = fe_inst(11, 7)
@@ -76,11 +74,10 @@ class Datapath extends Module with CoreParams {
   val ex_rd_addr = ew_inst(11, 7)
   val rs1hazard = io.ctrl.wb_en && rs1_addr.orR && (rs1_addr === ex_rd_addr)
   val rs2hazard = io.ctrl.wb_en && rs2_addr.orR && (rs2_addr === ex_rd_addr)
-  val rs1 = Mux(io.ctrl.wb_sel === WB_ALU && rs1hazard, ew_alu,
+  val rs1 = Mux(io.ctrl.wb_sel === WB_ALU && rs1hazard, ew_alu, 
             Mux(io.ctrl.wb_sel === WB_CSR && rs1hazard, ew_csr, regFile.io.rdata1))
-  val rs2 = Mux(io.ctrl.wb_sel === WB_ALU && rs2hazard, ew_alu,
+  val rs2 = Mux(io.ctrl.wb_sel === WB_ALU && rs2hazard, ew_alu, 
             Mux(io.ctrl.wb_sel === WB_CSR && rs2hazard, ew_csr, regFile.io.rdata2))
-  load_stall := io.ctrl.data_re && io.ctrl.wb_en && (rs1hazard || rs2hazard)
  
   // ALU operations
   alu.io.A := Mux(io.ctrl.A_sel === A_RS1, rs1, fe_pc)
