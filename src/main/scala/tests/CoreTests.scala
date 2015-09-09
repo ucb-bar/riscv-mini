@@ -74,6 +74,11 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
       mem.loadMem(dir + "/" + test)
       runTests(maxcycles, verbose)
     }
-    case Benchmarks => 
+    case Benchmarks => for (test <- bmarksTest) {
+      reset(5)
+      println("\n***** Benchmark: %s ******".format(test))
+      mem.loadMem(dir + "/" + test)
+      runTests(maxcycles, verbose)
+    } 
   }
 }

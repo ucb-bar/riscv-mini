@@ -37,7 +37,7 @@ class Datapath extends Module with CoreParams {
   val ew_expt = RegInit(Bool(false))
  
   /****** Fetch *****/
-  val load_stall = Bool()
+  val load_stall = Wire(Bool())
   val started    = RegNext(reset)
   val pc    = RegInit(Const.PC_START - UInt(4, instLen)) 
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
@@ -141,5 +141,5 @@ class Datapath extends Module with CoreParams {
   regFile.io.wen   := io.ctrl.wb_en && !ew_expt
   regFile.io.waddr := ex_rd_addr
   regFile.io.wdata := regWrite
-  csr.io.instret   := !ew_expt && ew_inst != Instructions.NOP
+  csr.io.instret   := !io.stall && !ew_expt && ew_inst != Instructions.NOP
 }

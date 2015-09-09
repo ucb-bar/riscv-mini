@@ -1,9 +1,8 @@
 src_dir   = $(base_dir)/src/main/scala/designs
 gen_dir   = $(base_dir)/generated-src
 log_dir   = $(base_dir)/logs
-test_dir  = $(base_dir)/riscv-tests
-isa_dir   = $(test_dir)/isa 
-bmark_dir = $(test_dir)/benchmarks 
+isa_dir   = $(base_dir)/riscv-tests/isa 
+bmark_dir = $(base_dir)/riscv-bmarks
 
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
@@ -25,19 +24,34 @@ $(v): %.v: %.scala
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS)" | tee $(log_dir)/$(notdir $@).out
 
-Core-simple-cpp: Core.scala
+Core-simple-cpp: 
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +simple +verbose +max-cycles=500" \
 	| tee $(log_dir)/$@.out
 	
-Core-simple-v: Core.scala
+Core-simple-v: 
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +simple +verbose +max-cycles=500" \
 	| tee $(log_dir)/$@.out
 
-Core-isa-cpp: Core.scala
+Core-isa-cpp: 
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
+
+Core-isa-v: 
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
+
+Core-bmark-cpp: 
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	| tee $(log_dir)/$@.out
+
+Core-bmark-v: 
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
 timeout_cycles = 30000

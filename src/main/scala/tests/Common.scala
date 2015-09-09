@@ -461,6 +461,11 @@ object TestCommon extends FileSystemUtilities {
   ) 
 
   val bmarksTest = List(
+    "median.riscv",
+    "multiply.riscv",
+    "qsort.riscv",
+    "towers.riscv",
+    "vvadd.riscv"
   )
 }
 
