@@ -9,28 +9,80 @@ class CSRTests(c: CSR) extends Tester(c) {
   implicit def toBoolean(x: BigInt) = x != 0
   val csrFile = c.csrFile map { case (k, y) => (k.litValue(), y) }
   val values = HashMap[BigInt, BigInt]()
-  def prv = (values(CSR.mstatus) >> 1) & 0x3
   val pc = int(rnd.nextInt())
+  var instret = BigInt(0)
+  def nextInstret = {
+    instret = rnd.nextInt() & 0x1
+    instret
+  }
+  def prv = (values(CSR.mstatus) >> 1) & 0x3
   def nextIn = int(rnd.nextInt() & 0xffffffff)
   def nextSrc = int(rnd.nextInt() & 0x1f)
+  def updateTime(value: BigInt) {
+    values(CSR.time) = value
+    values(CSR.timew) = value
+    values(CSR.mtime) = value
+  }
+  def updateCycle(value: BigInt) {
+    values(CSR.cycle) = value
+    values(CSR.cyclew) = value
+  }
+  def updateInstret(value: BigInt) {
+    values(CSR.instret) = value
+    values(CSR.instretw) = value
+  }
+  def updateTimeh(value: BigInt) {
+    values(CSR.timeh) = value
+    values(CSR.timehw) = value
+    values(CSR.mtimeh) = value
+  }
+  def updateCycleh(value: BigInt) {
+    values(CSR.cycleh) = value
+    values(CSR.cyclehw) = value
+  }
+  def updateInstreth(value: BigInt) {
+    values(CSR.instreth) = value
+    values(CSR.instrethw) = value
+  }
   def pokeCSR(csr: BigInt, value: BigInt) {
     if (csr == CSR.mstatus.litValue()) {
       poke(c.PRV1, (value >> 4) & 0x3)
       poke(c.IE1,  (value >> 3) & 0x1)
       poke(c.PRV,  (value >> 1) & 0x3)
       poke(c.IE,   (value >> 0) & 0x1)
+      values(csr) = value & (0x3 << 4 | 0x1 << 3 | 0x3 << 1 | 0x1)
     } else if (csr == CSR.mip.litValue()) {
       poke(c.MTIP, (value >> 7) & 0x1)
       poke(c.MSIP, (value >> 3) & 0x1)
+      values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mie.litValue()) {
       poke(c.MTIE, (value >> 7) & 0x1)
       poke(c.MSIE, (value >> 3) & 0x1)
+      values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mcause.litValue()) {
-      poke(c.mcause, value & (BigInt(1) << (c.instLen-1) | 0xf))
+      val mcause = value & (BigInt(1) << (c.instLen-1) | 0xf)
+      poke(c.mcause, mcause)
+      values(csr) = mcause
     } else if (csr == CSR.mepc.litValue()) {
-      poke(c.mepc, value & int(-4))
+      val mepc = value & int(-4)
+      poke(c.mepc, mepc)
+      values(csr) = mepc
+    } else if (csrCycle(csr)) {
+      poke(c.cycle, value) ; updateCycle(value)
+    } else if (csrTime(csr)) {
+      poke(c.time, value) ; updateTime(value)  
+    } else if (csrInstret(csr)) {
+      poke(c.instret, value) ; updateInstret(value)
+    } else if (csrCycleh(csr)) {
+      poke(c.cycleh, value) ; updateCycleh(value)
+    } else if (csrTimeh(csr)) {
+      poke(c.timeh, value) ; updateTimeh(value)
+    } else if (csrInstreth(csr)) {
+      poke(c.instreth, value) ; updateInstreth(value)
     } else if (!csrRO(csr)) {
-      poke(csrFile(csr), value)
+      poke(csrFile(csr), value) ; values(csr) = value
+    } else {
+      values(csr) = value
     }
   }
   def expectOut(csr: BigInt, value: BigInt) {
@@ -63,15 +115,33 @@ class CSRTests(c: CSR) extends Tester(c) {
     } else if (csr == CSR.mip.litValue()) {
       expect(c.MTIP, (value >> 7) & 0x1)
       expect(c.MSIP, (value >> 3) & 0x1)
+      values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mie.litValue()) {
       expect(c.MTIE, (value >> 7) & 0x1)
       expect(c.MSIE, (value >> 3) & 0x1)
+      values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mcause.litValue()) {
-      expect(c.mcause, value & (BigInt(1) << (c.instLen-1) | 0xf))
+      val mcause = value & (BigInt(1) << (c.instLen-1) | 0xf)
+      expect(c.mcause, mcause)
+      values(csr) = mcause
     } else if (csr == CSR.mepc.litValue()) {
-      expect(c.mepc, value & int(-4))
+      val mepc = value & int(-4)
+      expect(c.mepc, mepc)
+      values(csr) = mepc
+    } else if (csrCycle(csr)) {
+      expect(c.cycle, value) ; updateCycle(value)
+    } else if (csrTime(csr)) {
+      expect(c.time, value) ; updateTime(value)
+    } else if (csrInstret(csr)) {
+      expect(c.instret, value) ; updateInstret(value)
+    } else if (csrCycleh(csr)) {
+      expect(c.cycleh, value) ; updateCycleh(value)
+    } else if (csrTimeh(csr)) {
+      expect(c.timeh, value) ; updateTimeh(value)
+    } else if (csrInstreth(csr)) {
+      expect(c.instreth, value) ; updateInstreth(value)
     } else { 
-      expect(csrFile(csr), value)
+      expect(csrFile(csr), value) ; values(csr) = value
     }
   }
   def expectException(cause: BigInt) {
@@ -102,8 +172,17 @@ class CSRTests(c: CSR) extends Tester(c) {
     values(CSR.mstatus) = (values(CSR.mstatus) >> 3) & 0x7 | CSR.PRV_U << 4 | 1 << 3
   }
   override def step(n: Int) {
+    values(CSR.time)   += 1
+    values(CSR.timew)  += 1
+    values(CSR.mtime)  += 1
+    values(CSR.cycle)  += 1
+    values(CSR.cyclew) += 1
+    if (instret) {
+      values(CSR.instret)  += 1
+      values(CSR.instretw) += 1
+    }
+    poke(c.io.instret, instret)
     super.step(n)
-    values(CSR.mtime) += 1
   }
 
   poke(c.io.pc, pc)
@@ -111,9 +190,10 @@ class CSRTests(c: CSR) extends Tester(c) {
   poke(c.io.iaddr_invalid, 0)
   poke(c.io.daddr_invalid, 0)
   poke(c.io.addr, 0)
+  poke(c.io.instret, 0)
   csrNames foreach { case (csr, name) => 
     val value = if (!csrRO(csr)) nextIn else peek(csrFile(csr))
-    pokeCSR(csr, values getOrElseUpdate (csr, value)) 
+    pokeCSR(csr, value)
   }
 
   poke(c.io.cmd, csr_n)
@@ -137,15 +217,11 @@ class CSRTests(c: CSR) extends Tester(c) {
     poke(c.io.src, src)
     poke(c.io.csr, csr)
     expectOut(csr, values(csr))
-    if (!csrPrv(csr, prv) || (csrRO(csr) && src != 0)) { 
+    if (!csrPrv(csr, prv) || csrRO(csr)) { 
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
-      val value = if (src != 0) in 
-        else if (csr == CSR.mtime.litValue()) values(csr) + 1 
-        else values(csr)
       step(1)
-      values(csr) = value
-      expectCSR(csr, value)
+      expectCSR(csr, in)
     }
   }
 
@@ -162,10 +238,9 @@ class CSRTests(c: CSR) extends Tester(c) {
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
       val value = if (src != 0) values(csr) | in 
-        else if (csr == CSR.mtime.litValue()) values(csr) + 1 
+        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr) && nextInstret) values(csr) + 1 
         else values(csr)
       step(1)
-      values(csr) = value
       expectCSR(csr, value)
     } 
   }
@@ -183,10 +258,9 @@ class CSRTests(c: CSR) extends Tester(c) {
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
       val value = if (src != 0) values(csr) & int(~in.toInt) 
-        else if (csr == CSR.mtime.litValue()) values(csr) + 1 
+        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr) && nextInstret) values(csr) + 1 
         else values(csr)
       step(1)
-      values(csr) = value
       expectCSR(csr, value) 
     } 
   }

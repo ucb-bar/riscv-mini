@@ -14,6 +14,22 @@ object CSR {
   val PRV_U = UInt(0x0, 2)
   val PRV_M = UInt(0x3, 2)
 
+  // User-level CSR addrs
+  val cycle    = UInt(0xc00, 12)
+  val time     = UInt(0xc01, 12)
+  val instret  = UInt(0xc02, 12)
+  val cycleh   = UInt(0xc80, 12)
+  val timeh    = UInt(0xc81, 12)
+  val instreth = UInt(0xc82, 12)
+
+  // Supervisor-level CSR addrs
+  val cyclew    = UInt(0x900, 12)
+  val timew     = UInt(0x901, 12)
+  val instretw  = UInt(0x902, 12)
+  val cyclehw   = UInt(0x980, 12)
+  val timehw    = UInt(0x981, 12)
+  val instrethw = UInt(0x982, 12)
+
   // Machine-level CSR addrs
   // Machine Information Registers
   val mcpuid   = UInt(0xf00, 12)
@@ -53,6 +69,7 @@ class CSRIO extends CoreBundle {
   val src  = UInt(INPUT, 5)
   val in   = UInt(INPUT, instLen)
   val out  = UInt(OUTPUT, instLen)
+  val instret = Bool(INPUT)
   // Excpetion
   val pc   = UInt(INPUT, instLen)
   val expt = Bool(OUTPUT)
@@ -68,6 +85,14 @@ class CSRIO extends CoreBundle {
 
 class CSR extends Module with CoreParams {
   val io = new CSRIO
+
+  // user counters
+  val time     = RegInit(UInt(0, instLen))
+  val timeh    = RegInit(UInt(0, instLen))
+  val cycle    = RegInit(UInt(0, instLen))
+  val cycleh   = RegInit(UInt(0, instLen))
+  val instret  = RegInit(UInt(0, instLen))
+  val instreth = RegInit(UInt(0, instLen))
 
   val mcpuid  = Cat(UInt(0, 2) /* RV32I */, UInt(0, instLen-28), 
                     UInt(1 << ('I' - 'A') /* Base ISA */| 
@@ -112,8 +137,6 @@ class CSR extends Module with CoreParams {
   val mip = Cat(UInt(0, instLen-8), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
   val mie = Cat(UInt(0, instLen-8), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
 
-  val mtime = RegInit(UInt(0, instLen))
-  val mtimeh = RegInit(UInt(0, instLen))
   val mtimecmp = Reg(UInt(width=instLen)) 
 
   val mscratch = Reg(UInt(width=instLen))
@@ -130,6 +153,18 @@ class CSR extends Module with CoreParams {
   }
  
   val csrFile = ListMap(
+    CSR.cycle     -> cycle,
+    CSR.cycleh    -> cycleh,
+    CSR.time      -> time,
+    CSR.timeh     -> timeh,
+    CSR.instret   -> instret,
+    CSR.instreth  -> instreth,
+    CSR.cyclew    -> cycle,
+    CSR.cyclehw   -> cycleh,
+    CSR.timew     -> time,
+    CSR.timehw    -> timeh,
+    CSR.instretw  -> instret,
+    CSR.instrethw -> instreth,
     CSR.mcpuid    -> mcpuid,
     CSR.mimpid    -> mimpid,
     CSR.mhartid   -> mhartid,
@@ -138,8 +173,8 @@ class CSR extends Module with CoreParams {
     CSR.mtdeleg   -> mtdeleg,
     CSR.mie       -> mie,
     CSR.mtimecmp  -> mtimecmp,
-    CSR.mtime     -> mtime,
-    CSR.mtimeh    -> mtimeh,
+    CSR.mtime     -> time,
+    CSR.mtimeh    -> timeh,
     CSR.mscratch  -> mscratch,
     CSR.mepc      -> mepc,
     CSR.mcause    -> mcause,
@@ -164,14 +199,19 @@ class CSR extends Module with CoreParams {
     CSR.C -> (io.out & ~io.in)
   ))
   io.expt := io.illegal_inst || io.iaddr_invalid || io.daddr_invalid ||
-             io.cmd(1, 0).orR && (!csrValid || !privValid || (io.src.orR && csrRO)) ||
+             io.cmd(1, 0).orR && (!csrValid || !privValid) ||
+             (io.cmd(0) || (io.cmd(1) && io.src.orR)) && csrRO || 
              (privInst && !privValid) || isEcall || isEbreak
   io.eret := isEret
   io.evec := Mux(io.eret, mepc, mtvec + (PRV << UInt(6)))
 
-  // Timer
-  mtime := mtime + UInt(1)
-  when(mtime.andR) { mtimeh := mtimeh + UInt(1) }
+  // Counters
+  time := time + UInt(1)
+  when(time.andR) { timeh := timeh + UInt(1) }
+  cycle := cycle + UInt(1)
+  when(cycle.andR) { cycleh := cycleh + UInt(1) }
+  when(io.instret) { instret := instret + UInt(1) }
+  when(instret.andR) { instreth := instreth + UInt(1) }
 
   when(io.expt) {
     mepc   := io.pc & SInt(-4)
@@ -204,8 +244,8 @@ class CSR extends Module with CoreParams {
       MTIE := wdata(7)
       MSIE := wdata(3)
     }
-    .elsewhen(io.csr === CSR.mtime) { mtime := wdata }
-    .elsewhen(io.csr === CSR.mtimeh) { mtimeh := wdata }
+    .elsewhen(io.csr === CSR.mtime) { time := wdata }
+    .elsewhen(io.csr === CSR.mtimeh) { timeh := wdata }
     .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
     .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
     .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
@@ -213,5 +253,11 @@ class CSR extends Module with CoreParams {
     .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
     .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
     .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
+    .elsewhen(io.csr === CSR.cyclew) { cycle := wdata }
+    .elsewhen(io.csr === CSR.timew) { time := wdata }
+    .elsewhen(io.csr === CSR.instretw) { instret := wdata }
+    .elsewhen(io.csr === CSR.cyclehw) { cycleh := wdata }
+    .elsewhen(io.csr === CSR.timehw) { timeh := wdata }
+    .elsewhen(io.csr === CSR.instrethw) { instreth := wdata }
   }
 }

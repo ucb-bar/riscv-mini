@@ -43,7 +43,7 @@ class Datapath extends Module with CoreParams {
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
               Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
               Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))
-  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || load_stall || csr.io.expt, 
+  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || load_stall || csr.io.expt || !io.icache.re, 
                   Instructions.NOP, io.icache.dout)
  
   io.icache.addr := iaddr 
@@ -141,4 +141,5 @@ class Datapath extends Module with CoreParams {
   regFile.io.wen   := io.ctrl.wb_en && !ew_expt
   regFile.io.waddr := ex_rd_addr
   regFile.io.wdata := regWrite
+  csr.io.instret   := !ew_expt && ew_inst != Instructions.NOP
 }

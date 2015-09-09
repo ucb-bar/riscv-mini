@@ -54,7 +54,6 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     println("*********************")
     println("  %s (0x%s)".format(dasm(inst), inst.litValue().toString(16)))
     println("*********************")
-
     poke(c.io.ctrl.inst_re, 1)
     poke(c.io.icache.dout,  0)
     poke(c.io.dcache.dout,  0)
@@ -62,10 +61,11 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     pokeWbCtrl(decode(Instructions.NOP))
     val pc = peek(c.io.icache.addr)
     step(1)
+
     // Emulate fetch
-    poke(c.io.ctrl.inst_re, 0)
-    poke(c.io.icache.dout, inst)
-    poke(c.io.dcache.dout, 0)
+    poke(c.io.ctrl.inst_re, 1)
+    poke(c.io.icache.dout,  inst)
+    poke(c.io.dcache.dout,  0)
     pokeExCtrl(decode(Instructions.NOP), false)
     pokeWbCtrl(decode(Instructions.NOP))
     step(1) 
@@ -112,13 +112,14 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     val expt = ctrl(11) == csr_p && csr_addr != Funct12.ERET.litValue() ||
               (ctrl(11) & 0x3) && (!csrVal(csr_addr) || !csrPrv(csr_addr, prv) || 
               (csrRO(csr_addr) && rs1_addr != 0)) || ctrl(12) 
+    val cur_pc = pc + 4
     val npc = if (expt && prv) BigInt(pc_mtvec)
       else if (expt) BigInt(pc_utvec)
       else if (eret) epc
       else if (br_cond) alu_out & int(-2)
-      else if (ctrl(0) == pc_4) pc + 4
+      else if (ctrl(0) == pc_4) cur_pc + 4
       else if (ctrl(0) == pc_alu) alu_out & int(-2)
-      else pc
+      else cur_pc
     val doffset = (8 * (alu_sum.toInt & 0x3)) & 0x1f
     val din = (rs2_val << doffset) & 0xffffffff
     val dwe = if (expt) BigInt(0)
@@ -135,7 +136,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     expect(c.alu.io.A,       a)
     expect(c.alu.io.B,       b)
     expect(c.alu.io.out,     alu_out)
-    expect(c.pc,             pc)
+    expect(c.pc,             cur_pc)
     expect(c.io.icache.addr, npc)
     expect(c.io.dcache.addr, alu_sum & int(-4))
     expect(c.io.dcache.din,  din)    

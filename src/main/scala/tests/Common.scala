@@ -186,12 +186,16 @@ object TestCommon extends FileSystemUtilities {
   implicit def toBoolean(x: Bool) = x.isTrue
 
   val csrRegs = List(
+    CSR.cycle, CSR.time, CSR.instret, CSR.cycleh, CSR.timeh, CSR.instreth,
+    CSR.cyclew, CSR.timew, CSR.instretw, CSR.cyclehw, CSR.timehw, CSR.instrethw,
     CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mtvec, CSR.mtdeleg, CSR.mie,
     CSR.mtimecmp, CSR.mtime, CSR.mtimeh, CSR.mscratch, CSR.mepc, CSR.mcause, CSR.mbadaddr, CSR.mip,
     CSR.mtohost, CSR.mfromhost, CSR.mstatus
   ) map (_.litValue())
 
   val csrNames = (csrRegs zip List(
+    "cycle", "time", "instret", "cycleh", "timeh", "instreth",
+    "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
     "mcpuid", "mimpid","mhartid", "mtvec", "mtdeleg", "mie",
     "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
     "mtohost", "mfromhost", "mstatus"
@@ -199,7 +203,20 @@ object TestCommon extends FileSystemUtilities {
 
   def csrPrv(csr: BigInt, prv: BigInt) = ((csr >> 8) & 0x3) <= prv
   def csrVal(csr: BigInt) = csrRegs exists (_ == csr)
-  def csrRO (csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue() 
+  def csrRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || 
+      csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue()    
+  def csrTime(csr: BigInt) = 
+      csr == CSR.time.litValue() || csr == CSR.timew.litValue() || csr == CSR.mtime.litValue()
+  def csrCycle(csr: BigInt) = 
+      csr == CSR.cycle.litValue() || csr == CSR.cyclew.litValue()
+  def csrInstret(csr: BigInt) =
+      csr == CSR.instret.litValue() || csr == CSR.instretw.litValue() 
+  def csrTimeh(csr: BigInt) = 
+      csr == CSR.timeh.litValue() || csr == CSR.timehw.litValue() || csr == CSR.mtimeh.litValue()
+  def csrCycleh(csr: BigInt) = 
+      csr == CSR.cycleh.litValue() || csr == CSR.cyclehw.litValue()
+  def csrInstreth(csr: BigInt) =
+      csr == CSR.instreth.litValue() || csr == CSR.instrethw.litValue() 
 
   private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
     LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
@@ -340,7 +357,7 @@ object TestCommon extends FileSystemUtilities {
 
   def genTests(tests: List[String], dir: String) {
     for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
-      run(List("make", "-C", dir, test + ".hex") mkString " ")
+      run(List("make", "-C", dir, test + ".hex", """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""") mkString " ")
     }
   }
 
@@ -356,9 +373,9 @@ object TestCommon extends FileSystemUtilities {
         tests = ISATests
         dir = arg.substring(5)
         genTests(isaTests, dir)
-      case arg if arg.substring(0, 8) == "+bmark=" =>
+      case arg if arg.substring(0, 7) == "+bmark=" =>
         tests = Benchmarks
-        dir = arg.substring(8)
+        dir = arg.substring(7)
         genTests(bmarksTest, dir)
       case arg if arg.substring(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt
@@ -436,12 +453,13 @@ object TestCommon extends FileSystemUtilities {
 
     "rv32mi-p-sbreak",
     "rv32mi-p-scall",
+    "rv32mi-p-illegal",
     // TODO: "rv32mi-p-ma_fetch", 
     // TODO: "rv32mi-p-ma_addr", 
-    // TODO: "rv32mi-p-csr",
     // TODO: "rv32mi-p-timer",
-    "rv32mi-p-illegal"
+    "rv32mi-p-csr"
   ) 
+
   val bmarksTest = List(
   )
 }
