@@ -78,8 +78,8 @@ class ControlSignals extends CoreBundle {
   val csr_cmd   = UInt(OUTPUT, 3)
   val xpt       = Bool(OUTPUT)
  
-  val inst       = UInt(INPUT, instLen)
-  val stall      = Bool(INPUT)
+  val inst      = UInt(INPUT, xlen)
+  val stall     = Bool(INPUT)
 }
 
 class ControlIO extends Bundle {

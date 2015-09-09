@@ -12,15 +12,15 @@ V_FLAGS  := $(C_FLAGS) --v
 
 VPATH = $(src_dir):$(gen_dir):$(log_dir)
 
-units = ALUTop CSR Control Datapath
-v     = $(addsuffix .v,   $(units))
-cpp   = $(addsuffix .cpp, $(units))
+units = ALU CSR Control Datapath
+v     = $(addsuffix -v,   $(units))
+cpp   = $(addsuffix -cpp, $(units))
 
-$(cpp): %.cpp: %.scala
+$(cpp): %-cpp:
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(C_FLAGS)" | tee $(log_dir)/$(notdir $@).out
 
-$(v): %.v: %.scala
+$(v): %-v:
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS)" | tee $(log_dir)/$(notdir $@).out
 
@@ -95,7 +95,3 @@ $(tile_asm_v): Tile.%.v.out: $(tests_isa_dir)/%.hex
 tile_asm_v: $(tile_asm_v)
 	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
 	$(addprefix $(log_dir)/, $(tile_asm_v)); echo;
-
-.PHONY: ALUCTests ALUVTests ALUCVectorTests ALUVVectorTests 
-.PHONY: core_asm_c core_asm_v 
-.PHONY: tile_asm_c tile_asm_v 

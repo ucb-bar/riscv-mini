@@ -3,14 +3,14 @@ package mini
 import Chisel._
 
 class HostIO extends CoreBundle {
-  val fromhost = Valid(UInt(width=instLen)).flip
-  val tohost   = UInt(OUTPUT, instLen)
+  val fromhost = Valid(UInt(width=xlen)).flip
+  val tohost   = UInt(OUTPUT, xlen)
 }
 
 class CacheIO extends CoreBundle {
-  val addr = UInt(OUTPUT, addrLen)
-  val din  = UInt(OUTPUT, instLen)
-  val dout = UInt(INPUT, instLen)
+  val addr = UInt(OUTPUT, xlen)
+  val din  = UInt(OUTPUT, xlen)
+  val dout = UInt(INPUT, xlen)
   val re   = Bool(OUTPUT)
   val we   = UInt(OUTPUT, 4)
 }

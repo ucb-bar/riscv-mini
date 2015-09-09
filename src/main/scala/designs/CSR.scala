@@ -67,18 +67,18 @@ class CSRIO extends CoreBundle {
   val cmd  = UInt(INPUT, 3)
   val csr  = UInt(INPUT, 12)
   val src  = UInt(INPUT, 5)
-  val in   = UInt(INPUT, instLen)
-  val out  = UInt(OUTPUT, instLen)
+  val in   = UInt(INPUT, xlen)
+  val out  = UInt(OUTPUT, xlen)
   val instret = Bool(INPUT)
   // Excpetion
-  val pc   = UInt(INPUT, instLen)
+  val pc   = UInt(INPUT, xlen)
   val expt = Bool(OUTPUT)
   val eret = Bool(OUTPUT)
-  val evec = UInt(OUTPUT, instLen)
+  val evec = UInt(OUTPUT, xlen)
   val illegal_inst  = Bool(INPUT)
   val iaddr_invalid = Bool(INPUT)
   val daddr_invalid = Bool(INPUT)
-  val addr = UInt(INPUT, instLen)
+  val addr = UInt(INPUT, xlen)
   // HTIF
   val host = new HostIO
 }
@@ -87,18 +87,18 @@ class CSR extends Module with CoreParams {
   val io = new CSRIO
 
   // user counters
-  val time     = RegInit(UInt(0, instLen))
-  val timeh    = RegInit(UInt(0, instLen))
-  val cycle    = RegInit(UInt(0, instLen))
-  val cycleh   = RegInit(UInt(0, instLen))
-  val instret  = RegInit(UInt(0, instLen))
-  val instreth = RegInit(UInt(0, instLen))
+  val time     = RegInit(UInt(0, xlen))
+  val timeh    = RegInit(UInt(0, xlen))
+  val cycle    = RegInit(UInt(0, xlen))
+  val cycleh   = RegInit(UInt(0, xlen))
+  val instret  = RegInit(UInt(0, xlen))
+  val instreth = RegInit(UInt(0, xlen))
 
-  val mcpuid  = Cat(UInt(0, 2) /* RV32I */, UInt(0, instLen-28), 
+  val mcpuid  = Cat(UInt(0, 2) /* RV32I */, UInt(0, xlen-28), 
                     UInt(1 << ('I' - 'A') /* Base ISA */| 
                          1 << ('U' - 'A') /* User Mode */, 26))
-  val mimpid  = UInt(0, instLen) // not implemented
-  val mhartid = UInt(0, instLen) // only one hart
+  val mimpid  = UInt(0, xlen) // not implemented
+  val mhartid = UInt(0, xlen) // only one hart
 
   // interrupt enable stack
   val PRV  = RegInit(CSR.PRV_M)
@@ -117,9 +117,9 @@ class CSR extends Module with CoreParams {
   val XS = UInt(0, 2)
   val FS = UInt(0, 2)
   val SD = UInt(0, 1)
-  val mstatus = Cat(SD, UInt(0, instLen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
+  val mstatus = Cat(SD, UInt(0, xlen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
   val mtvec   = Const.PC_EVEC
-  val mtdeleg = UInt(0x0, instLen)
+  val mtdeleg = UInt(0x0, xlen)
   
   // interrupt registers
   val MTIP = RegInit(Bool(false))
@@ -134,19 +134,19 @@ class CSR extends Module with CoreParams {
   val MSIE = RegInit(Bool(false))
   val HSIE = Bool(false)
   val SSIE = Bool(false)
-  val mip = Cat(UInt(0, instLen-8), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
-  val mie = Cat(UInt(0, instLen-8), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
+  val mip = Cat(UInt(0, xlen-8), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
+  val mie = Cat(UInt(0, xlen-8), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
 
-  val mtimecmp = Reg(UInt(width=instLen)) 
+  val mtimecmp = Reg(UInt(width=xlen)) 
 
-  val mscratch = Reg(UInt(width=instLen))
+  val mscratch = Reg(UInt(width=xlen))
 
-  val mepc = Reg(UInt(width=instLen))
-  val mcause = Reg(UInt(width=instLen))
-  val mbadaddr = Reg(UInt(width=instLen))
+  val mepc = Reg(UInt(width=xlen))
+  val mcause = Reg(UInt(width=xlen))
+  val mbadaddr = Reg(UInt(width=xlen))
 
-  val mtohost = RegInit(UInt(0, instLen))
-  val mfromhost = Reg(UInt(width=instLen))
+  val mtohost = RegInit(UInt(0, xlen))
+  val mfromhost = Reg(UInt(width=xlen))
   io.host.tohost := mtohost
   when(io.host.fromhost.valid) {
     mfromhost := io.host.fromhost.bits
@@ -192,15 +192,14 @@ class CSR extends Module with CoreParams {
   val isEret    = privInst && !io.csr(0) &&  io.csr(8)
   val csrValid  = csrFile map (_._1 === io.csr) reduce (_ || _)
   val csrRO     = io.csr(11, 10).andR || io.csr === CSR.mtvec || io.csr === CSR.mtdeleg
-  val wen       = io.cmd(1, 0).orR && io.src.orR
+  val wen       = io.cmd === CSR.W || io.cmd(1).orR && io.src.orR
   val wdata     = MuxLookup(io.cmd, UInt(0), Seq(
     CSR.W -> io.in,
     CSR.S -> (io.out | io.in),
     CSR.C -> (io.out & ~io.in)
   ))
   io.expt := io.illegal_inst || io.iaddr_invalid || io.daddr_invalid ||
-             io.cmd(1, 0).orR && (!csrValid || !privValid) ||
-             (io.cmd(0) || (io.cmd(1) && io.src.orR)) && csrRO || 
+             io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
              (privInst && !privValid) || isEcall || isEbreak
   io.eret := isEret
   io.evec := Mux(io.eret, mepc, mtvec + (PRV << UInt(6)))
@@ -249,7 +248,7 @@ class CSR extends Module with CoreParams {
     .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
     .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
     .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
-    .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (instLen-1) | 0xf) }
+    .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (xlen-1) | 0xf) }
     .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
     .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
     .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }

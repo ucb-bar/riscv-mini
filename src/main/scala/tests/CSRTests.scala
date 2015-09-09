@@ -60,7 +60,7 @@ class CSRTests(c: CSR) extends Tester(c) {
       poke(c.MSIE, (value >> 3) & 0x1)
       values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mcause.litValue()) {
-      val mcause = value & (BigInt(1) << (c.instLen-1) | 0xf)
+      val mcause = value & (BigInt(1) << (c.xlen-1) | 0xf)
       poke(c.mcause, mcause)
       values(csr) = mcause
     } else if (csr == CSR.mepc.litValue()) {
@@ -93,7 +93,7 @@ class CSRTests(c: CSR) extends Tester(c) {
     } else if (csr == CSR.mie.litValue()) {
       expect(c.io.out, value & (0x1 << 7 | 0x1 << 3))
     } else if (csr == CSR.mcause.litValue()) {
-      expect(c.io.out, value & (BigInt(1) << (c.instLen-1) | 0xf))
+      expect(c.io.out, value & (BigInt(1) << (c.xlen-1) | 0xf))
     } else if (csr == CSR.mepc.litValue()) {
       expect(c.io.out, value & int(-4))
     } else {
@@ -121,7 +121,7 @@ class CSRTests(c: CSR) extends Tester(c) {
       expect(c.MSIE, (value >> 3) & 0x1)
       values(csr) = value & (0x1 << 7 | 0x1 << 3)
     } else if (csr == CSR.mcause.litValue()) {
-      val mcause = value & (BigInt(1) << (c.instLen-1) | 0xf)
+      val mcause = value & (BigInt(1) << (c.xlen-1) | 0xf)
       expect(c.mcause, mcause)
       values(csr) = mcause
     } else if (csr == CSR.mepc.litValue()) {

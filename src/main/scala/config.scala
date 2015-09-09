@@ -2,16 +2,18 @@ package mini
 
 import Chisel._
 
-case object InstLen extends Field[Int]
-case object AddrLen extends Field[Int]
+case object XLEN extends Field[Int]
 case object MemLen extends Field[Int]
 case object TagLen extends Field[Int]
+case object BuildImmGen extends Field[() => ImmGen]
+case object BuildBrCond extends Field[() => BrCond]
 
 object Config {
   val params = Parameters.empty alter (
     (key, site, here, up) => key match {
-      case InstLen => 32
-      case AddrLen => here(InstLen)
+      case XLEN => 32
+      case BuildImmGen => () => Module(new ImmGenWire)
+      case BuildBrCond => () => Module(new BrCondArea)
       case MemLen => 32
       case TagLen => 5
     }
@@ -19,14 +21,13 @@ object Config {
 }
 
 abstract trait CoreParams extends UsesParameters {
-  val instLen = params(InstLen)
-  val addrLen = params(AddrLen)
+  val xlen = params(XLEN)
 }
 
 abstract trait CoreBundle extends Bundle with CoreParams
 
 abstract trait MemParams extends UsesParameters {
-  val addrLen = params(AddrLen)
+  val xlen = params(XLEN)
   val memLen = params(MemLen)
   val tagLen = params(TagLen)
 }

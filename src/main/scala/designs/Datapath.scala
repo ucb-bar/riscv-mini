@@ -21,9 +21,9 @@ class Datapath extends Module with CoreParams {
   val io      = new DatapathIO
   val alu     = Module(new ALU)
   val csr     = Module(new CSR)
-  val brCond  = Module(new BrCond)  
+  val immGen  = params(BuildImmGen)()
+  val brCond  = params(BuildBrCond)()
   val regFile = Module(new RegFile) 
-  val immGen  = Module(new ImmGenWire) 
 
   /***** Fetch / Execute Registers *****/
   val fe_inst = RegInit(Instructions.NOP)
@@ -39,7 +39,7 @@ class Datapath extends Module with CoreParams {
   /****** Fetch *****/
   val load_stall = Wire(Bool())
   val started    = RegNext(reset)
-  val pc    = RegInit(Const.PC_START - UInt(4, instLen)) 
+  val pc    = RegInit(Const.PC_START - UInt(4, xlen)) 
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
               Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
               Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))

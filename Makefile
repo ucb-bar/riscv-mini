@@ -1,7 +1,6 @@
 base_dir = $(abspath .)
 
-#include Makefrag-sim
-include Makefrag-chisel
+include Makefrag
 
 clean:
 	rm -rf $(gen_dir) $(log_dir) *.key

@@ -4,7 +4,7 @@ import Chisel._
 
 class MemReqCmd extends MemBundle {
   val rw   = Bool()
-  val addr = UInt(width=addrLen)
+  val addr = UInt(width=xlen)
   val tag  = UInt(width=tagLen)
   val mask = UInt(width=4) // TODO:
 }
@@ -39,8 +39,8 @@ class Memory extends Module with MemParams {
   val state  = RegInit(s_READY)
   val tag    = RegInit(UInt(0, tagLen))
   val cpuReq = (state === s_READY) && (io.icache.re || io.dcache.re || io.dcache.we.orR)
-  val iaddr  = io.icache.addr(addrLen-1, 2)
-  val daddr  = io.dcache.addr(addrLen-1, 2)
+  val iaddr  = io.icache.addr(xlen-1, 2)
+  val daddr  = io.dcache.addr(xlen-1, 2)
   val idata  = Reg(UInt())
   val ddata  = Reg(UInt())
   val ire    = Reg(Bool())
