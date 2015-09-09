@@ -16,25 +16,26 @@ class CoreTests(c: Core, args: Array[String]) extends Tester(c, false) {
       else
         pokeAt(c.dpath.regFile.regs, int(rnd.nextInt() & 0xffffffff), i)
     }
-    poke(c.io.stall, 0)
+    poke(c.io.icache.resp.valid, 1)
+    poke(c.io.dcache.resp.valid, 1)
     var tohost = BigInt(0)
     do {
-      val iaddr = peek(c.io.icache.addr)
-      val daddr = peek(c.io.dcache.addr)
-      val inst  = UInt(mem.read(iaddr))
+      val iaddr = peek(c.io.icache.req.bits.addr)
+      val daddr = peek(c.io.dcache.req.bits.addr)
+      val inst  = mem.read(iaddr)
+      val ire   = peek(c.io.icache.req.valid)
+      val dre   = peek(c.io.dcache.req.valid)
+      val dwe   = peek(c.io.dcache.req.bits.mask)
+      val din   = peek(c.io.dcache.req.bits.data)
       val dout  = mem.read(daddr)
-      val din   = peek(c.io.dcache.din)
-      val ire   = peek(c.io.icache.re)
-      val dre   = peek(c.io.dcache.re)
-      val dwe   = peek(c.io.dcache.we)
       step(1)
       if (ire) {
-        if (verbose) println("MEM[%x] -> %s".format(iaddr, dasm(inst)))
-        poke(c.io.icache.dout, inst.litValue())
+        if (verbose) println("MEM[%x] -> %s".format(iaddr, dasm(UInt(inst))))
+        poke(c.io.icache.resp.bits.data, inst)
       } 
       if (dre) {
         if (verbose) println("MEM[%x] -> %x".format(daddr, dout))
-        poke(c.io.dcache.dout, dout)
+        poke(c.io.dcache.resp.bits.data, dout)
       }
       if (dwe) {
         if (verbose) println("MEM[%x] <- %x".format(daddr, din))

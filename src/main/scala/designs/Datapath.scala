@@ -10,8 +10,8 @@ object Const {
 class DatapathIO extends Bundle {
   val stall = Bool(INPUT)
   val host = new HostIO
-  val icache = new CacheIO
-  val dcache = new CacheIO
+  val icache = (new CacheIO).flip
+  val dcache = (new CacheIO).flip
   val ctrl = (new ControlSignals).flip
 }
 
@@ -19,9 +19,9 @@ class Datapath extends Module with CoreParams {
   val io      = new DatapathIO
   val alu     = Module(new ALU)
   val csr     = Module(new CSR)
+  val regFile = Module(new RegFile) 
   val immGen  = params(BuildImmGen)()
   val brCond  = params(BuildBrCond)()
-  val regFile = Module(new RegFile) 
 
   import Control._
 
@@ -42,14 +42,14 @@ class Datapath extends Module with CoreParams {
   val iaddr = Mux(csr.io.expt || csr.io.eret, csr.io.evec,
               Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
               Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))
-  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.dout)
- 
-  io.icache.addr := iaddr 
-  io.icache.re   := io.ctrl.inst_re 
-  pc             := Mux(io.ctrl.inst_re, iaddr, pc)
+  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, 
+                  Instructions.NOP, io.icache.resp.bits.data)
+  io.icache.req.bits.addr := iaddr 
+  io.icache.req.valid     := io.ctrl.inst_re
+  pc := Mux(io.ctrl.inst_re, iaddr, pc)
  
   // Pipelining
-  when (!io.stall) {
+  when (!io.ctrl.stall) {
     fe_pc   := pc
     fe_inst := inst
   }
@@ -57,7 +57,7 @@ class Datapath extends Module with CoreParams {
   /****** Execute *****/
   // Decode
   io.ctrl.inst  := fe_inst
-  io.ctrl.stall := io.stall 
+  io.ctrl.stall := !io.icache.resp.valid || !io.dcache.resp.valid
 
   // regFile read
   val rd_addr  = fe_inst(11, 7)
@@ -90,14 +90,15 @@ class Datapath extends Module with CoreParams {
   brCond.io.br_type := io.ctrl.br_type
 
   // D$ access
+  val daddr   = Mux(io.stall, ew_alu, alu.io.sum) & SInt(-4)
   val woffset = alu.io.sum(1) << UInt(4) | alu.io.sum(0) << UInt(3)
-  io.dcache.re   := io.ctrl.data_re 
-  io.dcache.addr := Mux(io.stall, ew_alu, alu.io.sum) & SInt(-4)
-  io.dcache.we   := Mux(io.stall || csr.io.expt, UInt("b0000"), MuxLookup(io.ctrl.st_type, UInt("b0000"), Seq(
-    ST_SW -> UInt("b1111"),
-    ST_SH -> (UInt("b11") << alu.io.sum(1,0)),
-    ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) )))
-  io.dcache.din  := rs2 << woffset 
+  io.dcache.req.valid     := io.ctrl.data_re 
+  io.dcache.req.bits.addr := daddr 
+  io.dcache.req.bits.data := rs2 << woffset
+  io.dcache.req.bits.mask := Mux(io.stall || csr.io.expt, UInt("b0000"), MuxLookup(io.ctrl.st_type, UInt("b0000"), 
+     Seq(ST_SW -> UInt("b1111"),
+         ST_SH -> (UInt("b11") << alu.io.sum(1,0)),
+         ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) )))
   
   // CSR access
   csr.io.in  := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
@@ -108,11 +109,11 @@ class Datapath extends Module with CoreParams {
   csr.io.illegal_inst  := io.ctrl.xpt 
   csr.io.iaddr_invalid := Bool(false)
   csr.io.daddr_invalid := Bool(false) 
-  csr.io.addr := Mux(csr.io.iaddr_invalid, iaddr, io.dcache.addr)
+  csr.io.addr := Mux(csr.io.iaddr_invalid, iaddr, daddr)
   csr.io.host <> io.host
 
   // Pipelining
-  when(!io.stall) {
+  when(!io.ctrl.stall) {
     ew_pc   := fe_pc
     ew_inst := fe_inst
     ew_alu  := alu.io.out
@@ -122,8 +123,8 @@ class Datapath extends Module with CoreParams {
 
   // Load
   val loffset = ew_alu(1) << UInt(4) | ew_alu(0) << UInt(3)
-  val lshift = io.dcache.dout >> loffset
-  val load =  MuxLookup(io.ctrl.ld_type, io.dcache.dout.zext, Seq(
+  val lshift  = io.dcache.resp.bits.data >> loffset
+  val load    =  MuxLookup(io.ctrl.ld_type, io.dcache.resp.bits.data.zext, Seq(
     LD_LH  -> lshift(15, 0).toSInt,
     LD_LB  -> lshift(7, 0).toSInt,
     LD_LHU -> lshift(15, 0).zext,

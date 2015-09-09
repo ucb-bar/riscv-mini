@@ -27,8 +27,8 @@ class MemIO extends Bundle {
 class MemoryIO extends Bundle {
   val stall  = Bool(OUTPUT)
   val mem    = new MemIO
-  val icache = (new CacheIO).flip
-  val dcache = (new CacheIO).flip
+  val icache = new CacheIO
+  val dcache = new CacheIO
 }
 
 class Memory extends Module with MemParams {
@@ -38,32 +38,32 @@ class Memory extends Module with MemParams {
   val s_READY :: s_WAIT :: Nil = Enum(UInt(), 2)
   val state  = RegInit(s_READY)
   val tag    = RegInit(UInt(0, tagLen))
-  val cpuReq = (state === s_READY) && (io.icache.re || io.dcache.re || io.dcache.we.orR)
-  val iaddr  = io.icache.addr(xlen-1, 2)
-  val daddr  = io.dcache.addr(xlen-1, 2)
+  val cpuReq = (state === s_READY) && (io.icache.req.valid || io.dcache.req.valid)
+  val iaddr  = io.icache.req.bits.addr(xlen-1, 2)
+  val daddr  = io.dcache.req.bits.addr(xlen-1, 2)
   val idata  = Reg(UInt())
   val ddata  = Reg(UInt())
   val ire    = Reg(Bool())
   val dre    = Reg(Bool())
-  io.icache.dout := idata // io.mem.resp.bits.data
-  io.dcache.dout := ddata // io.mem.resp.bits.data
+  io.icache.resp.bits.data := idata // io.mem.resp.bits.data
+  io.dcache.resp.bits.data := ddata // io.mem.resp.bits.data
   io.mem.req_cmd <> memReqCmdQueue.io.deq
   io.mem.req_data <> memReqDataQueue.io.deq
   io.mem.resp.ready := Bool(false)
   io.stall := state === s_WAIT || !memReqCmdQueue.io.enq.ready || !memReqDataQueue.io.enq.ready
-  memReqCmdQueue.io.enq.bits.rw    := io.dcache.we.orR
+  memReqCmdQueue.io.enq.bits.rw    := io.dcache.req.bits.mask.orR
   memReqCmdQueue.io.enq.bits.tag   := tag
-  memReqCmdQueue.io.enq.bits.addr  := Mux(io.dcache.we.orR || !io.icache.re, daddr, iaddr)
-  memReqCmdQueue.io.enq.bits.mask  := io.dcache.we
+  memReqCmdQueue.io.enq.bits.addr  := Mux(io.dcache.req.bits.mask.orR || !io.icache.req.valid, daddr, iaddr)
+  memReqCmdQueue.io.enq.bits.mask  := io.dcache.req.bits.mask
   memReqCmdQueue.io.enq.valid      := memReqDataQueue.io.enq.ready && cpuReq
-  memReqDataQueue.io.enq.bits.data := io.dcache.din
-  memReqDataQueue.io.enq.valid     := memReqCmdQueue.io.enq.ready && cpuReq && io.dcache.we.orR
+  memReqDataQueue.io.enq.bits.data := io.dcache.req.bits.data
+  memReqDataQueue.io.enq.valid     := memReqCmdQueue.io.enq.ready && cpuReq && io.dcache.req.bits.mask.orR
 
   switch(state) {
     is(s_READY) {
-      when((io.icache.re || io.dcache.re) && !io.dcache.we.orR && memReqCmdQueue.io.enq.ready) {
-        ire := io.icache.re 
-        dre := io.dcache.re 
+      when((io.icache.req.valid || io.dcache.req.valid) && !io.dcache.req.bits.mask.orR && memReqCmdQueue.io.enq.ready) {
+        ire := io.icache.req.valid
+        dre := io.dcache.req.valid 
         state := s_WAIT
       }
     }

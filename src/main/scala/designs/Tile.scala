@@ -19,7 +19,6 @@ class Tile extends Module {
   
   io.htif.host <> core.io.host
   io.mem <> mem.io.mem
-  core.io.stall <> mem.io.stall
   core.io.icache <> mem.io.icache
   core.io.dcache <> mem.io.dcache
 }
