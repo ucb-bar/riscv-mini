@@ -49,7 +49,7 @@ class Datapath extends Module with CoreParams {
   pc             := Mux(io.ctrl.inst_re, iaddr, pc)
  
   // Pipelining
-  when (!io.ctrl.stall) {
+  when (!io.stall) {
     fe_pc   := pc
     fe_inst := inst
   }
