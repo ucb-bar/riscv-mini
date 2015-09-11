@@ -2,6 +2,14 @@ package mini
 
 import Chisel._
 
+abstract trait MemParams extends UsesParameters {
+  val xlen = params(XLEN)
+  val memLen = params(MemLen)
+  val tagLen = params(TagLen)
+}
+
+abstract trait MemBundle extends Bundle with MemParams
+
 class MemReqCmd extends MemBundle {
   val rw   = Bool()
   val addr = UInt(width=xlen)

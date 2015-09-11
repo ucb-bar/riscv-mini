@@ -472,17 +472,19 @@ object TestCommon extends FileSystemUtilities {
 class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   import TestCommon._
   implicit def toBigInt(x: UInt) = x.litValue()
+
   private val mem = Array.fill(size){0.toByte} 
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
 
-  def read(addr: Int) = {
-    val a = math.min(addr & (size - 1), size - 4)
-    ((0 until blockSize) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
+  def read(addr: Int, s: Int = blockSize) = {
+    val off = log2Up(s)
+    val a = (addr & (size - 1)) >> off << off
+    ((0 until s) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
   }
 
   def write(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) {
     val a = addr & (size - 1)
-    for (i <- blockSize to 0 by -1 if ((mask >> i) & 0x1) > 0) {
+    for (i <- 0 until blockSize if ((mask >> i) & 0x1) > 0) {
       mem(a+i) = (data >> (8 * i)).toByte
     }
   }

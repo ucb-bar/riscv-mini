@@ -6,6 +6,7 @@ object DebugBuild extends Build {
     scalaVersion := "2.11.6",
     scalacOptions ++= Seq("-deprecation","-unchecked")
   )
-  lazy val chisel = project
-  lazy val root   = (project in file(".")).settings(settings:_*).dependsOn(chisel)
+  lazy val chisel    = project
+  lazy val junctions = project.dependsOn(chisel)
+  lazy val root      = (project in file(".")).settings(settings:_*).dependsOn(junctions)
 }

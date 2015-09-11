@@ -7,3 +7,6 @@
 [submodule "riscv-bmarks"]
 	path = riscv-bmarks
 	url = https://github.com/donggyukim/riscv-bmarks.git
+[submodule "junctions"]
+	path = junctions
+	url = https://github.com/ucb-bar/junctions.git

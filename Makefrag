@@ -12,7 +12,7 @@ V_FLAGS  := $(C_FLAGS) --v
 
 VPATH = $(src_dir):$(gen_dir):$(log_dir)
 
-units = ALU CSR Control Datapath
+units = ALU CSR Control Datapath Cache
 v     = $(addsuffix -v,   $(units))
 cpp   = $(addsuffix -cpp, $(units))
 
