@@ -379,7 +379,6 @@ object TestCommon extends FileSystemUtilities {
     exceptionTest -> Array((1, 1), (2, 2), (3, 3))
   )
 
-  // val isaTests = List("rv32ui-p-jal")
   val isaTests = List(
     "rv32ui-p-simple",
     "rv32ui-p-add",
@@ -430,7 +429,7 @@ object TestCommon extends FileSystemUtilities {
   val bmarksTest = List(
     "median.riscv",
     "multiply.riscv",
-    // TODO: "qsort.riscv",
+    "qsort.riscv",
     "towers.riscv",
     "vvadd.riscv"
   ) 

@@ -31,33 +31,37 @@ class CacheTests(c: Cache) extends Tester(c) {
   }
 
   def doWriteBack {
-    do {
-      step(1)
-    } while(!peek(c.io.mem.req_cmd.valid))
+    expect(c.io.mem.req_cmd.valid, 1)
     expect(c.io.mem.req_cmd.bits.rw, 1)
     expect(c.io.mem.req_data.valid, 1)
     val wb_addr = peek(c.io.mem.req_cmd.bits.addr) << c.blen
     val wb_data = peek(c.io.mem.req_data.bits.data)
     expect(wb_data == mem.read(wb_addr), "CHECK WRITE BACK(%s)".format(mem.read(wb_addr).toString(16)))
+    poke(c.io.mem.req_cmd.ready, 1)
+    poke(c.io.mem.req_data.ready, 1)
     step(1)
+    // step(1)
+    poke(c.io.mem.req_cmd.ready, 0)
+    poke(c.io.mem.req_data.ready, 0)
   }
 
   def doRefill(tag: Int, idx: Int, data: BigInt) {
-    do {
-      step(1)
-    } while(!peek(c.io.mem.req_cmd.valid))
+    expect(c.io.mem.req_cmd.valid, 1)
     expect(c.io.mem.req_cmd.bits.rw, 0)
     expect(c.io.mem.req_cmd.bits.addr, tag << c.slen | idx)
     expect(c.io.mem.req_cmd.bits.tag, 0)
     expect(c.io.mem.req_data.valid, 0)
-    do {
-      step(5)
-    } while (!peek(c.io.mem.resp.ready))
+    poke(c.io.mem.req_cmd.ready, 1)
+    step(5)
     mem.write(addr(tag, idx, 0), data)
+    poke(c.io.mem.req_cmd.ready, 0)
     poke(c.io.mem.resp.bits.data, data)
     poke(c.io.mem.resp.bits.tag, 0)
-    poke(c.io.mem.resp.valid, 1) 
-    expect(c.is_refill, 1)
+    poke(c.io.mem.resp.valid, 1)
+    expect(c.is_alloc, 1)
+    step(1)
+    expect(c.io.mem.resp.ready, 1)
+    poke(c.io.mem.resp.valid, 0)
   }
 
   def doReadOnHit(tag: Int, idx: Int, off: Int) {
@@ -106,6 +110,8 @@ class CacheTests(c: Cache) extends Tester(c) {
     poke(c.io.cpu.req.valid, 0)
     if (wb) doWriteBack
     doRefill(tag, idx, bdata)
+    expect(c.io.cpu.resp.valid, 0)
+    step(1) // need a cycle to write after refill
     expect(c.io.cpu.resp.valid, 1)
     doWrite(tag, idx, off, data, mask)
   }
@@ -132,8 +138,8 @@ class CacheTests(c: Cache) extends Tester(c) {
 
   println("TAG: %d bits, IDX: %d bits, BLOCK OFFSET: %d bits".format(c.tlen, c.slen, c.blen))
   expect(c.io.cpu.resp.valid, 1)
-  poke(c.io.mem.req_cmd.ready, 1)
-  poke(c.io.mem.req_data.ready, 1)
+  poke(c.io.mem.req_cmd.ready, 0)
+  poke(c.io.mem.req_data.ready, 0)
   poke(c.io.mem.resp.valid, 0)
 
   val tags = Vector(rand_tag, rand_tag, rand_tag)
@@ -153,5 +159,5 @@ class CacheTests(c: Cache) extends Tester(c) {
   doTask(tags(1), idxs(1), offs(2), if (tags(1) != tags(0)) WriteOnWriteBack else WriteOnHit, mask=rand_mask)
   doTask(tags(1), idxs(1), offs(3), ReadOnHit)
   doTask(tags(2), idxs(1), offs(4), if (tags(2) != tags(1)) ReadOnWriteBack else ReadOnHit)
-  doTask(tags(2), idxs(1), offs(5), ReadOnHit)
+  doTask(tags(2), idxs(1), offs(5), ReadOnHit) 
 }

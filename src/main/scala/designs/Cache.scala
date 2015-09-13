@@ -89,7 +89,7 @@ class Cache extends Module with CacheParams {
 
   val wmeta = Wire(new MetaData)
   wmeta.tag   := tag_reg
-  wmeta.dirty := is_write 
+  wmeta.dirty := !is_alloc 
 
   val wen = hit && is_write || is_alloc || is_refill && cpu_mask.orR 
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
@@ -101,7 +101,7 @@ class Cache extends Module with CacheParams {
   }
 
   io.mem.req_cmd.valid      := Bool(false)
-  io.mem.req_cmd.bits.rw    := state === s_WRITE_BACK 
+  io.mem.req_cmd.bits.rw    := Bool(false) 
   io.mem.req_cmd.bits.addr  := Mux(io.mem.req_cmd.bits.rw, Cat(rmeta.tag, idx_reg), Cat(tag_reg, idx_reg))
   io.mem.req_cmd.bits.tag   := UInt(0) // Only one outstanding request
   io.mem.req_data.bits.data := rdata 
@@ -125,6 +125,7 @@ class Cache extends Module with CacheParams {
         }
       }.otherwise {
         io.mem.req_cmd.valid := Bool(true)
+        io.mem.req_cmd.bits.rw := is_dirty
         when(is_dirty && io.mem.req_cmd.ready && io.mem.req_data.ready) {
           state := s_WRITE_BACK
         }.elsewhen(!is_dirty && io.mem.req_cmd.ready) {
@@ -137,6 +138,7 @@ class Cache extends Module with CacheParams {
         state := s_IDLE
       }.otherwise {
         io.mem.req_cmd.valid := Bool(true)
+        io.mem.req_cmd.bits.rw := is_dirty
         when(is_dirty && io.mem.req_cmd.ready && io.mem.req_data.ready) {
           state := s_WRITE_BACK
         }.elsewhen(!is_dirty && io.mem.req_cmd.ready) {
@@ -147,7 +149,7 @@ class Cache extends Module with CacheParams {
     is(s_WRITE_BACK) {
       io.mem.req_cmd.valid := Bool(true)
       when(io.mem.req_cmd.ready) {
-        state := s_REFILL
+        state := s_WAIT
       }
     }
     is(s_WAIT) {
