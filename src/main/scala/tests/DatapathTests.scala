@@ -19,7 +19,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     poke(c.io.ctrl.alu_op,    ctrl(4))
     poke(c.io.ctrl.br_type,   ctrl(5))
     poke(c.io.ctrl.st_type,   ctrl(7))
-    poke(c.io.ctrl.data_re,   ctrl(8) != ld_xxx)
+    poke(c.io.ctrl.data_en,   ctrl(8) != ld_xxx)
     poke(c.io.ctrl.csr_cmd,   ctrl(11))
     poke(c.io.ctrl.xpt,       ctrl(12))
     println("=======================")
@@ -55,7 +55,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     println("\n*********************")
     println("  %s (0x%s)".format(dasm(inst), inst.litValue().toString(16)))
     println("*********************")
-    poke(c.io.ctrl.inst_re, 1)
+    poke(c.io.ctrl.inst_en, 1)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
@@ -64,7 +64,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     step(1)
 
     // Emulate fetch
-    poke(c.io.ctrl.inst_re, 1)
+    poke(c.io.ctrl.inst_en, 1)
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
@@ -132,7 +132,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else if (ctrl(7) == st_sb) (BigInt(0x1) << (alu_out.toInt & 0x3)) & 0xf
       else BigInt(0)
     val dre = if (ctrl(8) != ld_xxx) y else n
-    poke(c.io.ctrl.inst_re, y - dre)
+    poke(c.io.ctrl.inst_en, y - dre)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(ctrl, br_cond)
@@ -159,7 +159,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else if (ctrl(8) == ld_lbu) int(lbu)
       else BigInt(0)
 
-    poke(c.io.ctrl.inst_re, 0)
+    poke(c.io.ctrl.inst_en, 0)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, lw)
     pokeExCtrl(decode(Instructions.NOP), false)

@@ -1,9 +1,10 @@
 package mini
 
 import Chisel._
+import junctions.MemIO
 
 class HTIFIO extends Bundle {
-  val host     = new HostIO
+  val host = new HostIO
 }
 
 class TileIO extends Bundle {
@@ -12,13 +13,16 @@ class TileIO extends Bundle {
 }
 
 class Tile extends Module {
-  val io = new TileIO
- 
-  val core = Module(new Core)
-  val mem = Module(new Memory)
+  val io     = new TileIO
+  val core   = Module(new Core)
+  val icache = Module(new Cache)
+  val dcache = Module(new Cache)
+  val mem    = Module(new MemArbiter)
   
   io.htif.host <> core.io.host
+  core.io.icache <> icache.io.cpu
+  core.io.dcache <> dcache.io.cpu
+  mem.io.icache <> icache.io.mem
+  mem.io.dcache <> dcache.io.mem
   io.mem <> mem.io.mem
-  core.io.icache <> mem.io.icache
-  core.io.dcache <> mem.io.dcache
 }

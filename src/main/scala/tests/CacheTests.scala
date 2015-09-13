@@ -31,29 +31,33 @@ class CacheTests(c: Cache) extends Tester(c) {
   }
 
   def doWriteBack {
-    expect(c.io.mem.req_cmd.valid, 1)
+    do {
+      step(1)
+    } while(!peek(c.io.mem.req_cmd.valid))
     expect(c.io.mem.req_cmd.bits.rw, 1)
     expect(c.io.mem.req_data.valid, 1)
     val wb_addr = peek(c.io.mem.req_cmd.bits.addr) << c.blen
     val wb_data = peek(c.io.mem.req_data.bits.data)
-    expect(wb_data == mem.read(wb_addr), "CHECK WRITE BACK")
+    expect(wb_data == mem.read(wb_addr), "CHECK WRITE BACK(%s)".format(mem.read(wb_addr).toString(16)))
     step(1)
   }
 
   def doRefill(tag: Int, idx: Int, data: BigInt) {
-    expect(c.io.mem.req_cmd.valid, 1)
+    do {
+      step(1)
+    } while(!peek(c.io.mem.req_cmd.valid))
     expect(c.io.mem.req_cmd.bits.rw, 0)
     expect(c.io.mem.req_cmd.bits.addr, tag << c.slen | idx)
     expect(c.io.mem.req_cmd.bits.tag, 0)
     expect(c.io.mem.req_data.valid, 0)
-    expect(c.io.mem.resp.ready, 0)
-    step(5)
-    expect(c.io.mem.resp.ready, 1)
+    do {
+      step(5)
+    } while (!peek(c.io.mem.resp.ready))
     mem.write(addr(tag, idx, 0), data)
     poke(c.io.mem.resp.bits.data, data)
     poke(c.io.mem.resp.bits.tag, 0)
     poke(c.io.mem.resp.valid, 1) 
-    expect(c.refill, 1)
+    expect(c.is_refill, 1)
   }
 
   def doReadOnHit(tag: Int, idx: Int, off: Int) {

@@ -63,14 +63,14 @@ object Control {
 
 class ControlSignals extends CoreBundle {
   val pc_sel    = UInt(OUTPUT, 2) 
-  val inst_re   = Bool(OUTPUT)
+  val inst_en   = Bool(OUTPUT)
   val inst_kill = Bool(OUTPUT)
   val A_sel     = UInt(OUTPUT, 1)
   val B_sel     = UInt(OUTPUT, 1)
   val imm_sel   = UInt(OUTPUT, 3)
   val alu_op    = UInt(OUTPUT, 4)
   val br_type   = UInt(OUTPUT, 3)
-  val data_re   = Bool(OUTPUT)
+  val data_en   = Bool(OUTPUT)
   val st_type   = UInt(OUTPUT, 2)
   val ld_type   = UInt(OUTPUT, 3)
   val wb_sel    = UInt(OUTPUT, 2) 
@@ -147,8 +147,6 @@ class Control extends Module {
     ERET  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
   ))
-  val rs1_addr    = io.ctrl.inst(19, 15)
-  val rs2_addr    = io.ctrl.inst(24, 20)
   val st_type     = Reg(io.ctrl.st_type)
   val ld_type     = Reg(ctrlSignals(8))
   val wb_sel      = Reg(ctrlSignals(9))
@@ -156,7 +154,7 @@ class Control extends Module {
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
-  io.ctrl.inst_re   := !io.ctrl.stall && !io.ctrl.data_re 
+  io.ctrl.inst_en   := !io.ctrl.stall 
   io.ctrl.inst_kill := ctrlSignals(6).toBool 
 
   // Control signals for Execute
@@ -165,7 +163,6 @@ class Control extends Module {
   io.ctrl.imm_sel := ctrlSignals(3)
   io.ctrl.alu_op  := ctrlSignals(4)
   io.ctrl.br_type := ctrlSignals(5)
-  io.ctrl.st_type := ctrlSignals(7)
   io.ctrl.csr_cmd := ctrlSignals(11)
   io.ctrl.xpt     := ctrlSignals(12).toBool
 
@@ -177,10 +174,11 @@ class Control extends Module {
   }
 
   // D$ signals
-  io.ctrl.data_re := Mux(io.ctrl.stall, io.ctrl.ld_type != LD_XXX, ctrlSignals(8) != LD_XXX)
-
+  io.ctrl.st_type := Mux(io.ctrl.stall, st_type, ctrlSignals(7))
+  io.ctrl.data_en := !io.ctrl.stall && (ctrlSignals(7) != ST_XXX || ctrlSignals(8) != LD_XXX)
+                                 
   // Control signals for Write Back
   io.ctrl.ld_type := ld_type
-  io.ctrl.wb_en   := wb_en 
+  io.ctrl.wb_en   := wb_en && !io.ctrl.stall 
   io.ctrl.wb_sel  := wb_sel
 }

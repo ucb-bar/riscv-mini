@@ -2,6 +2,10 @@ package mini
 
 import Chisel._
 
+case object XLEN extends Field[Int]
+case object BuildImmGen extends Field[() => ImmGen]
+case object BuildBrCond extends Field[() => BrCond]
+
 abstract trait CoreParams extends UsesParameters {
   val xlen = params(XLEN)
 }

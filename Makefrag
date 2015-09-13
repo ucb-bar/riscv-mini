@@ -7,8 +7,9 @@ bmark_dir = $(base_dir)/riscv-bmarks
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
 
-C_FLAGS  := --targetDir $(gen_dir) --genHarness --compile --test --vcd --vcdMem --debug --minimumCompatibility 3.0
-V_FLAGS  := $(C_FLAGS) --v
+C_FLAGS     := --targetDir $(gen_dir) --genHarness --compile --test --minimumCompatibility 3.0
+V_FLAGS     := $(C_FLAGS) --v
+DEBUG_FLAGS := --vcd --vcdMem --debug 
 
 VPATH = $(src_dir):$(gen_dir):$(log_dir)
 
@@ -18,30 +19,30 @@ cpp   = $(addsuffix -cpp, $(units))
 
 $(cpp): %-cpp:
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(C_FLAGS)" | tee $(log_dir)/$(notdir $@).out
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(C_FLAGS) $(DEBUG_FLAGS)" | tee $(log_dir)/$(notdir $@).out
 
 $(v): %-v:
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS)" | tee $(log_dir)/$(notdir $@).out
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run $* $(V_FLAGS) $(DEBUG_FLAGS)" | tee $(log_dir)/$(notdir $@).out
 
 Core-simple-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +simple +verbose +max-cycles=500" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
 	| tee $(log_dir)/$@.out
 	
 Core-simple-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +simple +verbose +max-cycles=500" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
 	| tee $(log_dir)/$@.out
 
 Core-isa-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
 	| tee $(log_dir)/$@.out
 
 Core-isa-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
 	| tee $(log_dir)/$@.out
 
 Core-bmark-cpp: 
@@ -54,44 +55,33 @@ Core-bmark-v:
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
-timeout_cycles = 30000
-core_asm_c = $(addprefix Core., $(addsuffix .cpp.out, $(asm_p_tests)))
-$(core_asm_c): Core.%.cpp.out: $(tests_isa_dir)/%.hex
+Tile-simple-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run CoreHex $(C_FLAGS) \
-	+verbose +loadmem=$< +max-cycles=$(timeout_cycles)" \
-	| tee $(log_dir)/$(notdir $@)
-core_asm_c: $(core_asm_c)
-	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
-	$(addprefix $(log_dir)/, $(core_asm_c)); echo;
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
+	| tee $(log_dir)/$@.out
+	
+Tile-simple-v: 
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
+	| tee $(log_dir)/$@.out
 
-core_asm_v = $(addprefix Core., $(addsuffix .v.out, $(asm_p_tests)))
-$(core_asm_v): Core.%.v.out: $(tests_isa_dir)/%.hex
+Tile-isa-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run CoreHex $(V_FLAGS) \
-	+verbose +loadmem=$< +max-cycles=$(timeout_cycles)" \
-	| tee $(log_dir)/$(notdir $@)
-core_asm_v: $(core_asm_v)
-	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
-	$(addprefix $(log_dir)/, $(core_asm_v)); echo;
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
 
-timeout_cycles = 300000
-tile_asm_c = $(addprefix Tile., $(addsuffix .cpp.out, $(asm_p_tests)))
-$(tile_asm_c): Tile.%.cpp.out: $(tests_isa_dir)/%.hex
+Tile-isa-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) \
-	+loadmem=$< +max-cycles=$(timeout_cycles)" \
-	| tee $(log_dir)/$(notdir $@)
-tile_asm_c: $(tile_asm_c)
-	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
-	$(addprefix $(log_dir)/, $(tile_asm_c)); echo;
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
 
-tile_asm_v = $(addprefix Tile., $(addsuffix .v.out, $(asm_p_tests)))
-$(tile_asm_v): Tile.%.v.out: $(tests_isa_dir)/%.hex
+Tile-bmark-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) \
-	+loadmem=$< +max-cycles=$(timeout_cycles)" \
-	| tee $(log_dir)/$(notdir $@)
-tile_asm_v: $(tile_asm_v)
-	@echo; perl -ne 'print " [$$1] $$ARGV \t$$2\n" if /\*{3}(.{8})\*{3}(.*)/' \
-	$(addprefix $(log_dir)/, $(tile_asm_v)); echo;
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	| tee $(log_dir)/$@.out
+
+Tile-bmark-v: 
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	| tee $(log_dir)/$@.out
+

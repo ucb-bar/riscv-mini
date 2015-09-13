@@ -70,6 +70,7 @@ class CSRIO extends CoreBundle {
   val in   = UInt(INPUT, xlen)
   val out  = UInt(OUTPUT, xlen)
   val instret = Bool(INPUT)
+  val stall   = Bool(INPUT)
   // Excpetion
   val pc   = UInt(INPUT, xlen)
   val expt = Bool(OUTPUT)
@@ -192,7 +193,7 @@ class CSR extends Module with CoreParams {
   val isEret    = privInst && !io.csr(0) &&  io.csr(8)
   val csrValid  = csrFile map (_._1 === io.csr) reduce (_ || _)
   val csrRO     = io.csr(11, 10).andR || io.csr === CSR.mtvec || io.csr === CSR.mtdeleg
-  val wen       = io.cmd === CSR.W || io.cmd(1).orR && io.src.orR
+  val wen       = io.cmd === CSR.W || io.cmd(1).orR && io.src.orR 
   val wdata     = MuxLookup(io.cmd, UInt(0), Seq(
     CSR.W -> io.in,
     CSR.S -> (io.out | io.in),
@@ -212,51 +213,53 @@ class CSR extends Module with CoreParams {
   when(io.instret) { instret := instret + UInt(1) }
   when(instret.andR) { instreth := instreth + UInt(1) }
 
-  when(io.expt) {
-    mepc   := io.pc & SInt(-4)
-    mcause := Mux(io.iaddr_invalid, Cause.InstAddrMisaligned,
-              Mux(io.daddr_invalid, Cause.LoadAddrMisaligned,
-              Mux(isEcall,          Cause.Ecall + PRV,
-              Mux(isEbreak,         Cause.Breakpoint, Cause.IllegalInst))))
-    PRV  := CSR.PRV_M
-    IE   := Bool(false)
-    PRV1 := PRV
-    IE1  := IE
-    when(io.iaddr_invalid || io.daddr_invalid) { mbadaddr := io.addr }
-  }.elsewhen(io.eret) {
-    PRV  := PRV1
-    IE   := IE1
-    PRV1 := CSR.PRV_U
-    IE1  := Bool(true)
-  }.elsewhen(wen) {
-    when(io.csr === CSR.mstatus) { 
-      PRV1 := wdata(5, 4)
-      IE1  := wdata(3)
-      PRV  := wdata(2, 1)
-      IE   := wdata(0)
+  when(!io.stall) {
+    when(io.expt) {
+      mepc   := io.pc & SInt(-4)
+      mcause := Mux(io.iaddr_invalid, Cause.InstAddrMisaligned,
+                Mux(io.daddr_invalid, Cause.LoadAddrMisaligned,
+                Mux(isEcall,          Cause.Ecall + PRV,
+                Mux(isEbreak,         Cause.Breakpoint, Cause.IllegalInst))))
+      PRV  := CSR.PRV_M
+      IE   := Bool(false)
+      PRV1 := PRV
+      IE1  := IE
+      when(io.iaddr_invalid || io.daddr_invalid) { mbadaddr := io.addr }
+    }.elsewhen(io.eret) {
+      PRV  := PRV1
+      IE   := IE1
+      PRV1 := CSR.PRV_U
+      IE1  := Bool(true)
+    }.elsewhen(wen) {
+      when(io.csr === CSR.mstatus) { 
+        PRV1 := wdata(5, 4)
+        IE1  := wdata(3)
+        PRV  := wdata(2, 1)
+        IE   := wdata(0)
+      }
+      .elsewhen(io.csr === CSR.mip) {
+        MTIP := wdata(7)
+        MSIP := wdata(3)
+      }
+      .elsewhen(io.csr === CSR.mie) {
+        MTIE := wdata(7)
+        MSIE := wdata(3)
+      }
+      .elsewhen(io.csr === CSR.mtime) { time := wdata }
+      .elsewhen(io.csr === CSR.mtimeh) { timeh := wdata }
+      .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
+      .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
+      .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
+      .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (xlen-1) | 0xf) }
+      .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
+      .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
+      .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
+      .elsewhen(io.csr === CSR.cyclew) { cycle := wdata }
+      .elsewhen(io.csr === CSR.timew) { time := wdata }
+      .elsewhen(io.csr === CSR.instretw) { instret := wdata }
+      .elsewhen(io.csr === CSR.cyclehw) { cycleh := wdata }
+      .elsewhen(io.csr === CSR.timehw) { timeh := wdata }
+      .elsewhen(io.csr === CSR.instrethw) { instreth := wdata }
     }
-    .elsewhen(io.csr === CSR.mip) {
-      MTIP := wdata(7)
-      MSIP := wdata(3)
-    }
-    .elsewhen(io.csr === CSR.mie) {
-      MTIE := wdata(7)
-      MSIE := wdata(3)
-    }
-    .elsewhen(io.csr === CSR.mtime) { time := wdata }
-    .elsewhen(io.csr === CSR.mtimeh) { timeh := wdata }
-    .elsewhen(io.csr === CSR.mtimecmp) { mtimecmp := wdata }
-    .elsewhen(io.csr === CSR.mscratch) { mscratch := wdata }
-    .elsewhen(io.csr === CSR.mepc) { mepc := wdata & SInt(-4) }
-    .elsewhen(io.csr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (xlen-1) | 0xf) }
-    .elsewhen(io.csr === CSR.mbadaddr) { mbadaddr := wdata }
-    .elsewhen(io.csr === CSR.mtohost) { mtohost := wdata }
-    .elsewhen(io.csr === CSR.mfromhost) { mfromhost := wdata }
-    .elsewhen(io.csr === CSR.cyclew) { cycle := wdata }
-    .elsewhen(io.csr === CSR.timew) { time := wdata }
-    .elsewhen(io.csr === CSR.instretw) { instret := wdata }
-    .elsewhen(io.csr === CSR.cyclehw) { cycleh := wdata }
-    .elsewhen(io.csr === CSR.timehw) { timeh := wdata }
-    .elsewhen(io.csr === CSR.instrethw) { instreth := wdata }
   }
 }

@@ -350,40 +350,6 @@ object TestCommon extends FileSystemUtilities {
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
 
-  abstract class Tests
-  case object SimpleTests extends Tests
-  case object ISATests extends Tests
-  case object Benchmarks extends Tests
-
-  def genTests(tests: List[String], dir: String) {
-    for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
-      run(List("make", "-C", dir, test + ".hex", """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""") mkString " ")
-    }
-  }
-
-  def parseOpts(args: Array[String]) = {
-    var tests: Tests = SimpleTests
-    var dir = ""
-    var maxcycles = 0
-    var verbose = false
-    args foreach {
-      case "+verbose" => verbose = true 
-      case "+simple" => tests = SimpleTests
-      case arg if arg.substring(0, 5) == "+isa=" =>
-        tests = ISATests
-        dir = arg.substring(5)
-        genTests(isaTests, dir)
-      case arg if arg.substring(0, 7) == "+bmark=" =>
-        tests = Benchmarks
-        dir = arg.substring(7)
-        genTests(bmarksTest, dir)
-      case arg if arg.substring(0, 12) == "+max-cycles=" =>
-        maxcycles = arg.substring(12).toInt
-      case _ => 
-    }
-    (dir, tests, maxcycles, verbose)
-  }
-  
   val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -413,12 +379,13 @@ object TestCommon extends FileSystemUtilities {
     exceptionTest -> Array((1, 1), (2, 2), (3, 3))
   )
 
+  // val isaTests = List("rv32ui-p-jal")
   val isaTests = List(
     "rv32ui-p-simple",
     "rv32ui-p-add",
     "rv32ui-p-addi",
     "rv32ui-p-auipc",
-    "rv32ui-p-fence_i",
+    // TODO: "rv32ui-p-fence_i",
     "rv32ui-p-sb",
     "rv32ui-p-sh",
     "rv32ui-p-sw",
@@ -463,10 +430,10 @@ object TestCommon extends FileSystemUtilities {
   val bmarksTest = List(
     "median.riscv",
     "multiply.riscv",
-    "qsort.riscv",
+    // TODO: "qsort.riscv",
     "towers.riscv",
     "vvadd.riscv"
-  )
+  ) 
 }
 
 class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
@@ -490,10 +457,13 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 
   def loadMem(test: Seq[UInt]) {
-    write(pc_mtvec, fin)
-    write(pc_utvec, fin)
+    def writeWord(a: Int, data: BigInt) {
+      (0 until 4) foreach {i => mem(a+i) = (data >> (8 * i)).toByte}
+    }
+    writeWord(pc_mtvec, fin)
+    writeWord(pc_utvec, fin)
     for((inst, i) <- test.zipWithIndex) {
-      write(pc_start + i * blockSize, inst)
+      writeWord(pc_start + 4*i, inst)
     }
   }
 
@@ -514,47 +484,89 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 }
 
-object HexCommon {
-  private val mem = HashMap[BigInt, BigInt]()
-  private var filename = ""
-  private var maxcycles = 0
-  private var readcycles = 2
-  private var writecycles = 1
+abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends Tester(c, false) {
+  import TestCommon._
 
+  implicit def bigIntToBoolean(b: BigInt) = b != 0
+  implicit def bigIntToInt(b: BigInt) = b.toInt
 
-  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+  abstract class Tests
+  case object SimpleTests extends Tests
+  case object ISATests extends Tests
+  case object Benchmarks extends Tests
 
-  def loadMem(filename: String) {
-    val lines = Source.fromFile(filename).getLines
-    for ((line, i) <- lines.zipWithIndex) {
-      val base = (i * line.length) / 2
-      var offset = 0
-      for (k <- (line.length - 2) to 0 by -2) {
-        val addr = BigInt(base+offset)
-        val data = BigInt((parseNibble(line(k)) << 4) | parseNibble(line(k+1)))
-        mem(addr) = data
-        offset += 1
+  var cycles = 0
+  override def step(n: Int) {
+    cycles += n
+    super.step(n)
+  }
+
+  def genTests(tests: List[String], dir: String) {
+    for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
+      run(List("make", "-C", dir, test + ".hex", """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""") mkString " ")
+    }
+  }
+
+  def parseOpts(args: Array[String]) = {
+    var tests: Tests = SimpleTests
+    var dir = ""
+    var maxcycles = 0
+    var verbose = false
+    args foreach {
+      case "+verbose" => verbose = true 
+      case "+simple" => tests = SimpleTests
+      case arg if arg.substring(0, 5) == "+isa=" =>
+        tests = ISATests
+        dir = arg.substring(5)
+        genTests(isaTests, dir)
+      case arg if arg.substring(0, 7) == "+bmark=" =>
+        tests = Benchmarks
+        dir = arg.substring(7)
+        // genTests(bmarksTest, dir)
+      case arg if arg.substring(0, 12) == "+max-cycles=" =>
+        maxcycles = arg.substring(12).toInt
+      case _ => 
+    }
+    (dir, tests, maxcycles, verbose)
+  }
+  
+  def runTests(maxCycles: Int, verboase: Boolean): Unit
+  def regFile(x: Int): BigInt
+
+  val mem = new MagicMem(blockSize)
+  val (dir, tests, maxcycles, verbose) = parseOpts(args)
+  tests match {
+    case SimpleTests =>
+      cycles = 0
+      mem.loadMem(bypassTest)
+      runTests(maxcycles, verbose)
+      for ((rd, expected) <- testResults(bypassTest)) {
+        val result = regFile(rd) 
+        println("[%s] RegFile[%d] = %d == %d".format(
+                if (result == expected) "PASS" else "FAIL", rd, result, expected))
       }
+      reset(5) 
+      cycles = 0
+      mem.loadMem(exceptionTest)
+      runTests(maxcycles, verbose)
+      for ((rd, expected) <- testResults(exceptionTest)) {
+        val result = regFile(rd) 
+        println("[%s] RegFile[%d] = %d == %d".format(
+                if (result == expected) "PASS" else "FAIL", rd, result, expected))
+      }
+    case ISATests => for (test <- isaTests) {
+      reset(5)
+      cycles = 0
+      println("\n***** ISA Test: %s ******".format(test))
+      mem.loadMem(dir + "/" + test)
+      runTests(maxcycles, verbose)
     }
-  }
-
-  def readMem(addr: BigInt) = {
-    var data = BigInt(0)
-    for (i <- 0 until 4) {
-      data |= mem(addr + i) << (8 * i)
-    }
-    data
-  }
-  def readCycles = readcycles
-
-  def writeMem(addr: BigInt, data: BigInt, mask: BigInt = 0xf) {
-    for (i <- 3 to 0 by -1 ; if ((mask >> i) & 0x1) > 0) {
-      mem(addr+i) = (data >> (8 * i)) & 0xff
-    }
-  }
-  def writeCycles = writecycles
-
-  def clearMem {
-    mem.clear
+    case Benchmarks => for (test <- bmarksTest) {
+      reset(5)
+      cycles = 0
+      println("\n***** Benchmark: %s ******".format(test))
+      mem.loadMem(dir + "/" + test)
+      runTests(maxcycles, verbose)
+    } 
   }
 }
