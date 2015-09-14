@@ -518,9 +518,9 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
         tests = ISATests
         dir = arg.substring(5)
         genTests(isaTests, dir)
-      case arg if arg.substring(0, 7) == "+bmark=" =>
+      case arg if arg.substring(0, 8) == "+bmarks=" =>
         tests = Benchmarks
-        dir = arg.substring(7)
+        dir = arg.substring(8)
         // genTests(bmarksTest, dir)
       case arg if arg.substring(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt

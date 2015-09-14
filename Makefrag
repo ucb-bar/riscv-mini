@@ -2,7 +2,7 @@ src_dir   = $(base_dir)/src/main/scala/designs
 gen_dir   = $(base_dir)/generated-src
 log_dir   = $(base_dir)/logs
 isa_dir   = $(base_dir)/riscv-tests/isa 
-bmark_dir = $(base_dir)/riscv-bmarks
+bmarks_dir = $(base_dir)/riscv-bmarks
 
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
@@ -45,14 +45,14 @@ Core-isa-v:
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
 	| tee $(log_dir)/$@.out
 
-Core-bmark-cpp: 
+Core-bmarks-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(C_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
-Core-bmark-v: 
+Core-bmarks-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Core $(V_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
 Tile-simple-cpp: 
@@ -75,13 +75,13 @@ Tile-isa-v:
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
 	| tee $(log_dir)/$@.out
 
-Tile-bmark-cpp: 
+Tile-bmarks-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
-Tile-bmark-v: 
+Tile-bmarks-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmark=$(bmark_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 
