@@ -184,6 +184,7 @@ class CSRTests(c: CSR) extends RISCVTester(c) {
   poke(c.io.stall,    0)
   poke(c.io.illegal,  0)
   poke(c.io.ld_type,  ld_xxx)
+  poke(c.io.st_type,  st_xxx)
   poke(c.io.pc_check, 0)
   csrNames foreach { case (csr, name) => 
     val value = if (!csrRO(csr)) nextIn else peek(csrFile(csr))

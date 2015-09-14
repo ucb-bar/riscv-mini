@@ -13,6 +13,7 @@ class ControlTests(c: Control) extends RISCVTester(c) {
     expect(c.io.ctrl.br_type,   ctrl(5))
     expect(c.io.ctrl.st_type,   ctrl(7))
     step(1)
+    expect(c.io.ctrl.st_type_r, ctrl(7))
     expect(c.io.ctrl.ld_type,   ctrl(8))
     expect(c.io.ctrl.wb_sel,    ctrl(9))
     expect(c.io.ctrl.wb_en,     ctrl(10))

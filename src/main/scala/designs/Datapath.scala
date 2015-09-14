@@ -47,6 +47,7 @@ class Datapath extends Module with CoreParams {
   io.icache.req.bits.data := UInt(0)
   io.icache.req.bits.mask := UInt(0)
   io.icache.req.valid     := io.ctrl.inst_en
+  io.icache.abort         := Bool(false)
   pc := Mux(io.ctrl.inst_en, iaddr, pc)
  
   // Pipelining
@@ -127,6 +128,7 @@ class Datapath extends Module with CoreParams {
   csr.io.addr     := ew_alu
   csr.io.illegal  := io.ctrl.illegal
   csr.io.ld_type  := io.ctrl.ld_type
+  csr.io.st_type  := io.ctrl.st_type_r
   csr.io.pc_check := io.ctrl.pc_check
   csr.io.host     <> io.host
 
@@ -139,6 +141,10 @@ class Datapath extends Module with CoreParams {
   regFile.io.wen   := io.ctrl.wb_en && !io.ctrl.stall && !csr.io.expt 
   regFile.io.waddr := wb_rd_addr
   regFile.io.wdata := regWrite
+
+  // Abort store when there's an excpetion
+  io.dcache.abort := csr.io.expt
+
   printf("PC: %x, INST: %x, REG[%d] <- %x\n", ew_pc, ew_inst, 
     Mux(regFile.io.wen, wb_rd_addr, UInt(0)),
     Mux(regFile.io.wen, regFile.io.wdata, UInt(0)))

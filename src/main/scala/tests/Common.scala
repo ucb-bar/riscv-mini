@@ -472,7 +472,7 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
     "rv32mi-p-scall",
     "rv32mi-p-illegal",
     "rv32mi-p-ma_fetch", 
-    // TODO: "rv32mi-p-ma_addr", 
+    "rv32mi-p-ma_addr", 
     // TODO: "rv32mi-p-timer",
     "rv32mi-p-csr"
   ) 

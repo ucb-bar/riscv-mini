@@ -18,8 +18,9 @@ class CacheResp extends CoreBundle {
 }
 
 class CacheIO extends Bundle {
-  val req  = Valid(new CacheReq).flip
-  val resp = Valid(new CacheResp)
+  val abort = Bool(INPUT)
+  val req   = Valid(new CacheReq).flip
+  val resp  = Valid(new CacheResp)
 }
 
 class CacheModuleIO extends Bundle {
@@ -91,7 +92,7 @@ class Cache extends Module with CacheParams {
   wmeta.tag   := tag_reg
   wmeta.dirty := !is_alloc 
 
-  val wen = hit && is_write || is_alloc || is_refill && cpu_mask.orR 
+  val wen = is_write && hit && !io.cpu.abort || is_alloc || is_refill && cpu_mask.orR 
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
   val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1)) 
   when(wen) {
@@ -134,7 +135,7 @@ class Cache extends Module with CacheParams {
       }
     }
     is(s_WRITE_CACHE) {
-      when(hit) {
+      when(hit || io.cpu.abort) {
         state := s_IDLE
       }.otherwise {
         io.mem.req_cmd.valid := Bool(true)

@@ -19,12 +19,13 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
 
   def pokeWbCtrl(ctrl: Array[BigInt]) {
     println("=== Write-Back Control Signals ===")
-    poke(c.io.ctrl.ld_type,  ctrl(8))
-    poke(c.io.ctrl.wb_sel,   ctrl(9))
-    poke(c.io.ctrl.wb_en,    ctrl(10))
-    poke(c.io.ctrl.csr_cmd,  ctrl(11))
-    poke(c.io.ctrl.illegal,  ctrl(12))
-    poke(c.io.ctrl.pc_check, ctrl(0) == pc_alu)
+    poke(c.io.ctrl.st_type_r, ctrl(7))
+    poke(c.io.ctrl.ld_type,   ctrl(8))
+    poke(c.io.ctrl.wb_sel,    ctrl(9))
+    poke(c.io.ctrl.wb_en,     ctrl(10))
+    poke(c.io.ctrl.csr_cmd,   ctrl(11))
+    poke(c.io.ctrl.illegal,   ctrl(12))
+    poke(c.io.ctrl.pc_check,  ctrl(0) == pc_alu)
     println("=======================")
   }
 
@@ -142,7 +143,9 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     val csr_out  = if (csr_file contains csr_addr) peek(csr_file(csr_addr)) else BigInt(0)
     val addr_invalid = ctrl(0) == pc_alu && (alu_sum & 0x2) || 
                ctrl(8) == ld_lw && (alu_sum & 0x3) || 
-              (ctrl(8) == ld_lh || ctrl(8) == ld_lhu) && (alu_sum & 0x1)
+              (ctrl(8) == ld_lh || ctrl(8) == ld_lhu) && (alu_sum & 0x1) ||
+               ctrl(7) == st_sw && (alu_sum & 0x3) ||
+               ctrl(7) == st_sh && (alu_sum & 0x1)
     val eret = ctrl(11) == csr_p && csr_addr == Funct12.ERET.litValue()
     val expt = ctrl(11) == csr_p && csr_addr != Funct12.ERET.litValue() ||
               (ctrl(11) & 0x3) && (!csrVal(csr_addr) || !csrPrv(csr_addr, prv) || 

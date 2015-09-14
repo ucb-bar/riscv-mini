@@ -41,7 +41,6 @@ class CacheTests(c: Cache) extends Tester(c) {
     poke(c.io.mem.req_cmd.ready, 1)
     poke(c.io.mem.req_data.ready, 1)
     step(1)
-    // step(1)
     poke(c.io.mem.req_cmd.ready, 0)
     poke(c.io.mem.req_data.ready, 0)
   }
@@ -139,6 +138,7 @@ class CacheTests(c: Cache) extends Tester(c) {
 
   println("TAG: %d bits, IDX: %d bits, BLOCK OFFSET: %d bits".format(c.tlen, c.slen, c.blen))
   expect(c.io.cpu.resp.valid, 1)
+  poke(c.io.cpu.abort, 0)
   poke(c.io.mem.req_cmd.ready, 0)
   poke(c.io.mem.req_data.ready, 0)
   poke(c.io.mem.resp.valid, 0)

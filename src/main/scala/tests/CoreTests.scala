@@ -34,7 +34,7 @@ class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) {
         if (verbose) println("MEM[%x] -> %x".format(daddr, dout))
         poke(c.io.dcache.resp.bits.data, dout)
       }
-      if (dwe) {
+      if (dwe && !peek(c.io.dcache.abort)) {
         if (verbose) println("MEM[%x] <- %x".format(daddr, din))
         mem.write(daddr, din, dwe)
       }

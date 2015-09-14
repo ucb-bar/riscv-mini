@@ -72,6 +72,7 @@ class ControlSignals extends CoreBundle {
   val br_type   = UInt(OUTPUT, 3)
   val data_en   = Bool(OUTPUT)
   val st_type   = UInt(OUTPUT, 2)
+  val st_type_r = UInt(OUTPUT, 2)
   val ld_type   = UInt(OUTPUT, 3)
   val wb_sel    = UInt(OUTPUT, 2) 
   val wb_en     = Bool(OUTPUT)
@@ -197,7 +198,8 @@ class Control extends Module {
   io.ctrl.wb_sel  := wb_sel
 
   // Control signals for CSR
-  io.ctrl.csr_cmd  := csr_cmd
-  io.ctrl.illegal  := illegal
-  io.ctrl.pc_check := pc_check
+  io.ctrl.st_type_r := st_type
+  io.ctrl.csr_cmd   := csr_cmd
+  io.ctrl.illegal   := illegal
+  io.ctrl.pc_check  := pc_check
 }

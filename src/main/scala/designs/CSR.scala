@@ -56,11 +56,12 @@ object CSR {
 }
 
 object Cause {
-  val InstAddrMisaligned = UInt(0x0)
-  val IllegalInst        = UInt(0x2)
-  val Breakpoint         = UInt(0x3)
-  val LoadAddrMisaligned = UInt(0x4)
-  val Ecall              = UInt(0x8)
+  val InstAddrMisaligned  = UInt(0x0)
+  val IllegalInst         = UInt(0x2)
+  val Breakpoint          = UInt(0x3)
+  val LoadAddrMisaligned  = UInt(0x4)
+  val StoreAddrMisaligned = UInt(0x6)
+  val Ecall               = UInt(0x8)
 }
 
 class CSRIO extends CoreBundle {
@@ -73,6 +74,7 @@ class CSRIO extends CoreBundle {
   val addr     = UInt(INPUT, xlen)
   val inst     = UInt(INPUT, xlen)
   val illegal  = Bool(INPUT)
+  val st_type  = UInt(INPUT, 2)
   val ld_type  = UInt(INPUT, 3)
   val pc_check = Bool(INPUT)
   val expt     = Bool(OUTPUT)
@@ -201,9 +203,11 @@ class CSR extends Module with CoreParams {
     CSR.C -> (io.out & ~io.in)
   ))
   val iaddrInvalid = io.pc_check && io.addr(1)
-  val daddrInvalid = MuxLookup(io.ld_type, Bool(false), Seq(
+  val laddrInvalid = MuxLookup(io.ld_type, Bool(false), Seq(
     Control.LD_LW -> io.addr(1, 0).orR, Control.LD_LH -> io.addr(0), Control.LD_LHU -> io.addr(0)))
-  io.expt := io.illegal || iaddrInvalid || daddrInvalid ||
+  val saddrInvalid = MuxLookup(io.st_type, Bool(false), Seq(
+    Control.ST_SW -> io.addr(1, 0).orR, Control.ST_SH -> io.addr(0)))
+  io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
              io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
              (privInst && !privValid) || isEcall || isEbreak
   io.evec := mtvec + (PRV << UInt(6))
@@ -222,14 +226,15 @@ class CSR extends Module with CoreParams {
     when(io.expt) {
       mepc   := io.pc & SInt(-4)
       mcause := Mux(iaddrInvalid, Cause.InstAddrMisaligned,
-                Mux(daddrInvalid, Cause.LoadAddrMisaligned,
+                Mux(laddrInvalid, Cause.LoadAddrMisaligned,
+                Mux(saddrInvalid, Cause.StoreAddrMisaligned,
                 Mux(isEcall,      Cause.Ecall + PRV,
-                Mux(isEbreak,     Cause.Breakpoint, Cause.IllegalInst))))
+                Mux(isEbreak,     Cause.Breakpoint, Cause.IllegalInst)))))
       PRV  := CSR.PRV_M
       IE   := Bool(false)
       PRV1 := PRV
       IE1  := IE
-      when(iaddrInvalid || daddrInvalid) { mbadaddr := io.addr }
+      when(iaddrInvalid || laddrInvalid || saddrInvalid) { mbadaddr := io.addr }
     }.elsewhen(isEret) {
       PRV  := PRV1
       IE   := IE1
