@@ -28,8 +28,11 @@ class ALUIo extends CoreBundle {
 
 import ALU._
 
-class ALU extends Module {
+abstract class ALU extends Module with CoreParams {
   val io = new ALUIo
+}
+
+class ALUSimple extends ALU {
   val shamt = io.B(4,0).toUInt
 
   io.out := MuxLookup(io.alu_op, io.B, Seq(
@@ -48,14 +51,13 @@ class ALU extends Module {
   io.sum := io.A + Mux(io.alu_op(0), -io.B, io.B)
 }
 
-class ALUArea extends Module with CoreParams {
-  val io = new ALUIo
+class ALUArea extends ALU { 
   val sum = io.A + Mux(io.alu_op(0), -io.B, io.B)
   val cmp = Mux(io.A(xlen-1) === io.B(xlen-1), sum(xlen-1),
-            Mux(io.alu_op(1), io.A(xlen-1), io.B(xlen-1)))
+            Mux(io.alu_op(1), io.B(xlen-1), io.A(xlen-1)))
   val shamt  = io.B(4,0).toUInt
   val shin   = Mux(io.alu_op(3), io.A, Reverse(io.A))
-  val shiftr = (Cat(!io.alu_op(0) && shin(xlen-1), shin).toSInt >> shamt)(xlen-1, 0)
+  val shiftr = (Cat(io.alu_op(0) && shin(xlen-1), shin).toSInt >> shamt)(xlen-1, 0)
   val shiftl = Reverse(shiftr)
 
   val out = 
@@ -63,10 +65,11 @@ class ALUArea extends Module with CoreParams {
     Mux(io.alu_op === ALU_SLT || io.alu_op === ALU_SLTU, cmp,
     Mux(io.alu_op === ALU_SRA || io.alu_op === ALU_SRL, shiftr,
     Mux(io.alu_op === ALU_SLL, shiftl,
-    Mux(io.alu_op === ALU_AND, (io.A & io.B).zext,
-    Mux(io.alu_op === ALU_OR,  (io.A | io.B).zext,
-    Mux(io.alu_op === ALU_XOR, (io.A ^ io.B).zext, 
-    Mux(io.alu_op === ALU_COPY_A, io.A, io.B.zext))))))))
+    Mux(io.alu_op === ALU_AND, (io.A & io.B),
+    Mux(io.alu_op === ALU_OR,  (io.A | io.B),
+    Mux(io.alu_op === ALU_XOR, (io.A ^ io.B), 
+    Mux(io.alu_op === ALU_COPY_A, io.A, io.B))))))))
+
 
   io.out := out
   io.sum := sum
@@ -118,7 +121,7 @@ class ALUTopIO extends CoreBundle {
 
 class ALUTop extends Module {
   val io = new ALUTopIO
-  val alu     = Module(new ALU)
+  val alu     = params(BuildALU)()
   val alu_dec = Module(new ALUdec)
 
   io.opcode <> alu_dec.io.opcode

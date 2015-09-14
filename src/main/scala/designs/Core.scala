@@ -3,6 +3,7 @@ package mini
 import Chisel._
 
 case object XLEN extends Field[Int]
+case object BuildALU extends Field[() => ALU]
 case object BuildImmGen extends Field[() => ImmGen]
 case object BuildBrCond extends Field[() => BrCond]
 

@@ -16,9 +16,9 @@ class DatapathIO extends Bundle {
 
 class Datapath extends Module with CoreParams {
   val io      = new DatapathIO
-  val alu     = Module(new ALU)
   val csr     = Module(new CSR)
   val regFile = Module(new RegFile) 
+  val alu     = params(BuildALU)()
   val immGen  = params(BuildImmGen)()
   val brCond  = params(BuildBrCond)()
 

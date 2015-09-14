@@ -8,6 +8,7 @@ object Config {
     (key, site, here, up) => key match {
       // Core
       case XLEN => 32
+      case BuildALU    => () => Module(new ALUArea)
       case BuildImmGen => () => Module(new ImmGenWire)
       case BuildBrCond => () => Module(new BrCondArea)
       // Cache
