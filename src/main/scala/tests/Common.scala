@@ -95,7 +95,7 @@ object TestCommon extends FileSystemUtilities {
   val pc_4   = BigInt(0)
   val pc_alu = BigInt(1)
   val pc_0   = BigInt(2)
-  val pc_xxx = BigInt(3)
+  val pc_epc = BigInt(3)
 
   val a_rs1  = BigInt(0)
   val a_pc   = BigInt(1)
@@ -324,12 +324,12 @@ object TestCommon extends FileSystemUtilities {
     /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
     /* FENCE  */ Array(pc_4,   a_xxx,  b_xxx, imm_x, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* CSRRW  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRS  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRC  */ Array(pc_4,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
-    /* CSRRWI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRSI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRCI */ Array(pc_4,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
+    /* CSRRW  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRS  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRC  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
+    /* CSRRWI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
+    /* CSRRSI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
+    /* CSRRCI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
     )
 
   def decode(x: UInt) = {
@@ -338,11 +338,11 @@ object TestCommon extends FileSystemUtilities {
       case (p, s) :: tail => if (x === p) s else iter(tail)  
     }
     if (x === FENCEI)
-      Array(pc_0, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
+      Array(pc_0,   a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
     else if (x === ERET)
-      Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
+      Array(pc_epc, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
     else if (x === ECALL || x === EBREAK)
-      Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
+      Array(pc_4,   a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
     else iter(instPats zip instCtrls)
   }
 
@@ -420,7 +420,7 @@ object TestCommon extends FileSystemUtilities {
     "rv32mi-p-sbreak",
     "rv32mi-p-scall",
     "rv32mi-p-illegal",
-    // TODO: "rv32mi-p-ma_fetch", 
+    "rv32mi-p-ma_fetch", 
     // TODO: "rv32mi-p-ma_addr", 
     // TODO: "rv32mi-p-timer",
     "rv32mi-p-csr"

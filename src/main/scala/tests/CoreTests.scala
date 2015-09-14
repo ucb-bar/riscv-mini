@@ -40,7 +40,7 @@ class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) {
       }
       tohost = peek(c.io.host.tohost)
       val log = testOutputString
-      if (verbose && !log.isEmpty) println(testOutputString) 
+      // if (verbose && !log.isEmpty) println(log)
     } while (!tohost && cycles < maxcycles)
 
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"

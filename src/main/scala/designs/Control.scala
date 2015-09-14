@@ -10,7 +10,7 @@ object Control {
   val PC_4   = UInt(0, 2)
   val PC_ALU = UInt(1, 2)
   val PC_0   = UInt(2, 2)
-  val PC_XXX = UInt(3, 2)
+  val PC_EPC = UInt(3, 2)
 
   // A_sel
   val A_RS1  = UInt(0, 1)
@@ -76,10 +76,12 @@ class ControlSignals extends CoreBundle {
   val wb_sel    = UInt(OUTPUT, 2) 
   val wb_en     = Bool(OUTPUT)
   val csr_cmd   = UInt(OUTPUT, 3)
-  val xpt       = Bool(OUTPUT)
+  val illegal   = Bool(OUTPUT)
+  val pc_check  = Bool(OUTPUT)
  
   val inst      = UInt(INPUT, xlen)
   val stall     = Bool(INPUT)
+  val flush     = Bool(INPUT)
 }
 
 class ControlIO extends Bundle {
@@ -136,21 +138,24 @@ class Control extends Module {
     AND   -> List(PC_4  , A_RS1,  B_RS2, IMM_X, ALU_AND   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     FENCE -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
     FENCEI-> List(PC_0  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N),
-    CSRRW -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
-    CSRRS -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
-    CSRRC -> List(PC_4  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
-    CSRRWI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
-    CSRRSI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
-    CSRRCI-> List(PC_4  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
+    CSRRW -> List(PC_0  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
+    CSRRS -> List(PC_0  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
+    CSRRC -> List(PC_0  , A_RS1,  B_XXX, IMM_X, ALU_COPY_A, BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
+    CSRRWI-> List(PC_0  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.W, N),
+    CSRRSI-> List(PC_0  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.S, N),
+    CSRRCI-> List(PC_0  , A_XXX,  B_XXX, IMM_Z, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, Y, CSR.C, N),
     ECALL -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     EBREAK-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
-    ERET  -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
+    ERET  -> List(PC_EPC, A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
   ))
-  val st_type     = Reg(io.ctrl.st_type)
-  val ld_type     = Reg(ctrlSignals(8))
-  val wb_sel      = Reg(ctrlSignals(9))
-  val wb_en       = RegInit(Bool(false))
+  val st_type  = Reg(io.ctrl.st_type)
+  val ld_type  = Reg(ctrlSignals(8))
+  val wb_sel   = Reg(ctrlSignals(9))
+  val wb_en    = RegInit(Bool(false))
+  val csr_cmd  = Reg(ctrlSignals(9))
+  val illegal  = RegInit(Bool(false))
+  val pc_check = RegInit(Bool(false))
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
@@ -163,14 +168,23 @@ class Control extends Module {
   io.ctrl.imm_sel := ctrlSignals(3)
   io.ctrl.alu_op  := ctrlSignals(4)
   io.ctrl.br_type := ctrlSignals(5)
-  io.ctrl.csr_cmd := ctrlSignals(11)
-  io.ctrl.xpt     := ctrlSignals(12).toBool
 
-  when(!io.ctrl.stall) {
-    st_type := io.ctrl.st_type
-    ld_type := ctrlSignals(8)
-    wb_sel  := ctrlSignals(9)
-    wb_en   := ctrlSignals(10).toBool
+  when(!io.ctrl.stall && !io.ctrl.flush) {
+    st_type  := io.ctrl.st_type
+    ld_type  := ctrlSignals(8)
+    wb_sel   := ctrlSignals(9)
+    wb_en    := ctrlSignals(10).toBool 
+    csr_cmd  := ctrlSignals(11)
+    illegal  := ctrlSignals(12).toBool 
+    pc_check := io.ctrl.pc_sel === PC_ALU
+  }.elsewhen(!io.ctrl.stall && io.ctrl.flush) {
+    st_type  := ST_XXX
+    ld_type  := LD_XXX
+    wb_sel   := UInt(0)
+    wb_en    := Bool(false)
+    csr_cmd  := CSR.N
+    illegal  := Bool(false)
+    pc_check := Bool(false)
   }
 
   // D$ signals
@@ -179,6 +193,11 @@ class Control extends Module {
                                  
   // Control signals for Write Back
   io.ctrl.ld_type := ld_type
-  io.ctrl.wb_en   := wb_en && !io.ctrl.stall 
+  io.ctrl.wb_en   := wb_en 
   io.ctrl.wb_sel  := wb_sel
+
+  // Control signals for CSR
+  io.ctrl.csr_cmd  := csr_cmd
+  io.ctrl.illegal  := illegal
+  io.ctrl.pc_check := pc_check
 }

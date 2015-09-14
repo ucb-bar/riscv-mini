@@ -20,19 +20,22 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     poke(c.io.ctrl.br_type,   ctrl(5))
     poke(c.io.ctrl.st_type,   ctrl(7))
     poke(c.io.ctrl.data_en,   ctrl(8) != ld_xxx)
-    poke(c.io.ctrl.csr_cmd,   ctrl(11))
-    poke(c.io.ctrl.xpt,       ctrl(12))
     println("=======================")
   }
 
   def pokeWbCtrl(ctrl: Array[BigInt]) {
     println("=== Write-Back Control Signals ===")
-    poke(c.io.ctrl.ld_type, ctrl(8))
-    poke(c.io.ctrl.wb_sel,  ctrl(9))
-    poke(c.io.ctrl.wb_en,   ctrl(10))
+    poke(c.io.ctrl.ld_type,  ctrl(8))
+    poke(c.io.ctrl.wb_sel,   ctrl(9))
+    poke(c.io.ctrl.wb_en,    ctrl(10))
+    poke(c.io.ctrl.csr_cmd,  ctrl(11))
+    poke(c.io.ctrl.illegal,  ctrl(12))
+    poke(c.io.ctrl.pc_check, ctrl(0) == pc_alu)
     println("=======================")
   }
 
+  poke(c.io.ctrl.stall, 0)
+  poke(c.io.ctrl.flush, 0)
   poke(c.io.icache.resp.valid, 0)
   poke(c.io.dcache.resp.valid, 0)
   poke(c.io.icache.resp.bits.data, 0)
@@ -60,7 +63,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
     pokeWbCtrl(decode(Instructions.NOP))
-    val pc = peek(c.io.icache.req.bits.addr)
+    val pc = peek(c.io.icache.req.bits.addr) 
     step(1)
 
     // Emulate fetch
@@ -109,25 +112,14 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else if (ctrl(5) == br_ltu) rs1_val < rs2_val
       else if (ctrl(5) == br_geu) rs1_val >= rs2_val
       else false
-    val csr_addr = csr(inst)
-    val csr_file = c.csr.csrFile map { case (k, v) => (k.litValue(), v) }
-    val csr_out  = if (csr_file contains csr_addr) peek(csr_file(csr_addr)) else BigInt(0)
-    val eret = ctrl(11) == csr_p && csr_addr == Funct12.ERET.litValue()
-    val expt = ctrl(11) == csr_p && csr_addr != Funct12.ERET.litValue() ||
-              (ctrl(11) & 0x3) && (!csrVal(csr_addr) || !csrPrv(csr_addr, prv) || 
-              (csrRO(csr_addr) && rs1_addr != 0)) || ctrl(12) 
     val cur_pc = pc + 4
-    val npc = if (expt && prv) BigInt(pc_mtvec)
-      else if (expt) BigInt(pc_utvec)
-      else if (eret) epc
-      else if (br_cond) alu_out & int(-2)
+    val npc = if (ctrl(0) == pc_epc) epc
+      else if (ctrl(0) == pc_alu || br_cond) alu_out & int(-2)
       else if (ctrl(0) == pc_4) cur_pc + 4
-      else if (ctrl(0) == pc_alu) alu_out & int(-2)
       else cur_pc
     val doffset = (8 * (alu_sum.toInt & 0x3)) & 0x1f
     val din = (rs2_val << doffset) & 0xffffffff
-    val dwe = if (expt) BigInt(0)
-      else if (ctrl(7) == st_sw) BigInt(0xf)
+    val dwe = if (ctrl(7) == st_sw) BigInt(0xf)
       else if (ctrl(7) == st_sh) (BigInt(0x3) << (alu_out.toInt & 0x3)) & 0xf
       else if (ctrl(7) == st_sb) (BigInt(0x1) << (alu_out.toInt & 0x3)) & 0xf
       else BigInt(0)
@@ -139,8 +131,6 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     pokeWbCtrl(decode(Instructions.NOP))
     expect(c.alu.io.A,   a)
     expect(c.alu.io.B,   b)
-    expect(c.alu.io.out, alu_out)
-    expect(c.csr.io.out, csr_out)
     expect(c.pc,         cur_pc)
     expect(c.io.icache.req.bits.addr, npc)
     expect(c.io.dcache.req.bits.addr, alu_sum & int(-4))
@@ -149,6 +139,26 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     step(1)
 
     // Emulate write back
+    poke(c.io.ctrl.inst_en, 0)
+    pokeExCtrl(decode(Instructions.NOP), false)
+    pokeWbCtrl(ctrl)
+
+    val csr_addr = csr(inst)
+    val csr_file = c.csr.csrFile map { case (k, v) => (k.litValue(), v) }
+    val csr_out  = if (csr_file contains csr_addr) peek(csr_file(csr_addr)) else BigInt(0)
+    val addr_invalid = ctrl(0) == pc_alu && (alu_sum & 0x2) || 
+               ctrl(8) == ld_lw && (alu_sum & 0x3) || 
+              (ctrl(8) == ld_lh || ctrl(8) == ld_lhu) && (alu_sum & 0x1)
+    val eret = ctrl(11) == csr_p && csr_addr == Funct12.ERET.litValue()
+    val expt = ctrl(11) == csr_p && csr_addr != Funct12.ERET.litValue() ||
+              (ctrl(11) & 0x3) && (!csrVal(csr_addr) || !csrPrv(csr_addr, prv) || 
+              (csrRO(csr_addr) && rs1_addr != 0)) || ctrl(12) || addr_invalid
+    val evec = if (expt && prv) BigInt(pc_mtvec) else if (expt) BigInt(pc_utvec) else npc + 4 
+
+    expect(c.io.icache.req.bits.addr, evec) 
+    expect(c.csr.io.expt,             expt)
+    expect(c.csr.io.out,              csr_out)
+
     val lw = rnd.nextInt() & 0xffffffff
     val lhu = (lw >>> doffset) & 0xffff
     val lbu = (lw >>> doffset) & 0xff
@@ -159,11 +169,8 @@ class DatapathTests(c: Datapath) extends Tester(c) {
       else if (ctrl(8) == ld_lbu) int(lbu)
       else BigInt(0)
 
-    poke(c.io.ctrl.inst_en, 0)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, lw)
-    pokeExCtrl(decode(Instructions.NOP), false)
-    pokeWbCtrl(ctrl)
     step(1)
 
     // Check the results
@@ -178,7 +185,7 @@ class DatapathTests(c: Datapath) extends Tester(c) {
     if (expt) {
       prv1 = prv
       prv  = CSR.PRV_M
-      epc  = pc
+      epc  = pc & int(-4)
     } else if (eret) {
       prv  = prv1
       prv1 = CSR.PRV_U
