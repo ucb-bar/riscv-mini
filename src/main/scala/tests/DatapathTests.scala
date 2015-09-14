@@ -53,7 +53,6 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     println("\n*********************")
     println("  %s (0x%s)".format(dasm(inst), inst.litValue().toString(16)))
     println("*********************")
-    poke(c.io.ctrl.inst_en, 1)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
@@ -62,7 +61,6 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     step(1)
 
     // Emulate fetch
-    poke(c.io.ctrl.inst_en, 1)
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
@@ -119,7 +117,6 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
       else if (ctrl(7) == st_sb) (BigInt(0x1) << (alu_out.toInt & 0x3)) & 0xf
       else BigInt(0)
     val dre = if (ctrl(8) != ld_xxx) y else n
-    poke(c.io.ctrl.inst_en, y - dre)
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(ctrl, br_cond)
@@ -134,7 +131,6 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     step(1)
 
     // Emulate write back
-    poke(c.io.ctrl.inst_en, 0)
     pokeExCtrl(decode(Instructions.NOP), false)
     pokeWbCtrl(ctrl)
 

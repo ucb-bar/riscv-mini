@@ -160,7 +160,6 @@ class Control extends Module {
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
-  io.ctrl.inst_en   := !io.ctrl.stall 
   io.ctrl.inst_kill := ctrlSignals(6).toBool 
 
   // Control signals for Execute

@@ -47,7 +47,7 @@ class Datapath extends Module with CoreParams {
   io.icache.req.bits.addr := npc
   io.icache.req.bits.data := UInt(0)
   io.icache.req.bits.mask := UInt(0)
-  io.icache.req.valid     := io.ctrl.inst_en
+  io.icache.req.valid     := !io.ctrl.stall
   io.icache.abort         := Bool(false)
  
   // Pipelining
