@@ -36,19 +36,19 @@ class Datapath extends Module with CoreParams {
  
   /****** Fetch *****/
   val started = RegNext(reset)
-  val pc    = RegInit(Const.PC_START - UInt(4, xlen)) 
-  val iaddr = Mux(csr.io.expt, csr.io.evec,
-              Mux(io.ctrl.pc_sel === PC_EPC, csr.io.epc,
-              Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
-              Mux(io.ctrl.pc_sel === PC_0 || io.ctrl.stall, pc, pc + UInt(4)))))
-  val inst  = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, 
-                  Instructions.NOP, io.icache.resp.bits.data)
-  io.icache.req.bits.addr := iaddr 
+  val pc   = RegInit(Const.PC_START - UInt(4, xlen)) 
+  val npc  = Mux(io.ctrl.stall, pc,
+             Mux(csr.io.expt, csr.io.evec,
+             Mux(io.ctrl.pc_sel === PC_EPC, csr.io.epc,
+             Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
+             Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))))
+  val inst = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.resp.bits.data)
+  pc                      := npc 
+  io.icache.req.bits.addr := npc
   io.icache.req.bits.data := UInt(0)
   io.icache.req.bits.mask := UInt(0)
   io.icache.req.valid     := io.ctrl.inst_en
   io.icache.abort         := Bool(false)
-  pc := Mux(io.ctrl.inst_en, iaddr, pc)
  
   // Pipelining
   when (!io.ctrl.stall) {
