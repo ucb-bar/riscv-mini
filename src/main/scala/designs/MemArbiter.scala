@@ -24,6 +24,8 @@ class MemArbiter extends Module {
   io.mem.req_data.bits.data := io.dcache.req_data.bits.data
   io.icache.req_cmd.ready   := io.mem.req_cmd.ready && !io.dcache.req_cmd.valid
   io.dcache.req_cmd.ready   := io.mem.req_cmd.ready 
+  io.icache.req_data.ready  := io.mem.req_data.ready && !io.dcache.req_cmd.valid
+  io.dcache.req_data.ready  := io.mem.req_data.ready 
   
   io.icache.resp.bits.data  := io.mem.resp.bits.data
   io.icache.resp.bits.tag   := UInt(0)
