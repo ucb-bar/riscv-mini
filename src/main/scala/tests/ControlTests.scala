@@ -1,11 +1,8 @@
 package mini
 
 import Chisel._
-import TestCommon._
 
-class ControlTests(c: Control) extends Tester(c) {
-  implicit def toBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0) 
-
+class ControlTests(c: Control) extends RISCVTester(c) {
   def checkCtrl(ctrl: Array[BigInt]) {
     expect(c.io.ctrl.pc_sel,    ctrl(0))
     expect(c.io.ctrl.inst_kill, ctrl(6))

@@ -1,7 +1,6 @@
 package mini
 
 import Chisel._
-import TestCommon._
 import scala.io.Source
 
 class TileTests(c: Tile, args: Array[String]) extends MemTester(c, args, 16) {

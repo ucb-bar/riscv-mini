@@ -1,23 +1,21 @@
 package mini
 
 import Chisel._
-import TestCommon._
 import scala.collection.mutable.HashMap
 
-class CSRTests(c: CSR) extends Tester(c) {
-  implicit def toBigInt(x: UInt) = x.litValue()
-  implicit def toBoolean(x: BigInt) = x != 0
+class CSRTests(c: CSR) extends RISCVTester(c) {
   val csrFile = c.csrFile map { case (k, y) => (k.litValue(), y) }
   val values = HashMap[BigInt, BigInt]()
-  val pc = int(rnd.nextInt())
-  var instret = BigInt(0)
-  def nextInstret = {
-    instret = rnd.nextInt() & 0x1
-    instret
-  }
+  val pc   = rand_addr
+  val addr = rand_addr
   def prv = (values(CSR.mstatus) >> 1) & 0x3
   def nextIn = int(rnd.nextInt() & 0xffffffff)
-  def nextSrc = int(rnd.nextInt() & 0x1f)
+  var inst = BigInt(0)
+  def nextInst(csr: BigInt) = {
+    inst = Cat(UInt(csr), rand_rs1, Funct3.CSRRW, rand_rd, Opcode.SYSTEM)
+    inst
+  }
+  var instret = true
   def updateTime(value: BigInt) {
     values(CSR.time) = value
     values(CSR.timew) = value
@@ -146,7 +144,6 @@ class CSRTests(c: CSR) extends Tester(c) {
   }
   def expectException(cause: BigInt) {
     expect(c.io.expt, 1)
-    expect(c.io.eret, 0)
     val evec = if (prv) pc_mtvec else pc_utvec
     expect(c.io.evec, evec)
     values(CSR.mepc) = pc & int(-4)
@@ -162,8 +159,6 @@ class CSRTests(c: CSR) extends Tester(c) {
   }
   def expectEret {
     expect(c.io.expt, 0)
-    expect(c.io.eret, 1)
-    expect(c.io.evec, values(CSR.mepc))
     step(1)
     expect(c.PRV, (values(CSR.mstatus) >> 4) & 0x3)
     expect(c.IE,  (values(CSR.mstatus) >> 3) & 0x1)
@@ -181,16 +176,15 @@ class CSRTests(c: CSR) extends Tester(c) {
       values(CSR.instret)  += 1
       values(CSR.instretw) += 1
     }
-    poke(c.io.instret, instret)
     super.step(n)
   }
 
-  poke(c.io.pc, pc)
-  poke(c.io.illegal_inst, 0)
-  poke(c.io.iaddr_invalid, 0)
-  poke(c.io.daddr_invalid, 0)
-  poke(c.io.addr, 0)
-  poke(c.io.instret, 0)
+  poke(c.io.pc,       pc)
+  poke(c.io.addr,     addr)
+  poke(c.io.stall,    0)
+  poke(c.io.illegal,  0)
+  poke(c.io.ld_type,  ld_xxx)
+  poke(c.io.pc_check, 0)
   csrNames foreach { case (csr, name) => 
     val value = if (!csrRO(csr)) nextIn else peek(csrFile(csr))
     pokeCSR(csr, value)
@@ -200,26 +194,27 @@ class CSRTests(c: CSR) extends Tester(c) {
   csrNames foreach { case (csr, name) => 
     val reg = csrFile(csr)
     println("*** CSR.N: %s ***".format(name))
-    poke(c.io.in, nextIn)
-    poke(c.io.src, nextSrc)
-    poke(c.io.csr, csr)
-    expectOut(csr, values(csr))
+    poke(c.io.in,   nextIn)
+    poke(c.io.inst, nextInst(csr))
+    expectOut(csr,  values(csr))
     step(1)
-    expectCSR(csr, values(csr))
+    expectCSR(csr,  values(csr))
   }
 
   poke(c.io.cmd, csr_w)
   csrNames foreach { case (csr, name) => 
-    val in = nextIn
-    val src = nextSrc
+    val in   = nextIn
+    val inst = nextInst(csr)
+    val src  = rs1(UInt(inst))
     println("*** CSR.W: %s <- %x (x%d) ***".format(name, in, src))
-    poke(c.io.in, in)
-    poke(c.io.src, src)
-    poke(c.io.csr, csr)
-    expectOut(csr, values(csr))
+    poke(c.io.in,   in)
+    poke(c.io.inst, inst)
+    expectOut(csr,  values(csr))
     if (!csrPrv(csr, prv) || csrRO(csr)) { 
+      instret = false
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
+      instret = true
       step(1)
       expectCSR(csr, in)
     }
@@ -227,18 +222,20 @@ class CSRTests(c: CSR) extends Tester(c) {
 
   poke(c.io.cmd, csr_s)
   csrNames foreach { case (csr, name) => 
-    val in = nextIn
-    val src = nextSrc
+    val in   = nextIn
+    val inst = nextInst(csr)
+    val src  = rs1(UInt(inst))
     println("*** CSR.S: %s <- %x (x%d) ****".format(name, in, src))
-    poke(c.io.in, in)
-    poke(c.io.src, src)
-    poke(c.io.csr, csr)
+    poke(c.io.in,   in)
+    poke(c.io.inst, inst)
     expectOut(csr, values(csr))
     if (!csrPrv(csr, prv) || (csrRO(csr) && src != 0)) { 
+      instret = false
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
+      instret = true
       val value = if (src != 0) values(csr) | in 
-        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr) && nextInstret) values(csr) + 1 
+        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr)) values(csr) + 1 
         else values(csr)
       step(1)
       expectCSR(csr, value)
@@ -247,37 +244,40 @@ class CSRTests(c: CSR) extends Tester(c) {
 
   poke(c.io.cmd, csr_c)
   csrNames foreach { case (csr, name) => 
-    val in = nextIn
-    val src = nextSrc
+    val in   = nextIn
+    val inst = nextInst(csr)
+    val src  = rs1(UInt(inst))
     println("*** CSR.C: %s <- %x (x%d) ***".format(name, in, src))
-    poke(c.io.in, in)
-    poke(c.io.src, src)
-    poke(c.io.csr, csr)
+    poke(c.io.in,   in)
+    poke(c.io.inst, inst)
     expectOut(csr, values(csr))
     if (!csrPrv(csr, prv) && (csrRO(csr) && src != 0)) { 
+      instret = false
       expectException(Cause.IllegalInst)
     } else if (!csrRO(csr)) {
+      instret = true
       val value = if (src != 0) values(csr) & int(~in.toInt) 
-        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr) && nextInstret) values(csr) + 1 
+        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr)) values(csr) + 1 
         else values(csr)
       step(1)
       expectCSR(csr, value) 
     } 
   }
 
+  instret = true
   poke(c.io.cmd, csr_p)
   println("*** CSR.P: ECALL ***")
-  poke(c.io.in, nextIn)
-  poke(c.io.csr, Funct12.ECALL)
+  poke(c.io.in,   nextIn)
+  poke(c.io.inst, Instructions.ECALL)
   expectException(Cause.Ecall + ((values(CSR.mstatus) >> 1) & 0x3))
 
   println("*** CSR.P: ERET ***")
-  poke(c.io.in, nextIn)
-  poke(c.io.csr, Funct12.ERET)
+  poke(c.io.in,   nextIn)
+  poke(c.io.inst, Instructions.ERET)
   expectEret
 
   println("*** CSR.P: EBREAK ***")
-  poke(c.io.in, nextIn)
-  poke(c.io.csr, Funct12.EBREAK)
+  poke(c.io.in,   nextIn)
+  poke(c.io.inst, Instructions.EBREAK)
   expectException(Cause.Breakpoint)
 }

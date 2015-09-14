@@ -70,14 +70,14 @@ class CSRIO extends CoreBundle {
   val out   = UInt(OUTPUT, xlen)
   // Excpetion
   val pc       = UInt(INPUT, xlen)
-  val inst     = UInt(INPUT, xlen)
-  val expt     = Bool(OUTPUT)
-  val evec     = UInt(OUTPUT, xlen)
-  val epc      = UInt(OUTPUT, xlen)
   val addr     = UInt(INPUT, xlen)
+  val inst     = UInt(INPUT, xlen)
   val illegal  = Bool(INPUT)
   val ld_type  = UInt(INPUT, 3)
   val pc_check = Bool(INPUT)
+  val expt     = Bool(OUTPUT)
+  val evec     = UInt(OUTPUT, xlen)
+  val epc      = UInt(OUTPUT, xlen)
   // HTIF
   val host = new HostIO
 }
@@ -214,7 +214,7 @@ class CSR extends Module with CoreParams {
   when(time.andR) { timeh := timeh + UInt(1) }
   cycle := cycle + UInt(1)
   when(cycle.andR) { cycleh := cycleh + UInt(1) }
-  val isInstRet = io.inst != Instructions.NOP && !io.expt && !io.stall
+  val isInstRet = io.inst != Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
   when(isInstRet) { instret := instret + UInt(1) }
   when(isInstRet && instret.andR) { instreth := instreth + UInt(1) }
 

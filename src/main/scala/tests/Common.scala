@@ -3,38 +3,44 @@ package mini
 import Chisel._
 import Instructions._
 import scala.io.Source
-import scala.util.Random
 import scala.collection.mutable.HashMap
 
-object TestCommon extends FileSystemUtilities {
-  /* Define tests */
-  private def rand_fn7 = UInt(Random.nextInt(1 << 7), 7)
-  private def rand_rs2 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
-  private def rand_rs1 = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
-  private def rand_fn3 = UInt(Random.nextInt(1 << 3), 3) 
-  private def rand_rd  = UInt(Random.nextInt((1 << 5) - 1) + 1, 5)
-  private def rand_csr = UInt(csrRegs(Random.nextInt(csrRegs.size-1)))
-  private def rand_inst = UInt(Random.nextInt())
+abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) {
+  implicit def bigIntToBoolean(x: BigInt) = x != 0
+  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
+  implicit def boolToBoolean(x: Bool) = x.isTrue
+  implicit def bigIntToInt(x: BigInt) = x.toInt
+  implicit def uintToBigInt(x: UInt) = x.litValue()
 
-  private def reg(x: Int) = UInt(x, 5)
-  private def imm(x: Int) = SInt(x, 21)
-  private def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+  /* Define tests */
+  def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
+  def rand_rs2 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
+  def rand_rs1 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
+  def rand_fn3 = UInt(rnd.nextInt(1 << 3), 3) 
+  def rand_rd  = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
+  def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
+  def rand_inst = UInt(int(rnd.nextInt()))
+  def rand_addr = UInt(int(rnd.nextInt()))
+
+  def reg(x: Int) = UInt(x, 5)
+  def imm(x: Int) = SInt(x, 21)
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
     Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  private def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
     Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  private def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
     Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  private def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
     Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  private def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
     Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  private def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
     Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  private def U(op: UInt, rd: Int, i: Int) = 
+  def U(op: UInt, rd: Int, i: Int) = 
     Cat(imm(i), reg(rd), op)
-  private def J(op: UInt, rd: Int, i: Int) = 
+  def J(op: UInt, rd: Int, i: Int) = 
     Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
-  private def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
     Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
@@ -182,8 +188,6 @@ object TestCommon extends FileSystemUtilities {
   def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst), 
                              inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
   def zimm(inst: UInt) = BigInt(rs1(inst))
-
-  implicit def toBoolean(x: Bool) = x.isTrue
 
   val csrRegs = List(
     CSR.cycle, CSR.time, CSR.instret, CSR.cycleh, CSR.timeh, CSR.instreth,
@@ -349,7 +353,54 @@ object TestCommon extends FileSystemUtilities {
   val pc_start = Const.PC_START.litValue().toInt
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
+}
 
+class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
+  implicit def toBigInt(x: UInt) = x.litValue()
+
+  private val mem = Array.fill(size){0.toByte} 
+  private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
+
+  def read(addr: Int, s: Int = blockSize) = {
+    val off = log2Up(s)
+    val a = (addr & (size - 1)) >> off << off
+    ((0 until s) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
+  }
+
+  def write(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) {
+    val a = addr & (size - 1)
+    for (i <- 0 until blockSize if ((mask >> i) & 0x1) > 0) {
+      mem(a+i) = (data >> (8 * i)).toByte
+    }
+  }
+
+  def loadMem(start: Int, test: Seq[UInt]) {
+    def writeWord(a: Int, data: BigInt) {
+      (0 until 4) foreach {i => mem(a+i) = (data >> (8 * i)).toByte}
+    }
+    for((inst, i) <- test.zipWithIndex) {
+      writeWord(start + 4*i, inst)
+    }
+  }
+
+  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+
+  def loadMem(testname: String) {
+    val lines = Source.fromFile(testname + ".hex").getLines
+    for ((line, i) <- lines.zipWithIndex) {
+      val base = (i * line.length) / 2
+      var offset = 0
+      for (k <- (line.length - 2) to 0 by -2) {
+        val addr = base+offset
+        val data = (parseNibble(line(k)) << 4) | parseNibble(line(k+1))
+        mem(addr) = data.toByte
+        offset += 1
+      }
+    }
+  }
+}
+
+abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends RISCVTester(c, false) {
   val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -365,13 +416,13 @@ object TestCommon extends FileSystemUtilities {
   )
   val exceptionTest = List(
     fence,
-    I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 2
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 3
+    I(Funct3.ADD, 1, 0, 2),  // ADDI x1, x0, 1   # x1 <- 2
+    I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 3
+    I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 4
     rand_inst,               // excpetion
-    I(Funct3.ADD, 1, 1, 1),  // ADDI x1, x1, 1   # x1 <- 2
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x1, x1, 1   # x1 <- 3
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x1, x1, 1   # x1 <- 4
+    I(Funct3.ADD, 1, 1, 1),  // ADDI x1, x1, 1   # x1 <- 3
+    I(Funct3.ADD, 2, 1, 1),  // ADDI x1, x1, 1   # x1 <- 4
+    I(Funct3.ADD, 3, 2, 1),  // ADDI x1, x1, 1   # x1 <- 5
     fin                      // fin
   )
   val testResults = Map(
@@ -433,61 +484,6 @@ object TestCommon extends FileSystemUtilities {
     "towers.riscv",
     "vvadd.riscv"
   ) 
-}
-
-class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
-  import TestCommon._
-  implicit def toBigInt(x: UInt) = x.litValue()
-
-  private val mem = Array.fill(size){0.toByte} 
-  private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
-
-  def read(addr: Int, s: Int = blockSize) = {
-    val off = log2Up(s)
-    val a = (addr & (size - 1)) >> off << off
-    ((0 until s) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
-  }
-
-  def write(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) {
-    val a = addr & (size - 1)
-    for (i <- 0 until blockSize if ((mask >> i) & 0x1) > 0) {
-      mem(a+i) = (data >> (8 * i)).toByte
-    }
-  }
-
-  def loadMem(test: Seq[UInt]) {
-    def writeWord(a: Int, data: BigInt) {
-      (0 until 4) foreach {i => mem(a+i) = (data >> (8 * i)).toByte}
-    }
-    writeWord(pc_mtvec, fin)
-    writeWord(pc_utvec, fin)
-    for((inst, i) <- test.zipWithIndex) {
-      writeWord(pc_start + 4*i, inst)
-    }
-  }
-
-  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
-
-  def loadMem(testname: String) {
-    val lines = Source.fromFile(testname + ".hex").getLines
-    for ((line, i) <- lines.zipWithIndex) {
-      val base = (i * line.length) / 2
-      var offset = 0
-      for (k <- (line.length - 2) to 0 by -2) {
-        val addr = base+offset
-        val data = (parseNibble(line(k)) << 4) | parseNibble(line(k+1))
-        mem(addr) = data.toByte
-        offset += 1
-      }
-    }
-  }
-}
-
-abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends Tester(c, false) {
-  import TestCommon._
-
-  implicit def bigIntToBoolean(b: BigInt) = b != 0
-  implicit def bigIntToInt(b: BigInt) = b.toInt
 
   abstract class Tests
   case object SimpleTests extends Tests
@@ -537,7 +533,9 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
   tests match {
     case SimpleTests =>
       cycles = 0
-      mem.loadMem(bypassTest)
+      mem.write(pc_mtvec, fin)
+      mem.write(pc_utvec, fin)
+      mem.loadMem(pc_start, bypassTest)
       runTests(maxcycles, verbose)
       for ((rd, expected) <- testResults(bypassTest)) {
         val result = regFile(rd) 
@@ -546,7 +544,9 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
       }
       reset(5) 
       cycles = 0
-      mem.loadMem(exceptionTest)
+      mem.write(pc_mtvec, fin)
+      mem.write(pc_utvec, fin)
+      mem.loadMem(pc_start, exceptionTest)
       runTests(maxcycles, verbose)
       for ((rd, expected) <- testResults(exceptionTest)) {
         val result = regFile(rd) 

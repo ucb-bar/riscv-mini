@@ -2,18 +2,19 @@ package mini
 
 import Chisel._
 
-abstract class CacheTask
-object ReadOnHit extends CacheTask
-object WriteOnHit extends CacheTask
-object ReadOnMiss extends CacheTask
-object WriteOnMiss extends CacheTask
-object ReadOnWriteBack extends CacheTask
-object WriteOnWriteBack extends CacheTask
-
 class CacheTests(c: Cache) extends Tester(c) {
+  abstract class CacheTask
+  object ReadOnHit extends CacheTask
+  object WriteOnHit extends CacheTask
+  object ReadOnMiss extends CacheTask
+  object WriteOnMiss extends CacheTask
+  object ReadOnWriteBack extends CacheTask
+  object WriteOnWriteBack extends CacheTask
+
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
+
   def rand_tag = rnd.nextInt(1 << c.tlen)
   def rand_idx = rnd.nextInt(1 << c.slen)
   def rand_off = rnd.nextInt(1 << c.blen)

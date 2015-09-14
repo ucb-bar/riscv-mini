@@ -27,7 +27,7 @@ class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) {
       val dout  = mem.read(daddr)
       step(1)
       if (ire) {
-        if (verbose) println("MEM[%x] -> %s".format(iaddr, TestCommon.dasm(UInt(inst))))
+        if (verbose) println("MEM[%x] -> %s".format(iaddr, dasm(UInt(inst))))
         poke(c.io.icache.resp.bits.data, inst)
       } 
       if (dre) {

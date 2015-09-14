@@ -1,14 +1,8 @@
 package mini
 
 import Chisel._
-import TestCommon._
 
-class DatapathTests(c: Datapath) extends Tester(c) {
-  implicit def booleanToBigInt(b: Boolean) = if (b) BigInt(1) else BigInt(0)
-  implicit def bigIntToBoolean(b: BigInt) = b != 0
-  implicit def bigIntToInt(b: BigInt) = b.toInt
-  implicit def uintToBigInt(x: UInt) = x.litValue()
-
+class DatapathTests(c: Datapath) extends RISCVTester(c) {
   def pokeExCtrl(ctrl: Array[BigInt], br_cond: Boolean) {
     println("=== Execute Control Signals ===")
     poke(c.io.ctrl.pc_sel,    ctrl(0))
