@@ -1,7 +1,7 @@
 import sbt._
 import Keys._
 
-object DebugBuild extends Build {
+object MiniBuild extends Build {
   override lazy val settings = super.settings ++ Seq(
     scalaVersion := "2.11.6",
     scalacOptions ++= Seq("-deprecation","-unchecked")
