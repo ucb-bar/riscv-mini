@@ -2,11 +2,8 @@ package mini
 
 import Chisel._
 
-class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) {
-  def regFile(x: Int) = peekAt(c.dpath.regFile.regs, x)
-  def runTests(maxcycles: Int, verbose: Boolean) = {
-    t = 0
-    ok = true
+trait CoreMem extends MemCommon {
+  def run(c: Core, maxcycles: Int, verbose: Boolean) = {
     for (i <- 0 until c.dpath.regFile.regs.n) {
       if (i == 0)
         pokeAt(c.dpath.regFile.regs, 0, i)
@@ -44,8 +41,16 @@ class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) {
     } while (!tohost && cycles < maxcycles)
 
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
-    ok &= tohost == 1
+    val ok = tohost == 1
     println("*** %s *** (%s) after %d simulation cycles".format(
-            if (tohost == 1) "PASSED" else "FAILED", reason, cycles))
+            if (ok) "PASSED" else "FAILED", reason, cycles))
+    ok
+  }
+}
+
+class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) with CoreMem {
+  def regFile(x: Int) = peekAt(c.dpath.regFile.regs, x)
+  def runTests(maxcycles: Int, verbose: Boolean) = {
+    ok &= run(c, maxcycles, verbose)
   }
 }

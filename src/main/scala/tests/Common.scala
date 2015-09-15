@@ -5,7 +5,7 @@ import Instructions._
 import scala.io.Source
 import scala.collection.mutable.HashMap
 
-abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) {
+trait RISCVCommon {
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
   implicit def boolToBoolean(x: Bool) = x.isTrue
@@ -13,36 +13,18 @@ abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Test
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
   /* Define tests */
+  def rnd: scala.util.Random
   def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
   def rand_rs2 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_rs1 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_fn3 = UInt(rnd.nextInt(1 << 3), 3) 
   def rand_rd  = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
-  def rand_inst = UInt(int(rnd.nextInt()))
-  def rand_addr = UInt(int(rnd.nextInt()))
+  def rand_inst = UInt(rnd.nextInt())
+  def rand_addr = UInt(rnd.nextInt())
 
   def reg(x: Int) = UInt(x, 5)
   def imm(x: Int) = SInt(x, 21)
-  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
-    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
-    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
-  def J(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
-  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
-    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
-
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
   val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
@@ -103,21 +85,21 @@ abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Test
   val pc_0   = BigInt(2)
   val pc_epc = BigInt(3)
 
-  val a_rs1  = BigInt(0)
-  val a_pc   = BigInt(1)
-  val a_xxx  = BigInt(1)
+  val a_xxx  = BigInt(0)
+  val a_pc   = BigInt(0)
+  val a_rs1  = BigInt(1)
 
-  val b_rs2  = BigInt(0)
-  val b_imm  = BigInt(1)
-  val b_xxx  = BigInt(1)
+  val b_xxx  = BigInt(0)
+  val b_imm  = BigInt(0)
+  val b_rs2  = BigInt(1)
 
-  val imm_i  = BigInt(0)
-  val imm_s  = BigInt(1)
-  val imm_u  = BigInt(2)
-  val imm_j  = BigInt(3)
-  val imm_b  = BigInt(4)
-  val imm_z  = BigInt(5)
-  val imm_x  = BigInt(7)
+  val imm_x  = BigInt(0)
+  val imm_i  = BigInt(1)
+  val imm_s  = BigInt(2)
+  val imm_u  = BigInt(3)
+  val imm_j  = BigInt(4)
+  val imm_b  = BigInt(5)
+  val imm_z  = BigInt(6)
 
   val alu_add    = BigInt(0)
   val alu_sub    = BigInt(1)
@@ -133,25 +115,25 @@ abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Test
   val alu_copy_b = BigInt(11)
   val alu_xxx    = BigInt(15)
 
-  val br_ltu = BigInt(0)
-  val br_lt  = BigInt(1)
-  val br_eq  = BigInt(2)
+  val br_xxx = BigInt(0)
+  val br_ltu = BigInt(1)
+  val br_lt  = BigInt(2)
+  val br_eq  = BigInt(3)
   val br_geu = BigInt(4)
   val br_ge  = BigInt(5)
   val br_ne  = BigInt(6)
-  val br_xxx = BigInt(7)
 
-  val st_sw  = BigInt(0)
-  val st_sh  = BigInt(1)
-  val st_sb  = BigInt(2)
-  val st_xxx = BigInt(3)
+  val st_xxx = BigInt(0)
+  val st_sw  = BigInt(1)
+  val st_sh  = BigInt(2)
+  val st_sb  = BigInt(3)
 
-  val ld_lw  = BigInt(0)
-  val ld_lh  = BigInt(1)
-  val ld_lb  = BigInt(2)
-  val ld_lhu = BigInt(3)
-  val ld_lbu = BigInt(4)
-  val ld_xxx = BigInt(7)
+  val ld_xxx = BigInt(0)
+  val ld_lw  = BigInt(1)
+  val ld_lh  = BigInt(2)
+  val ld_lb  = BigInt(3)
+  val ld_lhu = BigInt(4)
+  val ld_lbu = BigInt(5)
 
   val wb_alu = BigInt(0)
   val wb_mem = BigInt(1)
@@ -355,6 +337,8 @@ abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Test
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
 }
 
+abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) with RISCVCommon 
+
 class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   implicit def toBigInt(x: UInt) = x.litValue()
 
@@ -400,7 +384,26 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 }
 
-abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends RISCVTester(c, false) {
+trait MemCommon extends RISCVCommon {
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
+  def U(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i), reg(rd), op)
+  def J(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
+
   val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -427,9 +430,8 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
   )
   val testResults = Map(
     bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
-    exceptionTest -> Array((1, 1), (2, 2), (3, 3))
+    exceptionTest -> Array((1, 2), (2, 3), (3, 4))
   )
-
   val isaTests = List(
     "rv32ui-p-simple",
     "rv32ui-p-add",
@@ -490,11 +492,7 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
   case object ISATests extends Tests
   case object Benchmarks extends Tests
 
-  var cycles = 0
-  override def step(n: Int) {
-    cycles += n
-    super.step(n)
-  }
+  var cycles = 0 // step should increase it
 
   def genTests(tests: List[String], dir: String) {
     for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
@@ -525,47 +523,70 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
     (dir, tests, maxcycles, verbose)
   }
   
-  def runTests(maxCycles: Int, verboase: Boolean): Unit
+  def runTests(maxCycles: Int, verbose: Boolean): Unit
   def regFile(x: Int): BigInt
 
+  // Tester functions
+  // TODO: have a seperate trait to provide interface
+  def mem: MagicMem
+  def reset(n: Int): Unit
+  def run(s: String): Boolean
+  def poke(data: Bits, x: BigInt): Unit
+  def pokeAt[T <: Bits](data: Mem[T], x: BigInt, off: Int): Unit
+  def peek(data: Bits): BigInt
+  def peekAt[T <: Bits](data: Mem[T], off: Int): BigInt
+  def step(n: Int): Unit
+  def int(x: Int): BigInt
+  def testOutputString: String
+
+  def start(dir: String, tests: Tests, maxcycles: Int, verbose: Boolean) {
+    tests match {
+      case SimpleTests =>
+        cycles = 0
+        mem.write(pc_mtvec, fin)
+        mem.write(pc_utvec, fin)
+        mem.loadMem(pc_start, bypassTest)
+        runTests(maxcycles, verbose)
+        for ((rd, expected) <- testResults(bypassTest)) {
+          val result = regFile(rd) 
+          println("[%s] RegFile[%d] = %d == %d".format(
+                  if (result == expected) "PASS" else "FAIL", rd, result, expected))
+        }
+        reset(5) 
+        cycles = 0
+        mem.write(pc_mtvec, fin)
+        mem.write(pc_utvec, fin)
+        mem.loadMem(pc_start, exceptionTest)
+        runTests(maxcycles, verbose)
+        for ((rd, expected) <- testResults(exceptionTest)) {
+          val result = regFile(rd) 
+          println("[%s] RegFile[%d] = %d == %d".format(
+                  if (result == expected) "PASS" else "FAIL", rd, result, expected))
+        }
+      case ISATests => for (test <- isaTests) {
+        cycles = 0
+        println("\n***** ISA Test: %s ******".format(test))
+        mem.loadMem(dir + "/" + test)
+        runTests(maxcycles, verbose)
+        reset(5)
+      }
+      case Benchmarks => for (test <- bmarksTest) {
+        cycles = 0
+        println("\n***** Benchmark: %s ******".format(test))
+        mem.loadMem(dir + "/" + test)
+        runTests(maxcycles, verbose)
+        reset(5)
+      } 
+    }
+  }
+}
+
+abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends Tester(c, false) with MemCommon {
   val mem = new MagicMem(blockSize)
   val (dir, tests, maxcycles, verbose) = parseOpts(args)
-  tests match {
-    case SimpleTests =>
-      cycles = 0
-      mem.write(pc_mtvec, fin)
-      mem.write(pc_utvec, fin)
-      mem.loadMem(pc_start, bypassTest)
-      runTests(maxcycles, verbose)
-      for ((rd, expected) <- testResults(bypassTest)) {
-        val result = regFile(rd) 
-        println("[%s] RegFile[%d] = %d == %d".format(
-                if (result == expected) "PASS" else "FAIL", rd, result, expected))
-      }
-      reset(5) 
-      cycles = 0
-      mem.write(pc_mtvec, fin)
-      mem.write(pc_utvec, fin)
-      mem.loadMem(pc_start, exceptionTest)
-      runTests(maxcycles, verbose)
-      for ((rd, expected) <- testResults(exceptionTest)) {
-        val result = regFile(rd) 
-        println("[%s] RegFile[%d] = %d == %d".format(
-                if (result == expected) "PASS" else "FAIL", rd, result, expected))
-      }
-    case ISATests => for (test <- isaTests) {
-      reset(5)
-      cycles = 0
-      println("\n***** ISA Test: %s ******".format(test))
-      mem.loadMem(dir + "/" + test)
-      runTests(maxcycles, verbose)
-    }
-    case Benchmarks => for (test <- bmarksTest) {
-      reset(5)
-      cycles = 0
-      println("\n***** Benchmark: %s ******".format(test))
-      mem.loadMem(dir + "/" + test)
-      runTests(maxcycles, verbose)
-    } 
+  override def step(n: Int) {
+    cycles += n
+    super.step(n)
   }
+  start(dir, tests, maxcycles, verbose)
 }
