@@ -13,46 +13,46 @@ object Control {
   val PC_EPC = UInt(3, 2)
 
   // A_sel
-  val A_RS1  = UInt(0, 1)
-  val A_PC   = UInt(1, 1)
-  val A_XXX  = UInt(1, 1)
+  val A_XXX  = UInt(0, 1)
+  val A_PC   = UInt(0, 1)
+  val A_RS1  = UInt(1, 1)
 
   // B_sel
-  val B_RS2  = UInt(0, 1)
-  val B_IMM  = UInt(1, 1)
-  val B_XXX  = UInt(1, 1)
+  val B_XXX  = UInt(0, 1)
+  val B_IMM  = UInt(0, 1)
+  val B_RS2  = UInt(1, 1)
 
   // imm_sel
-  val IMM_I  = UInt(0, 3)
-  val IMM_S  = UInt(1, 3)
-  val IMM_U  = UInt(2, 3)
-  val IMM_J  = UInt(3, 3)
-  val IMM_B  = UInt(4, 3)
-  val IMM_Z  = UInt(5, 3)
-  val IMM_X  = UInt(7, 3)
+  val IMM_X  = UInt(0, 3)
+  val IMM_I  = UInt(1, 3)
+  val IMM_S  = UInt(2, 3)
+  val IMM_U  = UInt(3, 3)
+  val IMM_J  = UInt(4, 3)
+  val IMM_B  = UInt(5, 3)
+  val IMM_Z  = UInt(6, 3)
 
   // br_type
-  val BR_LTU = UInt(0, 3)
-  val BR_LT  = UInt(1, 3)
-  val BR_EQ  = UInt(2, 3)
+  val BR_XXX = UInt(0, 3)
+  val BR_LTU = UInt(1, 3)
+  val BR_LT  = UInt(2, 3)
+  val BR_EQ  = UInt(3, 3)
   val BR_GEU = UInt(4, 3)
   val BR_GE  = UInt(5, 3)
   val BR_NE  = UInt(6, 3)
-  val BR_XXX = UInt(7, 3)
 
   // st_type
-  val ST_SW  = UInt(0, 2)
-  val ST_SH  = UInt(1, 2)
-  val ST_SB  = UInt(2, 2)
-  val ST_XXX = UInt(3, 2)
+  val ST_XXX = UInt(0, 2)
+  val ST_SW  = UInt(1, 2)
+  val ST_SH  = UInt(2, 2)
+  val ST_SB  = UInt(3, 2)
 
   // ld_type
-  val LD_LW  = UInt(0, 3)
-  val LD_LH  = UInt(1, 3)
-  val LD_LB  = UInt(2, 3)
-  val LD_LHU = UInt(3, 3)
-  val LD_LBU = UInt(4, 3)
-  val LD_XXX = UInt(7, 3)
+  val LD_XXX = UInt(0, 3)
+  val LD_LW  = UInt(1, 3)
+  val LD_LH  = UInt(2, 3)
+  val LD_LB  = UInt(3, 3)
+  val LD_LHU = UInt(4, 3)
+  val LD_LBU = UInt(5, 3)
 
   // wb_sel
   val WB_ALU = UInt(0, 2)
@@ -153,10 +153,10 @@ class Control extends Module {
   val st_type  = Reg(io.ctrl.st_type)
   val ld_type  = Reg(ctrlSignals(8))
   val wb_sel   = Reg(ctrlSignals(9))
-  val wb_en    = RegInit(Bool(false))
-  val csr_cmd  = Reg(ctrlSignals(9))
-  val illegal  = RegInit(Bool(false))
-  val pc_check = RegInit(Bool(false))
+  val wb_en    = Reg(Bool())
+  val csr_cmd  = Reg(ctrlSignals(11))
+  val illegal  = Reg(Bool())
+  val pc_check = Reg(Bool())
 
   // Control signals for Fetch
   io.ctrl.pc_sel    := ctrlSignals(0)
@@ -177,19 +177,19 @@ class Control extends Module {
     csr_cmd  := ctrlSignals(11)
     illegal  := ctrlSignals(12).toBool 
     pc_check := io.ctrl.pc_sel === PC_ALU
-  }.elsewhen(!io.ctrl.stall && io.ctrl.flush) {
-    st_type  := ST_XXX
-    ld_type  := LD_XXX
+  }.elsewhen(reset || !io.ctrl.stall && io.ctrl.flush) {
+    st_type  := UInt(0)
+    ld_type  := UInt(0)
     wb_sel   := UInt(0)
     wb_en    := Bool(false)
-    csr_cmd  := CSR.N
+    csr_cmd  := UInt(0)
     illegal  := Bool(false)
     pc_check := Bool(false)
   }
 
   // D$ signals
   io.ctrl.st_type := Mux(io.ctrl.stall, st_type, ctrlSignals(7))
-  io.ctrl.data_en := !io.ctrl.stall && (ctrlSignals(7) != ST_XXX || ctrlSignals(8) != LD_XXX)
+  io.ctrl.data_en := !io.ctrl.stall && (ctrlSignals(7).orR || ctrlSignals(8).orR)
                                  
   // Control signals for Write Back
   io.ctrl.ld_type := ld_type
