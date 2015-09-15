@@ -28,8 +28,7 @@ class CacheModuleIO extends Bundle {
   val mem = new MemIO
 }
 
-trait CacheParams extends UsesParameters {
-  val xlen  = params(XLEN) 
+trait CacheParams extends UsesParameters with CoreParams {
   val nWays = params(NWays) // Not used...
   val nSets = params(NSets)
   val bByte = params(CacheBlockBytes)

@@ -12,7 +12,7 @@ class TileIO extends Bundle {
   val mem  = new MemIO 
 }
 
-class Tile extends Module {
+class Tile extends Module with CacheParams {
   val io     = new TileIO
   val core   = Module(new Core)
   val icache = Module(new Cache)
