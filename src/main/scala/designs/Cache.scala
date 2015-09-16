@@ -29,13 +29,13 @@ class CacheModuleIO extends Bundle {
 }
 
 trait CacheParams extends UsesParameters with CoreParams {
-  val nWays = params(NWays) // Not used...
-  val nSets = params(NSets)
-  val bByte = params(CacheBlockBytes)
-  val bBits = bByte << 3
-  val blen  = log2Up(bByte)
-  val slen  = log2Up(nSets)
-  val tlen  = xlen - (slen + blen)
+  val nWays  = params(NWays) // Not used...
+  val nSets  = params(NSets)
+  val bBytes = params(CacheBlockBytes)
+  val bBits  = bBytes << 3
+  val blen   = log2Up(bBytes)
+  val slen   = log2Up(nSets)
+  val tlen   = xlen - (slen + blen)
   val nWords = bBits / xlen
   val byteOffsetBits = log2Up(xlen/8) 
 } 
@@ -52,8 +52,8 @@ class Cache extends Module with CacheParams {
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(UInt(0, nSets))
-  val metaMem  = SeqMem(new MetaData,      nSets)
-  val dataMem  = SeqMem(UInt(width=bBits), nSets)
+  val metaMem  = SeqMem(new MetaData,               nSets)
+  val dataMem  = SeqMem(Vec(UInt(width=8), bBytes), nSets)
 
   val addr_reg = Reg(io.cpu.req.bits.addr)
   val cpu_data = Reg(io.cpu.req.bits.data)
@@ -73,13 +73,13 @@ class Cache extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata = Mux(!is_refill, dataMem.read(idx, ren), io.mem.resp.bits.data) // bypass refilled data
+  val mdata = dataMem.read(idx, ren) 
+  val rdata = Mux(!is_refill, Cat(mdata.reverse), io.mem.resp.bits.data) // bypass refilled data
   val hit   = v(idx_reg) && rmeta.tag === tag_reg 
 
   // Read Mux
-  io.cpu.resp.bits.data := MuxLookup(off_reg, rdata(bBits-1, bBits-xlen),
-    (0 until (nWords - 1)) map (i => UInt(i) -> rdata((i+1)*xlen-1, i*xlen)))
-  io.cpu.resp.valid := is_idle || is_read && hit || is_refill && !cpu_mask.orR
+  io.cpu.resp.bits.data := Vec.tabulate(nWords)(i => rdata((i+1)*xlen-1, i*xlen))(off_reg)
+  io.cpu.resp.valid     := is_idle || is_read && hit || is_refill && !cpu_mask.orR
 
   when(io.cpu.resp.valid) { 
     addr_reg  := addr
@@ -93,11 +93,11 @@ class Cache extends Module with CacheParams {
 
   val wen = is_write && hit && !io.cpu.abort || is_alloc || is_refill && cpu_mask.orR 
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
-  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1)) 
+  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1))
   when(wen) {
     v := v.bitSet(idx_reg, Bool(true))
     metaMem.write(idx_reg, wmeta)
-    dataMem.write(idx_reg, wdata, FillInterleaved(8, wmask))
+    dataMem.write(idx_reg, Vec.tabulate(bBytes)(i => wdata((i+1)*8-1, i*8)), wmask.toBools) 
   }
 
   io.mem.req_cmd.valid      := Bool(false)

@@ -23,7 +23,7 @@ class CacheTests(c: Cache) extends Tester(c) {
   def rand_mask = (1 << (c.xlen / 8)) - 1
   def addr(tag: Int, idx: Int, off: Int) = int(((tag << c.slen | idx) << c.blen) | off)
 
-  val mem = new MagicMem(c.bByte)
+  val mem = new MagicMem(c.bBytes)
 
   def doWrite(tag: Int, idx: Int, off: Int, data: Int, mask: Int) {
     val bmask = BigInt(mask) << ((off >> c.byteOffsetBits) * (c.xlen / 8))
