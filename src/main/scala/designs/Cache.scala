@@ -153,8 +153,10 @@ class Cache extends Module with CacheParams {
       }
     }
     is(s_REFILL) {
-      state := Mux(cpu_mask.orR, s_WRITE_CACHE, 
-               Mux(io.cpu.req.valid, s_READ_CACHE, s_IDLE))
+      when(io.mem.resp.valid) {
+        state := Mux(cpu_mask.orR, s_WRITE_CACHE, 
+                 Mux(io.cpu.req.valid, s_READ_CACHE, s_IDLE))
+      }
     }
   }
 }
