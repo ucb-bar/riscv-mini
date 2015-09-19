@@ -18,9 +18,9 @@ object Main {
       case "Cache" => chiselMainTest(chiselArgs, () => Module(new Cache)(Config.params)) {
         c => new CacheTests(c) }
       case "Core" => chiselMainTest(chiselArgs, () => Module(new Core)(Config.params)) {
-        c => new CoreTests(c, testArgs) }
+        c => new CoreTester(c, testArgs) }
       case "Tile" => chiselMainTest(chiselArgs, () => Module(new Tile)(Config.params)) {
-        c => new TileTests(c, testArgs) }
+        c => new TileTester(c, testArgs) }
       case _ =>
     }
   }

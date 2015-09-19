@@ -359,11 +359,15 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 
   def loadMem(start: Int, test: Seq[UInt]) {
-    def writeWord(a: Int, data: BigInt) {
-      (0 until 4) foreach {i => mem(a+i) = (data >> (8 * i)).toByte}
-    }
-    for((inst, i) <- test.zipWithIndex) {
-      writeWord(start + 4*i, inst)
+    val nwords = (blockSize >> 2)
+    for (i <- 0 until ((test.size / nwords) + 1)) {
+      var data = BigInt(0)
+      for (k <- 0 until nwords) {
+        val idx = i * nwords + k
+        val inst = (if (idx < test.size) test(idx) else UInt(0)).litValue()
+        data |= inst << (32 * k) 
+      }
+      write(start + i * blockSize, data)
     }
   }
 
@@ -384,7 +388,7 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 }
 
-trait MemCommon extends RISCVCommon {
+trait MemCommon extends RISCVCommon with Tests {
   def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
     Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
   def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
@@ -485,7 +489,7 @@ trait MemCommon extends RISCVCommon {
     "qsort.riscv",
     "towers.riscv",
     "vvadd.riscv"
-  ) 
+  )
 
   abstract class Tests
   case object SimpleTests extends Tests
@@ -526,37 +530,30 @@ trait MemCommon extends RISCVCommon {
   def runTests(maxCycles: Int, verbose: Boolean): Unit
   def regFile(x: Int): BigInt
 
-  // Tester functions
-  // TODO: have a seperate trait to provide interface
-  def mem: MagicMem
-  def reset(n: Int): Unit
-  def run(s: String): Boolean
-  def poke(data: Bits, x: BigInt): Unit
-  def pokeAt[T <: Bits](data: Mem[T], x: BigInt, off: Int): Unit
-  def peek(data: Bits): BigInt
-  def peekAt[T <: Bits](data: Mem[T], off: Int): BigInt
-  def step(n: Int): Unit
-  def int(x: Int): BigInt
-  def testOutputString: String
+  def readMem(addr: Int, s: Int = 0): BigInt 
+  def writeMem(addr: Int, data: BigInt, mask: BigInt = 0): Unit
+  def loadMem(start: Int, test: Seq[UInt]): Unit
+  def loadMem(testname: String): Unit
 
   def start(dir: String, tests: Tests, maxcycles: Int, verbose: Boolean) {
     tests match {
       case SimpleTests =>
+        reset(5)
         cycles = 0
-        mem.write(pc_mtvec, fin)
-        mem.write(pc_utvec, fin)
-        mem.loadMem(pc_start, bypassTest)
+        writeMem(pc_mtvec, fin)
+        writeMem(pc_utvec, fin)
+        loadMem(pc_start, bypassTest)
         runTests(maxcycles, verbose)
         for ((rd, expected) <- testResults(bypassTest)) {
           val result = regFile(rd) 
           println("[%s] RegFile[%d] = %d == %d".format(
                   if (result == expected) "PASS" else "FAIL", rd, result, expected))
         }
-        reset(5) 
+        reset(5)
         cycles = 0
-        mem.write(pc_mtvec, fin)
-        mem.write(pc_utvec, fin)
-        mem.loadMem(pc_start, exceptionTest)
+        writeMem(pc_mtvec, fin)
+        writeMem(pc_utvec, fin)
+        loadMem(pc_start, exceptionTest)
         runTests(maxcycles, verbose)
         for ((rd, expected) <- testResults(exceptionTest)) {
           val result = regFile(rd) 
@@ -566,14 +563,14 @@ trait MemCommon extends RISCVCommon {
       case ISATests => for (test <- isaTests) {
         cycles = 0
         println("\n***** ISA Test: %s ******".format(test))
-        mem.loadMem(dir + "/" + test)
+        loadMem(dir + "/" + test)
         runTests(maxcycles, verbose)
         reset(5)
       }
       case Benchmarks => for (test <- bmarksTest) {
         cycles = 0
         println("\n***** Benchmark: %s ******".format(test))
-        mem.loadMem(dir + "/" + test)
+        loadMem(dir + "/" + test)
         runTests(maxcycles, verbose)
         reset(5)
       } 
@@ -582,7 +579,11 @@ trait MemCommon extends RISCVCommon {
 }
 
 abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends Tester(c, false) with MemCommon {
-  val mem = new MagicMem(blockSize)
+  private val mem = new MagicMem(blockSize)
+  def readMem(addr: Int, s: Int = blockSize) = mem.read(addr, s) 
+  def writeMem(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) = mem.write(addr, data, mask)
+  def loadMem(start: Int, test: Seq[UInt]) = mem.loadMem(start, test) 
+  def loadMem(testname: String) = mem.loadMem(testname)
   val (dir, tests, maxcycles, verbose) = parseOpts(args)
   override def step(n: Int) {
     cycles += n

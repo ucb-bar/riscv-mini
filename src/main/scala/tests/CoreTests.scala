@@ -2,7 +2,7 @@ package mini
 
 import Chisel._
 
-trait CoreMem extends MemCommon {
+trait CoreTests extends MemCommon {
   def run(c: Core, maxcycles: Int, verbose: Boolean) = {
     for (i <- 0 until c.dpath.regFile.regs.n) {
       if (i == 0)
@@ -16,12 +16,12 @@ trait CoreMem extends MemCommon {
     do {
       val iaddr = peek(c.io.icache.req.bits.addr)
       val daddr = peek(c.io.dcache.req.bits.addr)
-      val inst  = mem.read(iaddr)
+      val inst  = readMem(iaddr)
       val ire   = peek(c.io.icache.req.valid)
       val dre   = peek(c.io.dcache.req.valid)
       val dwe   = peek(c.io.dcache.req.bits.mask)
       val din   = peek(c.io.dcache.req.bits.data)
-      val dout  = mem.read(daddr)
+      val dout  = readMem(daddr)
       step(1)
       if (ire) {
         if (verbose) println("MEM[%x] -> %s".format(iaddr, dasm(UInt(inst))))
@@ -33,7 +33,7 @@ trait CoreMem extends MemCommon {
       }
       if (dwe && !peek(c.io.dcache.abort)) {
         if (verbose) println("MEM[%x] <- %x".format(daddr, din))
-        mem.write(daddr, din, dwe)
+        writeMem(daddr, din, dwe)
       }
       tohost = peek(c.io.host.tohost)
       val log = testOutputString
@@ -48,7 +48,7 @@ trait CoreMem extends MemCommon {
   }
 }
 
-class CoreTests(c: Core, args: Array[String]) extends MemTester(c, args) with CoreMem {
+class CoreTester(c: Core, args: Array[String]) extends MemTester(c, args) with CoreTests {
   def regFile(x: Int) = peekAt(c.dpath.regFile.regs, x)
   def runTests(maxcycles: Int, verbose: Boolean) = {
     ok &= run(c, maxcycles, verbose)
