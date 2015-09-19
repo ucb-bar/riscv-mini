@@ -33,7 +33,8 @@ class MemArbiter extends Module {
   io.dcache.resp.bits.data  := io.mem.resp.bits.data
   io.dcache.resp.bits.tag   := UInt(0)
   io.dcache.resp.valid      := io.mem.resp.valid && state === s_DCACHE_WAIT
-  io.mem.resp.ready         := state === s_ICACHE_WAIT || state === s_DCACHE_WAIT
+  io.mem.resp.ready         := (state === s_ICACHE_WAIT && io.icache.resp.ready) || 
+                               (state === s_DCACHE_WAIT && io.dcache.resp.ready)
 
   switch(state) {
     is(s_IDLE) {

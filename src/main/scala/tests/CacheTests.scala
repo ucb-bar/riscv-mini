@@ -52,16 +52,15 @@ class CacheTests(c: Cache) extends Tester(c) {
     expect(c.io.mem.req_cmd.bits.tag, 0)
     expect(c.io.mem.req_data.valid, 0)
     poke(c.io.mem.req_cmd.ready, 1)
+    step(1)
+    poke(c.io.mem.req_cmd.ready, 0)
+    expect(c.io.mem.resp.ready, 1)
     step(5)
     mem.write(addr(tag, idx, 0), data)
-    poke(c.io.mem.req_cmd.ready, 0)
     poke(c.io.mem.resp.bits.data, data)
     poke(c.io.mem.resp.bits.tag, 0)
     poke(c.io.mem.resp.valid, 1)
     expect(c.is_alloc, 1)
-    step(1)
-    expect(c.io.mem.resp.ready, 1)
-    poke(c.io.mem.resp.valid, 0)
   }
 
   def doReadOnHit(tag: Int, idx: Int, off: Int) {
@@ -111,7 +110,8 @@ class CacheTests(c: Cache) extends Tester(c) {
     if (wb) doWriteBack
     doRefill(tag, idx, bdata)
     expect(c.io.cpu.resp.valid, 0)
-    step(1) // need a cycle to write after refill
+    step(1) // need a cycle to refill
+    step(1) // neea a cycle to write
     expect(c.io.cpu.resp.valid, 1)
     doWrite(tag, idx, off, data, mask)
   }

@@ -48,7 +48,7 @@ class MetaData extends Bundle with CacheParams {
 class Cache extends Module with CacheParams {
   val io = new CacheModuleIO
   // cache states
-  val s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WAIT :: s_REFILL :: Nil = Enum(UInt(), 6)
+  val s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_REFILL :: Nil = Enum(UInt(), 5)
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(UInt(0, nSets))
@@ -62,24 +62,24 @@ class Cache extends Module with CacheParams {
   val is_idle   = state === s_IDLE
   val is_read   = state === s_READ_CACHE
   val is_write  = state === s_WRITE_CACHE
-  val is_alloc  = state === s_WAIT && io.mem.resp.valid
-  val is_refill = state === s_REFILL
+  val is_alloc  = state === s_REFILL && io.mem.resp.valid
+  val is_allocd = RegNext(is_alloc)
 
   val addr     = io.cpu.req.bits.addr
   val idx      = addr(slen+blen-1, blen)
-  val ren      = is_idle || is_read || is_refill && !cpu_mask.orR
+  val ren      = is_idle || is_read || is_alloc && !cpu_mask.orR
   val tag_reg  = addr_reg(xlen-1, slen+blen)
   val idx_reg  = addr_reg(slen+blen-1, blen)
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
   val mdata = dataMem.read(idx, ren) 
-  val rdata = Mux(!is_refill, Cat(mdata.reverse), io.mem.resp.bits.data) // bypass refilled data
+  val rdata = Mux(!is_alloc, Cat(mdata.reverse), io.mem.resp.bits.data) // bypass refilled data
   val hit   = v(idx_reg) && rmeta.tag === tag_reg 
 
   // Read Mux
   io.cpu.resp.bits.data := Vec.tabulate(nWords)(i => rdata((i+1)*xlen-1, i*xlen))(off_reg)
-  io.cpu.resp.valid     := is_idle || is_read && hit || is_refill && !cpu_mask.orR
+  io.cpu.resp.valid     := is_idle || is_read && hit || is_alloc && !cpu_mask.orR
 
   when(io.cpu.resp.valid) { 
     addr_reg  := addr
@@ -91,7 +91,7 @@ class Cache extends Module with CacheParams {
   wmeta.tag   := tag_reg
   wmeta.dirty := !is_alloc 
 
-  val wen = is_write && hit && !io.cpu.abort || is_alloc || is_refill && cpu_mask.orR 
+  val wen = is_write && (hit || is_allocd) && !io.cpu.abort || is_alloc 
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
   val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1))
   when(wen) {
@@ -129,12 +129,12 @@ class Cache extends Module with CacheParams {
         when(is_dirty && io.mem.req_cmd.ready && io.mem.req_data.ready) {
           state := s_WRITE_BACK
         }.elsewhen(!is_dirty && io.mem.req_cmd.ready) {
-          state := s_WAIT
+          state := s_REFILL
         }
       }
     }
     is(s_WRITE_CACHE) {
-      when(hit || io.cpu.abort) {
+      when(hit || is_allocd || io.cpu.abort) {
         state := s_IDLE
       }.otherwise {
         io.mem.req_cmd.valid := Bool(true)
@@ -142,23 +142,19 @@ class Cache extends Module with CacheParams {
         when(is_dirty && io.mem.req_cmd.ready && io.mem.req_data.ready) {
           state := s_WRITE_BACK
         }.elsewhen(!is_dirty && io.mem.req_cmd.ready) {
-          state := s_WAIT
+          state := s_REFILL
         }
       }
     }
     is(s_WRITE_BACK) {
       io.mem.req_cmd.valid := Bool(true)
       when(io.mem.req_cmd.ready) {
-        state := s_WAIT
-      }
-    }
-    is(s_WAIT) {
-      when(io.mem.resp.valid) {
-        state := s_REFILL 
+        state := s_REFILL
       }
     }
     is(s_REFILL) {
-      state := Mux(cpu_mask.orR || !io.cpu.req.valid, s_IDLE, s_READ_CACHE)
+      state := Mux(cpu_mask.orR, s_WRITE_CACHE, 
+               Mux(io.cpu.req.valid, s_READ_CACHE, s_IDLE))
     }
   }
 }
