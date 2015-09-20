@@ -1,18 +1,3 @@
-src_dir   = $(base_dir)/src/main/scala/designs
-gen_dir   = $(base_dir)/generated-src
-log_dir   = $(base_dir)/logs
-isa_dir   = $(base_dir)/riscv-tests/isa 
-bmarks_dir = $(base_dir)/riscv-bmarks
-
-SBT       = sbt
-SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
-
-C_FLAGS     := --targetDir $(gen_dir) --genHarness --compile --test --minimumCompatibility 3.0
-V_FLAGS     := $(C_FLAGS) --v
-DEBUG_FLAGS := --vcd --vcdMem --debug 
-
-VPATH = $(src_dir):$(gen_dir):$(log_dir)
-
 units = ALU CSR Control Datapath Cache
 v     = $(addsuffix -v,   $(units))
 cpp   = $(addsuffix -cpp, $(units))
@@ -83,5 +68,25 @@ Tile-bmarks-cpp:
 Tile-bmarks-v: 
 	mkdir -p $(log_dir)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
+	| tee $(log_dir)/$@.out
+
+$(addsuffix -cpp, $(isa_tests)): %-cpp: $(isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
+
+$(addsuffix -v, $(isa_tests)): %-v: $(isa_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=3000" \
+	| tee $(log_dir)/$@.out
+
+$(addsuffix -cpp, $(bmarks)): %-cpp: $(bmarks_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=500000" \
+	| tee $(log_dir)/$@.out
+
+$(addsuffix -v, $(bmarks)): %-v: $(bmarks_dir)/%.hex
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=500000" \
 	| tee $(log_dir)/$@.out
 

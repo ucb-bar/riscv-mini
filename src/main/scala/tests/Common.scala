@@ -373,8 +373,8 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
 
   def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
 
-  def loadMem(testname: String) {
-    val lines = Source.fromFile(testname + ".hex").getLines
+  def loadMem(filename: String) {
+    val lines = Source.fromFile(filename).getLines
     for ((line, i) <- lines.zipWithIndex) {
       val base = (i * line.length) / 2
       var offset = 0
@@ -495,6 +495,7 @@ trait MemCommon extends RISCVCommon with Tests {
   case object SimpleTests extends Tests
   case object ISATests extends Tests
   case object Benchmarks extends Tests
+  case object LoadMem extends Tests
 
   var cycles = 0 // step should increase it
 
@@ -506,7 +507,8 @@ trait MemCommon extends RISCVCommon with Tests {
 
   def parseOpts(args: Array[String]) = {
     var tests: Tests = SimpleTests
-    var dir = ""
+    var file = ""
+    var loadmem: Option[String] = None
     var maxcycles = 0
     var verbose = false
     args foreach {
@@ -514,17 +516,20 @@ trait MemCommon extends RISCVCommon with Tests {
       case "+simple" => tests = SimpleTests
       case arg if arg.substring(0, 5) == "+isa=" =>
         tests = ISATests
-        dir = arg.substring(5)
-        genTests(isaTests, dir)
+        file = arg.substring(5)
+        genTests(isaTests, file)
       case arg if arg.substring(0, 8) == "+bmarks=" =>
         tests = Benchmarks
-        dir = arg.substring(8)
-        // genTests(bmarksTest, dir)
+        file = arg.substring(8)
+        // genTests(bmarksTest, file)
       case arg if arg.substring(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt
+      case arg if arg.substring(0, 9) == "+loadmem=" =>
+        tests = LoadMem
+        file = arg.substring(9)
       case _ => 
     }
-    (dir, tests, maxcycles, verbose)
+    (file, tests, maxcycles, verbose)
   }
   
   def runTests(maxCycles: Int, verbose: Boolean): Unit
@@ -535,7 +540,7 @@ trait MemCommon extends RISCVCommon with Tests {
   def loadMem(start: Int, test: Seq[UInt]): Unit
   def loadMem(testname: String): Unit
 
-  def start(dir: String, tests: Tests, maxcycles: Int, verbose: Boolean) {
+  def start(file: String, tests: Tests, maxcycles: Int, verbose: Boolean) {
     tests match {
       case SimpleTests =>
         reset(5)
@@ -563,17 +568,22 @@ trait MemCommon extends RISCVCommon with Tests {
       case ISATests => for (test <- isaTests) {
         cycles = 0
         println("\n***** ISA Test: %s ******".format(test))
-        loadMem(dir + "/" + test)
+        loadMem(file + "/" + test + ".hex")
         runTests(maxcycles, verbose)
         reset(5)
       }
       case Benchmarks => for (test <- bmarksTest) {
         cycles = 0
         println("\n***** Benchmark: %s ******".format(test))
-        loadMem(dir + "/" + test)
+        loadMem(file + "/" + test + ".hex")
         runTests(maxcycles, verbose)
         reset(5)
-      } 
+      }
+      case LoadMem =>
+        cycles = 0
+        println("\n***** LoadMem: %s ******".format(file))
+        loadMem(file)
+        runTests(maxcycles, verbose)
     }
   }
 }
@@ -584,10 +594,10 @@ abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int 
   def writeMem(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) = mem.write(addr, data, mask)
   def loadMem(start: Int, test: Seq[UInt]) = mem.loadMem(start, test) 
   def loadMem(testname: String) = mem.loadMem(testname)
-  val (dir, tests, maxcycles, verbose) = parseOpts(args)
+  val (file, tests, maxcycles, verbose) = parseOpts(args)
   override def step(n: Int) {
     cycles += n
     super.step(n)
   }
-  start(dir, tests, maxcycles, verbose)
+  start(file, tests, maxcycles, verbose)
 }
