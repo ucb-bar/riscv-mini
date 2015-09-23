@@ -61,6 +61,7 @@ class CacheTests(c: Cache) extends Tester(c) {
     poke(c.io.mem.resp.bits.tag, 0)
     poke(c.io.mem.resp.valid, 1)
     expect(c.is_alloc, 1)
+    step(1) // need a cycle to refill
   }
 
   def doReadOnHit(tag: Int, idx: Int, off: Int) {
@@ -110,7 +111,6 @@ class CacheTests(c: Cache) extends Tester(c) {
     if (wb) doWriteBack
     doRefill(tag, idx, bdata)
     expect(c.io.cpu.resp.valid, 0)
-    step(1) // need a cycle to refill
     step(1) // neea a cycle to write
     expect(c.io.cpu.resp.valid, 1)
     doWrite(tag, idx, off, data, mask)
