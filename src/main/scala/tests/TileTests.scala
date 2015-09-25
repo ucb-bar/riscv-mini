@@ -53,7 +53,7 @@ trait TileTests extends MemCommon {
   def tick(n: Int, verbose: Boolean): Unit
 
   def run(c: Tile, maxcycles: Int, verbose: Boolean) = {
-    pokeAt(c.core.dpath.regFile.regs, 0, 0)
+    // pokeAt(c.core.dpath.regFile.regs, 0, 0)
     var tohost = BigInt(0)
     do {
       tick(1, verbose)
