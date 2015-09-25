@@ -106,7 +106,7 @@ class Cache extends Module with CacheParams {
   io.mem.req_cmd.bits.rw    := Bool(false) 
   io.mem.req_cmd.bits.addr  := Mux(io.mem.req_cmd.bits.rw, Cat(rmeta.tag, idx_reg), Cat(tag_reg, idx_reg))
   io.mem.req_cmd.bits.tag   := UInt(0) // Only one outstanding request
-  io.mem.req_data.bits.data := rdata 
+  io.mem.req_data.bits.data := Mux(wen, UInt(0), rdata) 
   io.mem.req_data.valid     := io.mem.req_cmd.bits.rw
   io.mem.resp.ready         := state === s_REFILL
 
