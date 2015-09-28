@@ -37,7 +37,8 @@ trait CacheParams extends UsesParameters with CoreParams {
   val slen   = log2Up(nSets)
   val tlen   = xlen - (slen + blen)
   val nWords = bBits / xlen
-  val byteOffsetBits = log2Up(xlen/8) 
+  val wBytes = xlen / 8
+  val byteOffsetBits = log2Up(wBytes) 
 } 
 
 class MetaData extends Bundle with CacheParams {
@@ -52,8 +53,8 @@ class Cache extends Module with CacheParams {
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(UInt(0, nSets))
-  val metaMem  = SeqMem(new MetaData,               nSets)
-  val dataMem  = SeqMem(Vec(UInt(width=8), bBytes), nSets)
+  val metaMem  = SeqMem(new MetaData, nSets)
+  val dataMem  = Seq.fill(nWords)(SeqMem(Vec(UInt(width=8), wBytes), nSets))
 
   val addr_reg = Reg(io.cpu.req.bits.addr)
   val cpu_data = Reg(io.cpu.req.bits.data)
@@ -75,8 +76,8 @@ class Cache extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, !wen)
-  val mdata = dataMem.read(idx, !wen) 
-  val rdata = Mux(!is_allocd, Cat(mdata.reverse), RegNext(io.mem.resp.bits.data)) // bypass refilled data
+  val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, !wen).toBits).reverse), 
+                              RegNext(io.mem.resp.bits.data)) // bypass refilled data
   
   hit := v(idx_reg) && rmeta.tag === tag_reg 
 
@@ -94,12 +95,16 @@ class Cache extends Module with CacheParams {
   wmeta.tag   := tag_reg
   wmeta.dirty := !is_alloc 
 
-  val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
   val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1))
+  val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), io.mem.resp.bits.data)
   when(wen) {
     v := v.bitSet(idx_reg, Bool(true))
     metaMem.write(idx_reg, wmeta)
-    dataMem.write(idx_reg, Vec.tabulate(bBytes)(i => wdata((i+1)*8-1, i*8)), wmask.toBools) 
+    dataMem.zipWithIndex foreach { case (mem, i) =>
+      val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
+      mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
+      mem setName ("dataMem_" + i)
+    }
   }
 
   io.mem.req_cmd.valid      := Bool(false)
