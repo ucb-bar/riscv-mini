@@ -55,16 +55,21 @@ trait TileTests extends MemCommon {
   def run(c: Tile, maxcycles: Int, verbose: Boolean) = {
     // pokeAt(c.core.dpath.regFile.regs, 0, 0)
     var tohost = BigInt(0)
+    val startTime = System.nanoTime
     do {
       tick(1, verbose)
       val log = testOutputString
       if (verbose && !log.isEmpty) println(log)
       tohost = peek(c.io.htif.host.tohost)
     } while (tohost == 0 && cycles < maxcycles)
+    val endTime = System.nanoTime
+    val simTime = (endTime - startTime) / 1000000000.0
+    val simSpeed = cycles / simTime
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
     val ok = tohost == 1
     println("*** %s *** (%s) after %d simulation cycles".format(
             if (ok) "PASSED" else "FAILED", reason, cycles))
+    println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
     ok
   }
 }
