@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import Chisel.AdvTester._
 import Instructions._
 import scala.io.Source
 import scala.collection.mutable.HashMap
@@ -335,6 +336,25 @@ trait RISCVCommon {
   val pc_start = Const.PC_START.litValue().toInt
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
+
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
+  def U(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i), reg(rd), op)
+  def J(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 }
 
 abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) with RISCVCommon 
@@ -388,27 +408,54 @@ class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
   }
 }
 
-trait MemCommon extends RISCVCommon with Tests {
-  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
-    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
-    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
-  def J(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
-  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
-    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
+abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20) extends Processable {
+  require(word_width % 4 == 0, "word_width should be divisible by 4")
+  implicit def toBigInt(x: UInt) = x.litValue()
+  protected val off = log2Up(word_width)
+  private val mem = Array.fill(depth){BigInt(0)}
+  private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
+  private def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
 
-  val bypassTest = List(
+  def read(addr: Int) = mem(addr)
+  def write(addr: Int, data: BigInt) { mem(addr) = data }
+  def loadMem(test: Seq[UInt]) {
+    val chunk = word_width / 4
+    for (i <- 0 until (test.size / chunk)) {
+      val data = ((0 until chunk) foldLeft BigInt(0))((res, k) => 
+                   res | (test(i*chunk+k) << 32*(chunk-1-k)))
+      write(i, data)
+    }
+  }
+
+  def loadMem(filename: String) {
+    val lines = Source.fromFile(filename).getLines
+    for ((line, i) <- lines.zipWithIndex) {
+      val base = (i * line.length) / 2
+      assert(base % word_width == 0)
+      var offset = 0
+      var data = BigInt(0)
+      for (k <- (line.length - 2) to 0 by -2) {
+        val shift = 8 * (offset % word_width)
+        val byte = ((parseNibble(line(k)) << 4) | parseNibble(line(k+1))).toByte
+        data |= int(byte) << shift
+        if ((offset % word_width) == word_width - 1) {
+          mem((base+offset)>>off) = data
+          data = BigInt(0)
+        }
+        offset += 1
+      }
+    }
+  }
+}
+
+trait MemTests extends RISCVCommon with AdvTests {
+  abstract class Tests
+  case object SimpleTests extends Tests
+  case object ISATests extends Tests
+  case object Benchmarks extends Tests
+  case object LoadMem extends Tests
+
+  val bypassTest = List.fill(pc_start/4){fin} ++ List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
     L(Funct3.LW, 2, 0, 12),  // LW   x2, x0, 12  # x2 <- 1
@@ -421,7 +468,7 @@ trait MemCommon extends RISCVCommon with Tests {
     B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
     nop, nop, fin            // Finish
   )
-  val exceptionTest = List(
+  val exceptionTest = List.fill(pc_start/4){fin} ++ List(
     fence,
     I(Funct3.ADD, 1, 0, 2),  // ADDI x1, x0, 1   # x1 <- 2
     I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 3
@@ -436,6 +483,7 @@ trait MemCommon extends RISCVCommon with Tests {
     bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
     exceptionTest -> Array((1, 2), (2, 3), (3, 4))
   )
+
   val isaTests = List(
     "rv32ui-p-simple",
     "rv32ui-p-add",
@@ -491,14 +539,6 @@ trait MemCommon extends RISCVCommon with Tests {
     "vvadd.riscv"
   )
 
-  abstract class Tests
-  case object SimpleTests extends Tests
-  case object ISATests extends Tests
-  case object Benchmarks extends Tests
-  case object LoadMem extends Tests
-
-  var cycles = 0 // step should increase it
-
   def genTests(tests: List[String], dir: String) {
     for (test <- tests if !(new java.io.File(dir + "/" + test + ".hex").exists)) {
       run(List("make", "-C", dir, test + ".hex", """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""") mkString " ")
@@ -521,7 +561,7 @@ trait MemCommon extends RISCVCommon with Tests {
       case arg if arg.substring(0, 8) == "+bmarks=" =>
         tests = Benchmarks
         file = arg.substring(8)
-        // genTests(bmarksTest, file)
+        genTests(bmarksTest, file)
       case arg if arg.substring(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt
       case arg if arg.substring(0, 9) == "+loadmem=" =>
@@ -531,23 +571,17 @@ trait MemCommon extends RISCVCommon with Tests {
     }
     (file, tests, maxcycles, verbose)
   }
-  
+
+  def loadMem(test: Seq[UInt]): Unit
+  def loadMem(testname: String): Unit
   def runTests(maxCycles: Int, verbose: Boolean): Unit
   def regFile(x: Int): BigInt
-
-  def readMem(addr: Int, s: Int = 0): BigInt 
-  def writeMem(addr: Int, data: BigInt, mask: BigInt = 0): Unit
-  def loadMem(start: Int, test: Seq[UInt]): Unit
-  def loadMem(testname: String): Unit
 
   def start(file: String, tests: Tests, maxcycles: Int, verbose: Boolean) {
     tests match {
       case SimpleTests =>
         reset(5)
-        cycles = 0
-        writeMem(pc_mtvec, fin)
-        writeMem(pc_utvec, fin)
-        loadMem(pc_start, bypassTest)
+        loadMem(bypassTest)
         runTests(maxcycles, verbose)
         for ((rd, expected) <- testResults(bypassTest)) {
           val result = regFile(rd) 
@@ -555,10 +589,7 @@ trait MemCommon extends RISCVCommon with Tests {
                   if (result == expected) "PASS" else "FAIL", rd, result, expected))
         }
         reset(5)
-        cycles = 0
-        writeMem(pc_mtvec, fin)
-        writeMem(pc_utvec, fin)
-        loadMem(pc_start, exceptionTest)
+        loadMem(exceptionTest)
         runTests(maxcycles, verbose)
         for ((rd, expected) <- testResults(exceptionTest)) {
           val result = regFile(rd) 
@@ -566,38 +597,39 @@ trait MemCommon extends RISCVCommon with Tests {
                   if (result == expected) "PASS" else "FAIL", rd, result, expected))
         }
       case ISATests => for (test <- isaTests) {
-        cycles = 0
         println("\n***** ISA Test: %s ******".format(test))
         loadMem(file + "/" + test + ".hex")
         runTests(maxcycles, verbose)
         reset(5)
       }
       case Benchmarks => for (test <- bmarksTest) {
-        cycles = 0
         println("\n***** Benchmark: %s ******".format(test))
         loadMem(file + "/" + test + ".hex")
         runTests(maxcycles, verbose)
         reset(5)
       }
       case LoadMem =>
-        cycles = 0
         println("\n***** LoadMem: %s ******".format(file))
         loadMem(file)
         runTests(maxcycles, verbose)
     }
   }
+
+  def run(host: HostIO, maxcycles: Int, verbose: Boolean) = {
+    val startTime = System.nanoTime
+    val ok = do_until {
+      val log = testOutputString
+      if (verbose && !log.isEmpty) println(log)
+    } (peek(host.tohost), maxcycles)
+    val tohost = peek(host.tohost)
+    val endTime = System.nanoTime
+    val simTime = (endTime - startTime) / 1000000000.0
+    val simSpeed = cycles / simTime
+    val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
+    println("*** %s *** (%s) after %d simulation cycles".format(
+            if (ok) "PASSED" else "FAILED", reason, cycles))
+    println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
+    ok
+  }
 }
 
-abstract class MemTester[T <: Module](c: T, args: Array[String], blockSize: Int = 4) extends Tester(c, false) with MemCommon {
-  private val mem = new MagicMem(blockSize)
-  def readMem(addr: Int, s: Int = blockSize) = mem.read(addr, s) 
-  def writeMem(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) = mem.write(addr, data, mask)
-  def loadMem(start: Int, test: Seq[UInt]) = mem.loadMem(start, test) 
-  def loadMem(testname: String) = mem.loadMem(testname)
-  val (file, tests, maxcycles, verbose) = parseOpts(args)
-  override def step(n: Int) {
-    cycles += n
-    super.step(n)
-  }
-  start(file, tests, maxcycles, verbose)
-}
