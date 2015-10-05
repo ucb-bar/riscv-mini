@@ -7,7 +7,9 @@ object Main {
   def main(args: Array[String]) = {
     val (chiselArgs, testArgs) = args.tail partition (_.head != '+')
     val res = args(0) match {
-      case "ALU" => chiselMainTest(chiselArgs, () => Module(new ALUTop)(Config.params)){
+      case "ALUSimple" => chiselMainTest(chiselArgs, () => Module(new ALUSimple)(Config.params)){
+        c => new ALUTests(c) }
+      case "ALUArea" => chiselMainTest(chiselArgs, () => Module(new ALUArea)(Config.params)){
         c => new ALUTests(c) }
       case "CSR" => chiselMainTest(chiselArgs, () => Module(new CSR)(Config.params)){
         c => new CSRTests(c) }
