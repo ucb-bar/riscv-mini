@@ -30,7 +30,7 @@ trait RISCVCommon {
   val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
   val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
 
-  def insts = Array(
+  def insts = List(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),
@@ -172,14 +172,7 @@ trait RISCVCommon {
                              inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
   def zimm(inst: UInt) = BigInt(rs1(inst))
 
-  val csrRegs = List(
-    CSR.cycle, CSR.time, CSR.instret, CSR.cycleh, CSR.timeh, CSR.instreth,
-    CSR.cyclew, CSR.timew, CSR.instretw, CSR.cyclehw, CSR.timehw, CSR.instrethw,
-    CSR.mcpuid, CSR.mimpid, CSR.mhartid, CSR.mtvec, CSR.mtdeleg, CSR.mie,
-    CSR.mtimecmp, CSR.mtime, CSR.mtimeh, CSR.mscratch, CSR.mepc, CSR.mcause, CSR.mbadaddr, CSR.mip,
-    CSR.mtohost, CSR.mfromhost, CSR.mstatus
-  ) map (_.litValue())
-
+  val csrRegs = CSR.regs map (_.litValue())
   val csrNames = (csrRegs zip List(
     "cycle", "time", "instret", "cycleh", "timeh", "instreth",
     "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
@@ -189,21 +182,9 @@ trait RISCVCommon {
   )).toMap
 
   def csrPrv(csr: BigInt, prv: BigInt) = ((csr >> 8) & 0x3) <= prv
-  def csrVal(csr: BigInt) = csrRegs exists (_ == csr)
+  def csrVal(csr: BigInt) = csrRegs contains csr
   def csrRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || 
       csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue()    
-  def csrTime(csr: BigInt) = 
-      csr == CSR.time.litValue() || csr == CSR.timew.litValue() || csr == CSR.mtime.litValue()
-  def csrCycle(csr: BigInt) = 
-      csr == CSR.cycle.litValue() || csr == CSR.cyclew.litValue()
-  def csrInstret(csr: BigInt) =
-      csr == CSR.instret.litValue() || csr == CSR.instretw.litValue() 
-  def csrTimeh(csr: BigInt) = 
-      csr == CSR.timeh.litValue() || csr == CSR.timehw.litValue() || csr == CSR.mtimeh.litValue()
-  def csrCycleh(csr: BigInt) = 
-      csr == CSR.cycleh.litValue() || csr == CSR.cyclehw.litValue()
-  def csrInstreth(csr: BigInt) =
-      csr == CSR.instreth.litValue() || csr == CSR.instrethw.litValue() 
 
   private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
     LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
@@ -336,6 +317,27 @@ trait RISCVCommon {
   val pc_start = Const.PC_START.litValue().toInt
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
+
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
+  def U(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i), reg(rd), op)
+  def J(rd: Int, i: Int) = 
+    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), Opcode.JAL)
+  def JR(rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), UInt(0, 3), reg(rd), Opcode.JALR)
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 }
 
 abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) with RISCVCommon 
@@ -395,24 +397,6 @@ trait MemTests extends RISCVCommon with AdvTests {
   case object Benchmarks extends Tests
   case object LoadMem extends Tests
 
-  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
-    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
-    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
-  def J(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
-  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
-    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
   val bypassTest = List.fill(pc_start/4){fin} ++ List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -422,7 +406,7 @@ trait MemTests extends RISCVCommon with AdvTests {
     RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4
     RU(Funct3.SLT, 6, 4, 5), // SLT  x6, x4, x5  # x6 <- 1
     B(Funct3.BEQ, 1, 6, 8),  // BEQ  x1, x6, 8   # go to the BGE branch
-    J(Opcode.JAL, 0, 12),    // JAL  x0, 8       # skip nop, scrrw
+    J(0, 12),                // JAL  x0, 8       # skip nop, scrrw
     B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
     nop, nop, fin            // Finish
   )

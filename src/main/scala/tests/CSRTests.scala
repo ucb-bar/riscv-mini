@@ -3,282 +3,200 @@ package mini
 import Chisel._
 import scala.collection.mutable.HashMap
 
-class CSRTests(c: CSR) extends RISCVTester(c) {
-  val csrFile = c.csrFile map { case (k, y) => (k.litValue(), y) }
-  val values = HashMap[BigInt, BigInt]()
-  val pc   = rand_addr
-  val addr = rand_addr
-  def prv = (values(CSR.mstatus) >> 1) & 0x3
-  def nextIn = int(rnd.nextInt() & 0xffffffff)
-  var inst = BigInt(0)
-  def nextInst(csr: BigInt) = {
-    inst = Cat(UInt(csr), rand_rs1, Funct3.CSRRW, rand_rd, Opcode.SYSTEM)
-    inst
+case class CSRIn(cmd: BigInt, value: BigInt, inst: BigInt, pc: BigInt, addr: BigInt, 
+                 illegal: Boolean, pc_check: Boolean, st_type: BigInt, ld_type: BigInt)
+case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
+
+object GoldCSR {
+  private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
+    (if (reg.litValue() == CSR.mcpuid.litValue()) 
+      BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
+    else if (reg.litValue() == CSR.mstatus.litValue()) 
+      CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
+    else if (reg.litValue() == CSR.mtvec.litValue()) 
+      Const.PC_EVEC.litValue()
+    else BigInt(0))):_*)
+  private def mtvec = regs(CSR.mtvec.litValue())
+  private def mepc  = regs(CSR.mepc.litValue())
+  private def mepc_=(data: BigInt) { regs(CSR.mepc.litValue()) = data }
+  private def mcause = regs(CSR.mcause.litValue())
+  private def mcause_=(data: BigInt) { regs(CSR.mcause.litValue()) = data }
+  private def mbadaddr = regs(CSR.mbadaddr.litValue())
+  private def mbadaddr_=(data:BigInt) { regs(CSR.mbadaddr.litValue()) = data }
+  private def status(prv: BigInt, ie: BigInt, prv1: BigInt, ie1: BigInt) {
+    regs(CSR.mstatus.litValue()) = (prv1 << 4) | (ie1 << 3) | (prv << 1) | ie
   }
-  var instret = true
-  def updateTime(value: BigInt) {
-    values(CSR.time) = value
-    values(CSR.timew) = value
-    values(CSR.mtime) = value
+  private def ip(mtip: BigInt, msip: BigInt) {
+    regs(CSR.mip.litValue()) = mtip << 7 | msip << 3
   }
-  def updateCycle(value: BigInt) {
-    values(CSR.cycle) = value
-    values(CSR.cyclew) = value
+  private def ie(mtie: BigInt, msie: BigInt) {
+    regs(CSR.mie.litValue()) = mtie << 7 | msie << 3
   }
-  def updateInstret(value: BigInt) {
-    values(CSR.instret) = value
-    values(CSR.instretw) = value
-  }
-  def updateTimeh(value: BigInt) {
-    values(CSR.timeh) = value
-    values(CSR.timehw) = value
-    values(CSR.mtimeh) = value
-  }
-  def updateCycleh(value: BigInt) {
-    values(CSR.cycleh) = value
-    values(CSR.cyclehw) = value
-  }
-  def updateInstreth(value: BigInt) {
-    values(CSR.instreth) = value
-    values(CSR.instrethw) = value
-  }
-  def pokeCSR(csr: BigInt, value: BigInt) {
-    if (csr == CSR.mstatus.litValue()) {
-      poke(c.PRV1, (value >> 4) & 0x3)
-      poke(c.IE1,  (value >> 3) & 0x1)
-      poke(c.PRV,  (value >> 1) & 0x3)
-      poke(c.IE,   (value >> 0) & 0x1)
-      values(csr) = value & (0x3 << 4 | 0x1 << 3 | 0x3 << 1 | 0x1)
-    } else if (csr == CSR.mip.litValue()) {
-      poke(c.MTIP, (value >> 7) & 0x1)
-      poke(c.MSIP, (value >> 3) & 0x1)
-      values(csr) = value & (0x1 << 7 | 0x1 << 3)
-    } else if (csr == CSR.mie.litValue()) {
-      poke(c.MTIE, (value >> 7) & 0x1)
-      poke(c.MSIE, (value >> 3) & 0x1)
-      values(csr) = value & (0x1 << 7 | 0x1 << 3)
-    } else if (csr == CSR.mcause.litValue()) {
-      val mcause = value & (BigInt(1) << (c.xlen-1) | 0xf)
-      poke(c.mcause, mcause)
-      values(csr) = mcause
-    } else if (csr == CSR.mepc.litValue()) {
-      val mepc = value & int(-4)
-      poke(c.mepc, mepc)
-      values(csr) = mepc
-    } else if (csrCycle(csr)) {
-      poke(c.cycle, value) ; updateCycle(value)
-    } else if (csrTime(csr)) {
-      poke(c.time, value) ; updateTime(value)  
-    } else if (csrInstret(csr)) {
-      poke(c.instret, value) ; updateInstret(value)
-    } else if (csrCycleh(csr)) {
-      poke(c.cycleh, value) ; updateCycleh(value)
-    } else if (csrTimeh(csr)) {
-      poke(c.timeh, value) ; updateTimeh(value)
-    } else if (csrInstreth(csr)) {
-      poke(c.instreth, value) ; updateInstreth(value)
-    } else if (!csrRO(csr)) {
-      poke(csrFile(csr), value) ; values(csr) = value
-    } else {
-      values(csr) = value
-    }
-  }
-  def expectOut(csr: BigInt, value: BigInt) {
-    if (csr == CSR.mstatus.litValue()) {
-      expect(c.io.out, value & (0x3 << 4 | 0x1 << 3 | 0x3 << 1 | 0x1))
-    } else if (csr == CSR.mip.litValue()) {
-      expect(c.io.out, value & (0x1 << 7 | 0x1 << 3))
-    } else if (csr == CSR.mie.litValue()) {
-      expect(c.io.out, value & (0x1 << 7 | 0x1 << 3))
-    } else if (csr == CSR.mcause.litValue()) {
-      expect(c.io.out, value & (BigInt(1) << (c.xlen-1) | 0xf))
-    } else if (csr == CSR.mepc.litValue()) {
-      expect(c.io.out, value & int(-4))
-    } else {
-      expect(c.io.out, value)
-    }
-  }
-  def expectCSR(csr: BigInt, value: BigInt) {
-    if (csr == CSR.mstatus.litValue()) {
-      expect(c.PRV1, (value >> 4) & 0x3)
-      expect(c.IE1,  (value >> 3) & 0x1)
-      expect(c.PRV,  (value >> 1) & 0x3)
-      expect(c.IE,   (value >> 0) & 0x1)
-      // return to M mode
-      values(CSR.mstatus) = CSR.PRV_M << 4 | CSR.PRV_M << 1
-      poke(c.PRV1, CSR.PRV_M)
-      poke(c.IE1, 0)
-      poke(c.PRV, CSR.PRV_M)
-      poke(c.IE, 0)
-    } else if (csr == CSR.mip.litValue()) {
-      expect(c.MTIP, (value >> 7) & 0x1)
-      expect(c.MSIP, (value >> 3) & 0x1)
-      values(csr) = value & (0x1 << 7 | 0x1 << 3)
-    } else if (csr == CSR.mie.litValue()) {
-      expect(c.MTIE, (value >> 7) & 0x1)
-      expect(c.MSIE, (value >> 3) & 0x1)
-      values(csr) = value & (0x1 << 7 | 0x1 << 3)
-    } else if (csr == CSR.mcause.litValue()) {
-      val mcause = value & (BigInt(1) << (c.xlen-1) | 0xf)
-      expect(c.mcause, mcause)
-      values(csr) = mcause
-    } else if (csr == CSR.mepc.litValue()) {
-      val mepc = value & int(-4)
-      expect(c.mepc, mepc)
-      values(csr) = mepc
-    } else if (csrCycle(csr)) {
-      expect(c.cycle, value) ; updateCycle(value)
-    } else if (csrTime(csr)) {
-      expect(c.time, value) ; updateTime(value)
-    } else if (csrInstret(csr)) {
-      expect(c.instret, value) ; updateInstret(value)
-    } else if (csrCycleh(csr)) {
-      expect(c.cycleh, value) ; updateCycleh(value)
-    } else if (csrTimeh(csr)) {
-      expect(c.timeh, value) ; updateTimeh(value)
-    } else if (csrInstreth(csr)) {
-      expect(c.instreth, value) ; updateInstreth(value)
-    } else { 
-      expect(csrFile(csr), value) ; values(csr) = value
-    }
-  }
-  def expectException(cause: BigInt) {
-    expect(c.io.expt, 1)
-    val evec = if (prv) pc_mtvec else pc_utvec
-    expect(c.io.evec, evec)
-    values(CSR.mepc) = pc & int(-4)
-    values(CSR.mcause) = cause 
-    step(1)
-    expect(c.mepc,   values(CSR.mepc))
-    expect(c.mcause, values(CSR.mcause))
-    expect(c.PRV1,  (values(CSR.mstatus) >> 1) & 0x3)
-    expect(c.IE1,    values(CSR.mstatus) & 0x1)
-    expect(c.PRV,    CSR.PRV_M)
-    expect(c.IE,     0)
-    values(CSR.mstatus) = (values(CSR.mstatus) & 0x7) << 3 | CSR.PRV_M << 1
-  }
-  def expectEret {
-    expect(c.io.expt, 0)
-    step(1)
-    expect(c.PRV, (values(CSR.mstatus) >> 4) & 0x3)
-    expect(c.IE,  (values(CSR.mstatus) >> 3) & 0x1)
-    expect(c.PRV1, CSR.PRV_U)
-    expect(c.IE1,  1)
-    values(CSR.mstatus) = (values(CSR.mstatus) >> 3) & 0x7 | CSR.PRV_U << 4 | 1 << 3
-  }
-  override def step(n: Int) {
-    values(CSR.time)   += 1
-    values(CSR.timew)  += 1
-    values(CSR.mtime)  += 1
-    values(CSR.cycle)  += 1
-    values(CSR.cyclew) += 1
+  private def prv1 = (regs(CSR.mstatus.litValue()) >> 4) & 0x3
+  private def ie1 = (regs(CSR.mstatus.litValue()) >> 3) & 0x1
+  private def prv = (regs(CSR.mstatus.litValue()) >> 1) & 0x3
+  private def ie = regs(CSR.mstatus.litValue()) & 0x1
+  private def read(addr: BigInt) = regs getOrElse (addr, BigInt(0))
+
+  private def count(instret: Boolean) {
+    // TODO: overflow
+    regs(CSR.time.litValue())   += 1
+    regs(CSR.timew.litValue())  += 1
+    regs(CSR.mtime.litValue())  += 1
+    regs(CSR.cycle.litValue())  += 1
+    regs(CSR.cyclew.litValue()) += 1
     if (instret) {
-      values(CSR.instret)  += 1
-      values(CSR.instretw) += 1
-    }
-    super.step(n)
-  }
-
-  poke(c.io.pc,       pc)
-  poke(c.io.addr,     addr)
-  poke(c.io.stall,    0)
-  poke(c.io.illegal,  0)
-  poke(c.io.ld_type,  ld_xxx)
-  poke(c.io.st_type,  st_xxx)
-  poke(c.io.pc_check, 0)
-  csrNames foreach { case (csr, name) => 
-    val value = if (!csrRO(csr)) nextIn else peek(csrFile(csr))
-    pokeCSR(csr, value)
-  }
-
-  poke(c.io.cmd, csr_n)
-  csrNames foreach { case (csr, name) => 
-    val reg = csrFile(csr)
-    println("*** CSR.N: %s ***".format(name))
-    poke(c.io.in,   nextIn)
-    poke(c.io.inst, nextInst(csr))
-    expectOut(csr,  values(csr))
-    step(1)
-    expectCSR(csr,  values(csr))
-  }
-
-  poke(c.io.cmd, csr_w)
-  csrNames foreach { case (csr, name) => 
-    val in   = nextIn
-    val inst = nextInst(csr)
-    val src  = rs1(UInt(inst))
-    println("*** CSR.W: %s <- %x (x%d) ***".format(name, in, src))
-    poke(c.io.in,   in)
-    poke(c.io.inst, inst)
-    expectOut(csr,  values(csr))
-    if (!csrPrv(csr, prv) || csrRO(csr)) { 
-      instret = false
-      expectException(Cause.IllegalInst)
-    } else if (!csrRO(csr)) {
-      instret = true
-      step(1)
-      expectCSR(csr, in)
+      regs(CSR.instret.litValue())  += 1
+      regs(CSR.instretw.litValue()) += 1
     }
   }
 
-  poke(c.io.cmd, csr_s)
-  csrNames foreach { case (csr, name) => 
-    val in   = nextIn
-    val inst = nextInst(csr)
-    val src  = rs1(UInt(inst))
-    println("*** CSR.S: %s <- %x (x%d) ****".format(name, in, src))
-    poke(c.io.in,   in)
-    poke(c.io.inst, inst)
-    expectOut(csr, values(csr))
-    if (!csrPrv(csr, prv) || (csrRO(csr) && src != 0)) { 
-      instret = false
-      expectException(Cause.IllegalInst)
-    } else if (!csrRO(csr)) {
-      instret = true
-      val value = if (src != 0) values(csr) | in 
-        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr)) values(csr) + 1 
-        else values(csr)
-      step(1)
-      expectCSR(csr, value)
-    } 
+  private def write(addr: BigInt, data: BigInt) {
+    if (addr == CSR.mstatus.litValue()) { 
+      status((data >> 1) & 0x3, data & 0x1, (data >> 4) & 0x3, (data >> 1) & 0x1)
+    } else if (addr == CSR.mip.litValue()) {
+      ip((data >> 7) & 0x1, (data >> 3) & 0x1)
+    } else if (addr == CSR.mie.litValue()) {
+      ie((data >> 7) & 0x1, (data >> 3) & 0x1)
+    } else if (addr == CSR.mepc.litValue()) {
+      regs(CSR.mepc.litValue()) = data & -4
+    } else if (addr == CSR.mcause.litValue()) {
+      regs(CSR.mcause.litValue()) = data & (BigInt(1) << 31 | 0xf)
+    } else if (addr == CSR.timew.litValue() || addr == CSR.mtime.litValue()) {
+      regs(CSR.time.litValue())  = data
+      regs(CSR.timew.litValue()) = data
+      regs(CSR.mtime.litValue()) = data
+    } else if (addr == CSR.timehw.litValue() || addr == CSR.mtimeh.litValue()) {
+      regs(CSR.timeh.litValue())  = data
+      regs(CSR.timehw.litValue()) = data
+      regs(CSR.mtimeh.litValue()) = data
+    } else if (addr == CSR.cyclew.litValue()) {
+      regs(CSR.cycle.litValue())  = data
+      regs(CSR.cyclew.litValue()) = data
+    } else if (addr == CSR.cyclehw.litValue()) {
+      regs(CSR.cycleh.litValue())  = data
+      regs(CSR.cyclehw.litValue()) = data
+    } else if (addr == CSR.instretw.litValue()) {
+      regs(CSR.instret.litValue())  = data
+      regs(CSR.instretw.litValue()) = data
+    } else if (addr == CSR.instrethw.litValue()) {
+      regs(CSR.instreth.litValue())  = data
+      regs(CSR.instrethw.litValue()) = data
+    } else regs(addr) = data
   }
 
-  poke(c.io.cmd, csr_c)
-  csrNames foreach { case (csr, name) => 
-    val in   = nextIn
-    val inst = nextInst(csr)
-    val src  = rs1(UInt(inst))
-    println("*** CSR.C: %s <- %x (x%d) ***".format(name, in, src))
-    poke(c.io.in,   in)
-    poke(c.io.inst, inst)
-    expectOut(csr, values(csr))
-    if (!csrPrv(csr, prv) && (csrRO(csr) && src != 0)) { 
-      instret = false
-      expectException(Cause.IllegalInst)
-    } else if (!csrRO(csr)) {
-      instret = true
-      val value = if (src != 0) values(csr) & int(~in.toInt) 
-        else if (csrTime(csr) || csrCycle(csr) || csrInstret(csr)) values(csr) + 1 
-        else values(csr)
-      step(1)
-      expectCSR(csr, value) 
-    } 
+  def apply(in: CSRIn) = {
+    val csr_addr =  in.inst >> 20
+    val rs1_addr = (in.inst >> 15) & 0x1f
+    val privValid = ((csr_addr >> 8) & 0x3) <= prv
+    val privInst  = in.cmd == CSR.P.litValue()
+    val isEcall  = privInst && (csr_addr & 0x1) == 0 && ((csr_addr >> 8) & 0x1) == 0
+    val isEbreak = privInst && (csr_addr & 0x1) == 1 && ((csr_addr >> 8) & 0x1) == 0
+    val isEret   = privInst && (csr_addr & 0x1) == 0 && ((csr_addr >> 8) & 0x1) == 1
+    val csrValid = regs contains csr_addr
+    val csrRO    = ((csr_addr >> 10) & 0x3) == 0x3 ||
+        csr_addr == CSR.mtvec.litValue() || csr_addr == CSR.mtdeleg.litValue()
+    val wen = in.cmd == CSR.W.litValue() || ((in.cmd >> 1) & 0x1) == 0x1 && rs1_addr != 0
+    val iaddrInvalid = in.pc_check && ((in.addr >> 0x1) & 0x1) > 0
+    val laddrInvalid = in.ld_type == Control.LD_LW.litValue() && (in.addr & 0x3) > 0 ||
+        (in.ld_type == Control.LD_LH.litValue() || 
+         in.ld_type == Control.LD_LHU.litValue()) && (in.addr & 0x1) > 0
+    val saddrInvalid = in.st_type == Control.ST_SW.litValue() && (in.addr & 0x3) > 0 ||
+         in.st_type == Control.ST_SH.litValue() && (in.addr & 0x1) > 0
+    val exception = in.illegal || iaddrInvalid || laddrInvalid || saddrInvalid || 
+         (in.cmd & 0x3) > 0 && (!csrValid || !privValid) || wen && csrRO ||
+         (privInst && !privValid) || isEcall || isEbreak
+    val out = new CSROut(read(csr_addr), mepc, mtvec + (prv << 6), exception)
+    val wdata = if (in.cmd == CSR.W.litValue()) in.value
+      else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
+      else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
+      else BigInt(0)
+    val isInstRet = in.inst != Instructions.NOP.litValue() &&
+                    (!exception || isEcall || isEbreak)
+    count(isInstRet)
+    if (exception) {
+      mepc = in.pc & -4
+      mcause = if (iaddrInvalid) Cause.InstAddrMisaligned.litValue()
+        else if (laddrInvalid) Cause.LoadAddrMisaligned.litValue()
+        else if (saddrInvalid) Cause.StoreAddrMisaligned.litValue()
+        else if (isEcall) Cause.Ecall.litValue() + prv
+        else if (isEbreak) Cause.Breakpoint.litValue() 
+        else Cause.IllegalInst.litValue()
+      status(CSR.PRV_M.litValue(), 0, prv, ie)
+      if (iaddrInvalid || laddrInvalid || saddrInvalid) mbadaddr = in.addr
+    } else if (isEret) {
+      status(prv1, ie1, CSR.PRV_U.litValue(), 1)
+    } else if (wen) {
+      write(csr_addr, wdata) 
+    }
+    out
+  }
+}
+
+
+class CSRTests(c: CSR) extends Tester(c) with RISCVCommon {
+  override val insts = 
+    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRC, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, int(rand_rs1)))) ++
+    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++ List(
+    // system insts
+    Instructions.ECALL,  SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    Instructions.EBREAK, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    Instructions.ERET,   SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    // illegal addr
+    J(int(rand_rd), rnd.nextInt), SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    JR(int(rand_rd), int(rand_rs1), rnd.nextInt), 
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    L(Funct3.LW, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    L(Funct3.LH, int(rand_rd), int(rand_rs1), int(rand_rs2)), 
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    L(Funct3.LHU, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    S(Funct3.SW, int(rand_rd), int(rand_rs1), int(rand_rs2)), 
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    S(Funct3.SH, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    // illegal inst
+    rand_inst, SYS(Funct3.CSRRC, 0, CSR.mcause, 0))
+
+  def poke(in: CSRIn) {
+    poke(c.io.cmd,      in.cmd)
+    poke(c.io.in,       in.value)
+    poke(c.io.inst,     in.inst)
+    poke(c.io.pc,       in.pc)
+    poke(c.io.addr,     in.addr)
+    poke(c.io.illegal,  in.illegal)
+    poke(c.io.pc_check, in.pc_check)
+    poke(c.io.st_type,  in.st_type)
+    poke(c.io.ld_type,  in.ld_type)
   }
 
-  instret = true
-  poke(c.io.cmd, csr_p)
-  println("*** CSR.P: ECALL ***")
-  poke(c.io.in,   nextIn)
-  poke(c.io.inst, Instructions.ECALL)
-  expectException(Cause.Ecall + ((values(CSR.mstatus) >> 1) & 0x3))
+  def expect(out: CSROut) {
+    expect(c.io.out,  out.value)
+    expect(c.io.epc,  out.epc)
+    expect(c.io.evec, out.evec)
+    expect(c.io.expt, out.expt)
+  }
 
-  println("*** CSR.P: ERET ***")
-  poke(c.io.in,   nextIn)
-  poke(c.io.inst, Instructions.ERET)
-  expectEret
+  c.csrFile foreach (x => poke(x._2, 0))
+  poke(c.io.stall, 0)
 
-  println("*** CSR.P: EBREAK ***")
-  poke(c.io.in,   nextIn)
-  poke(c.io.inst, Instructions.EBREAK)
-  expectException(Cause.Breakpoint)
+  for (inst <- insts) {
+    val value = int(rnd.nextInt)
+    val ctrl = GoldControl(inst)
+    val in   = new CSRIn(ctrl(11), value, inst.litValue(), 
+      rand_addr, int(rnd.nextInt | 0x3),
+      ctrl(12), ctrl(0) == Control.PC_ALU.litValue(), ctrl(7), ctrl(8))
+    println("*** inst: %s, csr: %s, value: %x ***".format(
+      dasm(inst), csrNames getOrElse (csr(inst), csr(inst).toString(16)), value))
+    poke(in)
+    expect(GoldCSR(in))
+    step(1) // update registers
+  } 
 }

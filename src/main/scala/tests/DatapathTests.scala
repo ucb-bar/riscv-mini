@@ -135,7 +135,7 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     pokeWbCtrl(ctrl)
 
     val csr_addr = csr(inst)
-    val csr_file = c.csr.csrFile map { case (k, v) => (k.litValue(), v) }
+    val csr_file = (c.csr.csrFile map { case (k, v) => (k.litValue(), v) }).toMap
     val csr_out  = if (csr_file contains csr_addr) peek(csr_file(csr_addr)) else BigInt(0)
     val addr_invalid = ctrl(0) == pc_alu && (alu_sum & 0x2) || 
                ctrl(8) == ld_lw && (alu_sum & 0x3) || 

@@ -53,6 +53,13 @@ object CSR {
   // Hachine HITF
   val mtohost   = UInt(0x780, 12)
   val mfromhost = UInt(0x781, 12)
+
+  val regs = List(
+    cycle, time, instret, cycleh, timeh, instreth,
+    cyclew, timew, instretw, cyclehw, timehw, instrethw,
+    mcpuid, mimpid, mhartid, mtvec, mtdeleg, mie,
+    mtimecmp, mtime, mtimeh, mscratch, mepc, mcause, mbadaddr, mip,
+    mtohost, mfromhost, mstatus)
 }
 
 object Cause {
@@ -155,38 +162,15 @@ class CSR extends Module with CoreParams {
   when(io.host.fromhost.valid) {
     mfromhost := io.host.fromhost.bits
   }
- 
-  val csrFile = ListMap(
-    CSR.cycle     -> cycle,
-    CSR.cycleh    -> cycleh,
-    CSR.time      -> time,
-    CSR.timeh     -> timeh,
-    CSR.instret   -> instret,
-    CSR.instreth  -> instreth,
-    CSR.cyclew    -> cycle,
-    CSR.cyclehw   -> cycleh,
-    CSR.timew     -> time,
-    CSR.timehw    -> timeh,
-    CSR.instretw  -> instret,
-    CSR.instrethw -> instreth,
-    CSR.mcpuid    -> mcpuid,
-    CSR.mimpid    -> mimpid,
-    CSR.mhartid   -> mhartid,
-    CSR.mstatus   -> mstatus,
-    CSR.mtvec     -> mtvec,
-    CSR.mtdeleg   -> mtdeleg,
-    CSR.mie       -> mie,
-    CSR.mtimecmp  -> mtimecmp,
-    CSR.mtime     -> time,
-    CSR.mtimeh    -> timeh,
-    CSR.mscratch  -> mscratch,
-    CSR.mepc      -> mepc,
-    CSR.mcause    -> mcause,
-    CSR.mbadaddr  -> mbadaddr,
-    CSR.mip       -> mip,
-    CSR.mtohost   -> mtohost,
-    CSR.mfromhost -> mfromhost)
-  val csr = Lookup(csr_addr, UInt(0), csrFile.toSeq)
+
+  val csrFile = CSR.regs zip List(
+    cycle, time, instret, cycleh, timeh, instreth,
+    cycle, time, instret, cycleh, timeh, instreth,
+    mcpuid, mimpid, mhartid, mtvec, mtdeleg, mie,
+    mtimecmp, time, timeh, mscratch, mepc, mcause, mbadaddr, mip,
+    mtohost, mfromhost, mstatus)
+
+  val csr = Lookup(csr_addr, UInt(0), csrFile)
   io.out := csr.zext
 
   val privValid = csr_addr(9, 8) <= PRV
