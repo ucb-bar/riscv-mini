@@ -30,7 +30,7 @@ class BrCondTests[+T <: BrCond](c: T) extends Tester(c) with RISCVCommon {
     val b = int(rnd.nextInt)
     val ctrl = GoldControl(inst)
     val gold = GoldBrCond(new BrCondIn(ctrl(5), a, b))
-    println("*** %s -> A: %x, B: %x***".format(dasm(inst), a, b))
+    println("*** %s -> A: %x, B: %x ***".format(dasm(inst), a, b))
     poke(c.io.br_type, ctrl(5))
     poke(c.io.rs1, a)
     poke(c.io.rs2, b)

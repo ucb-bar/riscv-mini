@@ -15,6 +15,10 @@ object Main {
         c => new BrCondTests(c) }
       case "BrCondArea" => chiselMainTest(chiselArgs, () => Module(new BrCondArea)(Config.params)){
         c => new BrCondTests(c) }
+      case "ImmGenWire" => chiselMainTest(chiselArgs, () => Module(new ImmGenWire)(Config.params)){
+        c => new ImmGenTests(c) }
+      case "ImmGenMux" => chiselMainTest(chiselArgs, () => Module(new ImmGenMux)(Config.params)){
+        c => new ImmGenTests(c) }
       case "CSR" => chiselMainTest(chiselArgs, () => Module(new CSR)(Config.params)){
         c => new CSRTests(c) }
       case "Control" => chiselMainTest(chiselArgs, () => Module(new Control)(Config.params)) {

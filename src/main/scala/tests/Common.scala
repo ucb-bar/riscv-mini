@@ -152,26 +152,6 @@ trait RISCVCommon {
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
   def csr(inst: UInt) =  (inst.litValue() >> 20)
 
-  private def inst_31(inst: UInt)    = UInt((inst.litValue() >> 31) & 0x1,  1)
-  private def inst_30_25(inst: UInt) = UInt((inst.litValue() >> 25) & 0x3f, 6)
-  private def inst_24_21(inst: UInt) = UInt((inst.litValue() >> 21) & 0xf,  4)
-  private def inst_20(inst: UInt)    = UInt((inst.litValue() >> 20) & 0x1,  1)
-  private def inst_19_12(inst: UInt) = UInt((inst.litValue() >> 12) & 0xff, 8)
-  private def inst_11_8(inst: UInt)  = UInt((inst.litValue() >> 8)  & 0xf,  4)
-  private def inst_7(inst: UInt)     = UInt((inst.litValue() >> 7)  & 0x1,  1)
-
-  def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}), 
-                             inst_30_25(inst), inst_24_21(inst), inst_20(inst)).litValue()
-  def simm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}), 
-                             inst_30_25(inst), inst_11_8(inst), inst_7(inst)).litValue()
-  def bimm(inst: UInt) = Cat(Cat(Seq.fill(20){inst_31(inst)}),
-                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1)).litValue()
-  def uimm(inst: UInt) = Cat(inst_31(inst), inst_30_25(inst), inst_24_21(inst), 
-                             inst_20(inst), inst_19_12(inst), UInt(0, 12)).litValue()
-  def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst), 
-                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
-  def zimm(inst: UInt) = BigInt(rs1(inst))
-
   val csrRegs = CSR.regs map (_.litValue())
   val csrNames = (csrRegs zip List(
     "cycle", "time", "instret", "cycleh", "timeh", "instreth",
@@ -191,33 +171,33 @@ trait RISCVCommon {
     ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
 
   private val instFmts = List(
-    (x: UInt) => "AUIPC x%d, %x".format(rd(x), uimm(x)),
-    (x: UInt) => "LUI x%d, %x".format(rd(x), uimm(x)),
-    (x: UInt) => "JAL x%d, %x".format(rd(x), jimm(x)),
-    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), iimm(x)),
-    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "AUIPC x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
+    (x: UInt) => "LUI x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
+    (x: UInt) => "JAL x%d, %x".format(rd(x), GoldImmGen.jimm(x)),
+    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
     (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
     (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),

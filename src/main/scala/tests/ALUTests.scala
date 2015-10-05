@@ -39,7 +39,7 @@ class ALUTests[+T <: ALU](c: T) extends Tester(c) with RISCVCommon {
     val b = int(rnd.nextInt)
     val ctrl = GoldControl(inst)
     val gold = GoldALU(new ALUIn(ctrl(4), a, b))
-    println("*** %s -> A: %x, B: %x***".format(dasm(inst), a, b))
+    println("*** %s -> A: %x, B: %x ***".format(dasm(inst), a, b))
     poke(c.io.A, a)
     poke(c.io.B, b)
     poke(c.io.alu_op, ctrl(4))

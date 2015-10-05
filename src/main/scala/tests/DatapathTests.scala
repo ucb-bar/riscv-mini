@@ -74,16 +74,7 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     val rs1_val = peekAt(c.regFile.regs, rs1_addr)
     val rs2_val = peekAt(c.regFile.regs, rs2_addr)
     val rd_val  = peekAt(c.regFile.regs, rd_addr)
-    val imm_val = if (ctrl(3) == imm_i) iimm(inst)
-      else if (ctrl(3) == imm_s) simm(inst)
-      else if (ctrl(3) == imm_b) bimm(inst)
-      else if (ctrl(3) == imm_u) uimm(inst)
-      else if (ctrl(3) == imm_j) jimm(inst)
-      else if (ctrl(3) == imm_z) zimm(inst)
-      else c.immGen match {
-        case _: ImmGenWire => BigInt(0)
-        case _: ImmGenMux  => iimm(inst) & int(-2)
-      }
+    val imm_val = GoldImmGen(new ImmGenIn(inst, ctrl(3))).out
     val a = if (ctrl(1) == a_rs1) rs1_val else pc
     val b = if (ctrl(2) == b_rs2) rs2_val else imm_val
     val alu_sum = if ((ctrl(4) & 1) == 1) int(a.toInt - b.toInt) else int(a.toInt + b.toInt)
