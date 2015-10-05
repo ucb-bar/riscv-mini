@@ -5,14 +5,20 @@ import Chisel.AdvTester._
 import junctions.{MemReqCmd, MemData, MemResp}
 import scala.collection.mutable.{Queue => ScalaQueue}
 
-case class TestMemReq(addr: Int, tag: BigInt, rw: Boolean)
-case class TestMemData(data: BigInt)
-case class TestMemResp(data: BigInt, tag: BigInt)
+case class TestMemReq(addr: Int, tag: BigInt, rw: Boolean) {
+  override def toString = "[Mem Req] %s addr: %x, tag: %x".format(if (rw) "write" else "read", addr, tag)
+}
+case class TestMemData(data: BigInt) {
+  override def toString = "[Mem Data] data: %x".format(data)
+}
+case class TestMemResp(data: BigInt, tag: BigInt) {
+  override def toString = "[Mem Data] data: %x, tag: %x".format(data, tag)
+}
 
 class TileMem(cmdQ: ScalaQueue[TestMemReq],
-            dataQ: ScalaQueue[TestMemData],
-            respQ: ScalaQueue[TestMemResp],
-            word_width: Int = 16, depth: Int = 1 << 20) extends SimMem(word_width, depth) {
+             dataQ: ScalaQueue[TestMemData],
+             respQ: ScalaQueue[TestMemResp],
+             word_width: Int = 16, depth: Int = 1 << 20) extends SimMem(word_width, depth) {
   def process {
     if (!cmdQ.isEmpty && !dataQ.isEmpty && cmdQ.front.rw) {
       val cmd = cmdQ.dequeue

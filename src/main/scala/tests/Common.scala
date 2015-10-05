@@ -336,88 +336,28 @@ trait RISCVCommon {
   val pc_start = Const.PC_START.litValue().toInt
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
-
-  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
-    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
-    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
-  def J(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
-  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
-    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 }
 
 abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) with RISCVCommon 
 
-class MagicMem(blockSize: Int = 4, size: Int = 1 << 23) {
-  implicit def toBigInt(x: UInt) = x.litValue()
-
-  private val mem = Array.fill(size){0.toByte} 
-  private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
-
-  def read(addr: Int, s: Int = blockSize) = {
-    val off = log2Up(s)
-    val a = (addr & (size - 1)) >> off << off
-    ((0 until s) foldLeft BigInt(0)){case (res, i) => res | (int(mem(a + i)) << (8 * i))}
-  }
-
-  def write(addr: Int, data: BigInt, mask: BigInt = (1 << blockSize) - 1) {
-    val a = addr & (size - 1)
-    for (i <- 0 until blockSize if ((mask >> i) & 0x1) > 0) {
-      mem(a+i) = (data >> (8 * i)).toByte
-    }
-  }
-
-  def loadMem(start: Int, test: Seq[UInt]) {
-    val nwords = (blockSize >> 2)
-    for (i <- 0 until ((test.size / nwords) + 1)) {
-      var data = BigInt(0)
-      for (k <- 0 until nwords) {
-        val idx = i * nwords + k
-        val inst = (if (idx < test.size) test(idx) else UInt(0)).litValue()
-        data |= inst << (32 * k) 
-      }
-      write(start + i * blockSize, data)
-    }
-  }
-
-  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
-
-  def loadMem(filename: String) {
-    val lines = Source.fromFile(filename).getLines
-    for ((line, i) <- lines.zipWithIndex) {
-      val base = (i * line.length) / 2
-      var offset = 0
-      for (k <- (line.length - 2) to 0 by -2) {
-        val addr = base+offset
-        val data = (parseNibble(line(k)) << 4) | parseNibble(line(k+1))
-        mem(addr) = data.toByte
-        offset += 1
-      }
-    }
-  }
-}
-
-abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20) extends Processable {
+abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolean = false) extends Processable {
   require(word_width % 4 == 0, "word_width should be divisible by 4")
   implicit def toBigInt(x: UInt) = x.litValue()
+  private val addrMask = (1 << log2Up(depth))-1
   protected val off = log2Up(word_width)
   private val mem = Array.fill(depth){BigInt(0)}
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
   private def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
 
-  def read(addr: Int) = mem(addr)
-  def write(addr: Int, data: BigInt) { mem(addr) = data }
+  def read(addr: Int) = {
+    val data = mem(addr & addrMask)
+    if (verbose) println("MEM[%x] => %x".format(addr & addrMask, data))
+    data
+  }
+  def write(addr: Int, data: BigInt) { 
+    if (verbose) println("MEM[%x] <= %x".format(addr & addrMask, data))
+    mem(addr & addrMask) = data 
+  }
   def loadMem(test: Seq[UInt]) {
     val chunk = word_width / 4
     for (i <- 0 until (test.size / chunk)) {
@@ -455,6 +395,24 @@ trait MemTests extends RISCVCommon with AdvTests {
   case object Benchmarks extends Tests
   case object LoadMem extends Tests
 
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
+  def U(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i), reg(rd), op)
+  def J(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), op)
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
   val bypassTest = List.fill(pc_start/4){fin} ++ List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -632,4 +590,3 @@ trait MemTests extends RISCVCommon with AdvTests {
     ok
   }
 }
-

@@ -4,8 +4,12 @@ import Chisel._
 import Chisel.AdvTester._
 import scala.collection.mutable.{Queue => ScalaQueue}
 
-case class TestCacheReq(addr: Int, data: BigInt, mask: BigInt)
-case class TestCacheResp(data: BigInt)
+case class TestCacheReq(addr: Int, data: BigInt, mask: BigInt) {
+  override def toString = "[Cache Req] addr: %x, data: %x, mask: %x".format(addr, data, mask)
+}
+case class TestCacheResp(data: BigInt) {
+  override def toString = "[Cache Resp] data: %x".format(data)
+}
 
 class CoreMem(ireqQ: ScalaQueue[TestCacheReq], irespQ: ScalaQueue[TestCacheResp],
               dreqQ: ScalaQueue[TestCacheReq], drespQ: ScalaQueue[TestCacheResp], abort: => BigInt,
