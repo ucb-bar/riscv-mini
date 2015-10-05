@@ -2,8 +2,8 @@ package mini
 
 import Chisel._
 
-class DatapathTests(c: Datapath) extends RISCVTester(c) {
-  def pokeExCtrl(ctrl: Array[BigInt], br_cond: Boolean) {
+class DatapathTests(c: Datapath) extends Tester(c) with RISCVCommon {
+  def pokeExCtrl(ctrl: List[BigInt], br_cond: Boolean) {
     println("=== Execute Control Signals ===")
     poke(c.io.ctrl.pc_sel,    ctrl(0))
     poke(c.io.ctrl.inst_kill, ctrl(6))
@@ -17,7 +17,7 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     println("=======================")
   }
 
-  def pokeWbCtrl(ctrl: Array[BigInt]) {
+  def pokeWbCtrl(ctrl: List[BigInt]) {
     println("=== Write-Back Control Signals ===")
     poke(c.io.ctrl.st_type_r, ctrl(7))
     poke(c.io.ctrl.ld_type,   ctrl(8))
@@ -55,19 +55,19 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     println("*********************")
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
-    pokeExCtrl(decode(Instructions.NOP), false)
-    pokeWbCtrl(decode(Instructions.NOP))
+    pokeExCtrl(GoldControl(Instructions.NOP), false)
+    pokeWbCtrl(GoldControl(Instructions.NOP))
     val pc = peek(c.io.icache.req.bits.addr) 
     step(1)
 
     // Emulate fetch
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.dcache.resp.bits.data, 0)
-    pokeExCtrl(decode(Instructions.NOP), false)
-    pokeWbCtrl(decode(Instructions.NOP))
+    pokeExCtrl(GoldControl(Instructions.NOP), false)
+    pokeWbCtrl(GoldControl(Instructions.NOP))
     step(1) 
-    // Emulate decode & execute 
-    val ctrl = decode(inst)
+    // Emulate GoldControl & execute 
+    val ctrl = GoldControl(inst)
     val rs1_addr = rs1(inst)
     val rs2_addr = rs2(inst)
     val rd_addr  = rd(inst)
@@ -77,25 +77,10 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     val imm_val = GoldImmGen(new ImmGenIn(inst, ctrl(3))).out
     val a = if (ctrl(1) == a_rs1) rs1_val else pc
     val b = if (ctrl(2) == b_rs2) rs2_val else imm_val
-    val alu_sum = if ((ctrl(4) & 1) == 1) int(a.toInt - b.toInt) else int(a.toInt + b.toInt)
-    val alu_out = if (ctrl(4) == alu_copy_a) a
-      else if (ctrl(4) == alu_add || ctrl(4) == alu_sub) alu_sum
-      else if (ctrl(4) == alu_slt) if (a.toInt < b.toInt) BigInt(1) else BigInt(0)
-      else if (ctrl(4) == alu_sltu) if (a < b) BigInt(1) else BigInt(0)
-      else if (ctrl(4) == alu_sll) int(a.toInt << (b.toInt & 0x1f))
-      else if (ctrl(4) == alu_srl) int(a.toInt >>> (b.toInt & 0x1f))
-      else if (ctrl(4) == alu_sra) int(a.toInt >> (b.toInt & 0x1f))
-      else if (ctrl(4) == alu_xor) a ^ b
-      else if (ctrl(4) == alu_or) a | b
-      else if (ctrl(4) == alu_and) a & b
-      else b
-    val br_cond = if (ctrl(5) == br_eq) rs1_val == rs2_val
-      else if (ctrl(5) == br_ne) rs1_val != rs2_val
-      else if (ctrl(5) == br_lt) rs1_val.toInt < rs2_val.toInt
-      else if (ctrl(5) == br_ge) rs1_val.toInt >= rs2_val.toInt
-      else if (ctrl(5) == br_ltu) rs1_val < rs2_val
-      else if (ctrl(5) == br_geu) rs1_val >= rs2_val
-      else false
+    val alu_gold = GoldALU(new ALUIn(ctrl(4), a, b))
+    val alu_sum = alu_gold.sum
+    val alu_out = alu_gold.out 
+    val br_cond = GoldBrCond(new BrCondIn(ctrl(5), rs1_val, rs2_val)).taken 
     val cur_pc = pc + 4
     val npc = if (ctrl(0) == pc_epc) epc
       else if (ctrl(0) == pc_alu || br_cond) alu_out & int(-2)
@@ -111,7 +96,7 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     poke(c.io.icache.resp.bits.data, 0)
     poke(c.io.dcache.resp.bits.data, 0)
     pokeExCtrl(ctrl, br_cond)
-    pokeWbCtrl(decode(Instructions.NOP))
+    pokeWbCtrl(GoldControl(Instructions.NOP))
     expect(c.alu.io.A,   a)
     expect(c.alu.io.B,   b)
     expect(c.pc,         cur_pc)
@@ -122,7 +107,7 @@ class DatapathTests(c: Datapath) extends RISCVTester(c) {
     step(1)
 
     // Emulate write back
-    pokeExCtrl(decode(Instructions.NOP), false)
+    pokeExCtrl(GoldControl(Instructions.NOP), false)
     pokeWbCtrl(ctrl)
 
     val csr_addr = csr(inst)

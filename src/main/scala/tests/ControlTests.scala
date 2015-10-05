@@ -17,7 +17,7 @@ object GoldControl {
   }
 }
 
-class ControlTests(c: Control) extends RISCVTester(c) {
+class ControlTests(c: Control) extends Tester(c) with RISCVCommon { 
   def checkCtrl(ctrl: Seq[BigInt]) {
     expect(c.io.ctrl.pc_sel,    ctrl(0))
     expect(c.io.ctrl.A_sel,     ctrl(1))

@@ -145,7 +145,7 @@ trait RISCVCommon {
   val csr_w = BigInt(1)
   val csr_s = BigInt(2)
   val csr_c = BigInt(3)
-  val csr_p = BigInt(4)
+  val csr_p = BigInt(4) 
 
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
@@ -230,70 +230,6 @@ trait RISCVCommon {
     else iter(instPats zip instFmts)
   }
 
-  val instCtrls = List(
-    //                                                                      kill                    wb_en   illiegal?
-    //                pc_sel   A_sel   B_sel  imm_sel alu_op     br_type |  st_type ld_type wb_sel  |  csr_cmd _|
-    //                   |       |      |      |       |            |    |       |       |          |  |      |
-    /* AUIPC  */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* LUI    */ Array(pc_4,   a_pc,   b_imm, imm_u, alu_copy_b, br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* JAL    */ Array(pc_alu, a_pc,   b_imm, imm_j, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc4, y, csr_n, n),
-    /* JALR   */ Array(pc_alu, a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_xxx, wb_pc4, y, csr_n, n),
-    /* BEQ    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_eq,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* BNE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ne,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* BLT    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_lt,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* BGE    */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ge,  n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* BLTU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_ltu, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* BGEU   */ Array(pc_4,   a_pc,   b_imm, imm_b, alu_add,    br_geu, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* LB     */ Array(pc_0,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_lb,  wb_mem, y, csr_n, n),
-    /* LH     */ Array(pc_0,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_lh,  wb_mem, y, csr_n, n),
-    /* LW     */ Array(pc_0,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_lw,  wb_mem, y, csr_n, n),
-    /* LBU    */ Array(pc_0,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_lbu, wb_mem, y, csr_n, n),
-    /* LHU    */ Array(pc_0,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, y, st_xxx, ld_lhu, wb_mem, y, csr_n, n),
-    /* SB     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sb,  ld_xxx, wb_alu, n, csr_n, n),
-    /* SH     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sh,  ld_xxx, wb_alu, n, csr_n, n),
-    /* SW     */ Array(pc_4,   a_rs1,  b_imm, imm_s, alu_add,    br_xxx, n, st_sw,  ld_xxx, wb_alu, n, csr_n, n),
-    /* ADDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLTI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLTIU  */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* XORI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* ORI    */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* ANDI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SRLI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SRAI   */ Array(pc_4,   a_rs1,  b_imm, imm_i, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* ADD    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_add,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SUB    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sub,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLT    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_slt,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLTU   */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sltu,   br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* XOR    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_xor,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* OR     */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_or,     br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* AND    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_and,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SLL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sll,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SRL    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_srl,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* SRA    */ Array(pc_4,   a_rs1,  b_rs2, imm_x, alu_sra,    br_xxx, n, st_xxx, ld_xxx, wb_alu, y, csr_n, n),
-    /* FENCE  */ Array(pc_4,   a_xxx,  b_xxx, imm_x, alu_xxx,    br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, n),
-    /* CSRRW  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRS  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRC  */ Array(pc_0,   a_rs1,  b_xxx, imm_x, alu_copy_a, br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_c, n),
-    /* CSRRWI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_w, n),
-    /* CSRRSI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_s, n),
-    /* CSRRCI */ Array(pc_0,   a_xxx,  b_xxx, imm_z, alu_xxx,    br_xxx, y, st_xxx, ld_xxx, wb_csr, y, csr_c, n)
-    )
-
-  def decode(x: UInt) = {
-    def iter(l: List[(BitPat, Array[BigInt])]): Array[BigInt] = l match {
-      case Nil => Array(pc_4, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_alu, n, csr_n, y)
-      case (p, s) :: tail => if (x === p) s else iter(tail)  
-    }
-    if (x === FENCEI)
-      Array(pc_0,   a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_alu, n, csr_n, n)
-    else if (x === ERET)
-      Array(pc_epc, a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, y, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
-    else if (x === ECALL || x === EBREAK)
-      Array(pc_4,   a_xxx, b_xxx, imm_x, alu_xxx, br_xxx, n, st_xxx, ld_xxx, wb_csr, n, csr_p, n)
-    else iter(instPats zip instCtrls)
-  }
-
   val pc_start = Const.PC_START.litValue().toInt
   val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
   val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
@@ -319,8 +255,6 @@ trait RISCVCommon {
   def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
     Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 }
-
-abstract class RISCVTester[+T <: Module](c: T, isT: Boolean = true) extends Tester(c, isT) with RISCVCommon 
 
 abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolean = false) extends Processable {
   require(word_width % 4 == 0, "word_width should be divisible by 4")
