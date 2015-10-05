@@ -59,47 +59,16 @@ object Control {
   val WB_MEM = UInt(1, 2)
   val WB_PC4 = UInt(2, 2)
   val WB_CSR = UInt(3, 2)
-}
 
-class ControlSignals extends CoreBundle {
-  val pc_sel    = UInt(OUTPUT, 2) 
-  val inst_en   = Bool(OUTPUT)
-  val inst_kill = Bool(OUTPUT)
-  val A_sel     = UInt(OUTPUT, 1)
-  val B_sel     = UInt(OUTPUT, 1)
-  val imm_sel   = UInt(OUTPUT, 3)
-  val alu_op    = UInt(OUTPUT, 4)
-  val br_type   = UInt(OUTPUT, 3)
-  val data_en   = Bool(OUTPUT)
-  val st_type   = UInt(OUTPUT, 2)
-  val st_type_r = UInt(OUTPUT, 2)
-  val ld_type   = UInt(OUTPUT, 3)
-  val wb_sel    = UInt(OUTPUT, 2) 
-  val wb_en     = Bool(OUTPUT)
-  val csr_cmd   = UInt(OUTPUT, 3)
-  val illegal   = Bool(OUTPUT)
-  val pc_check  = Bool(OUTPUT)
- 
-  val inst      = UInt(INPUT, xlen)
-  val stall     = Bool(INPUT)
-  val flush     = Bool(INPUT)
-}
+  import Instructions._
+  import ALU._
 
-class ControlIO extends Bundle {
-  val ctrl = new ControlSignals
-}
-
-import Instructions._
-import ALU._
-import Control._
-
-class Control extends Module {
-  val io = new ControlIO
-  val ctrlSignals = ListLookup(io.ctrl.inst,
+  val default =
     //                                                            kill                        wb_en  illegal?
     //            pc_sel  A_sel   B_sel  imm_sel   alu_op   br_type |  st_type ld_type wb_sel  | csr_cmd |
     //              |       |       |     |          |          |   |     |       |       |    |  |      |
-             List(PC_4,   A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, Y), Array(
+             List(PC_4,   A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, Y)
+  val map = Array(
     LUI   -> List(PC_4  , A_PC,   B_IMM, IMM_U, ALU_COPY_B, BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     AUIPC -> List(PC_4  , A_PC,   B_IMM, IMM_U, ALU_ADD   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, Y, CSR.N, N),
     JAL   -> List(PC_ALU, A_PC,   B_IMM, IMM_J, ALU_ADD   , BR_XXX, Y, ST_XXX, LD_XXX, WB_PC4, Y, CSR.N, N),
@@ -148,8 +117,40 @@ class Control extends Module {
     ECALL -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     EBREAK-> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
     ERET  -> List(PC_EPC, A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, Y, ST_XXX, LD_XXX, WB_CSR, N, CSR.P, N),
-    WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N)
-  ))
+    WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N))
+}
+
+class ControlSignals extends CoreBundle {
+  val pc_sel    = UInt(OUTPUT, 2) 
+  val inst_en   = Bool(OUTPUT)
+  val inst_kill = Bool(OUTPUT)
+  val A_sel     = UInt(OUTPUT, 1)
+  val B_sel     = UInt(OUTPUT, 1)
+  val imm_sel   = UInt(OUTPUT, 3)
+  val alu_op    = UInt(OUTPUT, 4)
+  val br_type   = UInt(OUTPUT, 3)
+  val data_en   = Bool(OUTPUT)
+  val st_type   = UInt(OUTPUT, 2)
+  val st_type_r = UInt(OUTPUT, 2)
+  val ld_type   = UInt(OUTPUT, 3)
+  val wb_sel    = UInt(OUTPUT, 2) 
+  val wb_en     = Bool(OUTPUT)
+  val csr_cmd   = UInt(OUTPUT, 3)
+  val illegal   = Bool(OUTPUT)
+  val pc_check  = Bool(OUTPUT)
+ 
+  val inst      = UInt(INPUT, xlen)
+  val stall     = Bool(INPUT)
+  val flush     = Bool(INPUT)
+}
+
+class ControlIO extends Bundle {
+  val ctrl = new ControlSignals
+}
+
+class Control extends Module {
+  val io = new ControlIO
+  val ctrlSignals = ListLookup(io.ctrl.inst, Control.default, Control.map)
   val st_type  = Reg(io.ctrl.st_type)
   val ld_type  = Reg(ctrlSignals(8))
   val wb_sel   = Reg(ctrlSignals(9))
@@ -176,7 +177,7 @@ class Control extends Module {
     wb_en    := ctrlSignals(10).toBool 
     csr_cmd  := ctrlSignals(11)
     illegal  := ctrlSignals(12).toBool 
-    pc_check := io.ctrl.pc_sel === PC_ALU
+    pc_check := io.ctrl.pc_sel === Control.PC_ALU
   }.elsewhen(reset || !io.ctrl.stall && io.ctrl.flush) {
     st_type  := UInt(0)
     ld_type  := UInt(0)
