@@ -1,4 +1,4 @@
-units = ALUArea ALUSimple CSR Control Datapath Cache
+units = ALUArea ALUSimple BrCondArea BrCondSimple CSR Control Datapath Cache
 v     = $(addsuffix -v,   $(units))
 cpp   = $(addsuffix -cpp, $(units))
 
