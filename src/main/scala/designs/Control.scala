@@ -122,7 +122,6 @@ object Control {
 
 class ControlSignals extends CoreBundle {
   val pc_sel    = UInt(OUTPUT, 2) 
-  val inst_en   = Bool(OUTPUT)
   val inst_kill = Bool(OUTPUT)
   val A_sel     = UInt(OUTPUT, 1)
   val B_sel     = UInt(OUTPUT, 1)

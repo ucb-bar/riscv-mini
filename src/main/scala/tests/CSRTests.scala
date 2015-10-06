@@ -1,53 +1,53 @@
 package mini
 
 import Chisel._
+import RISCVCommon._
 import scala.collection.mutable.HashMap
 
-case class CSRIn(cmd: BigInt, value: BigInt, inst: BigInt, pc: BigInt, addr: BigInt, 
+case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
                  illegal: Boolean, pc_check: Boolean, st_type: BigInt, ld_type: BigInt)
 case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
 
 object GoldCSR {
+  implicit def uintToBigInt(x: UInt) = x.litValue()
+  implicit def boolToBoolean(x: Bool) = x.isTrue
   private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
-    (if (reg.litValue() == CSR.mcpuid.litValue()) 
-      BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
-    else if (reg.litValue() == CSR.mstatus.litValue()) 
-      CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
-    else if (reg.litValue() == CSR.mtvec.litValue()) 
-      Const.PC_EVEC.litValue()
+    (if (reg === CSR.mcpuid) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
+    else if (reg === CSR.mstatus) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
+    else if (reg === CSR.mtvec) Const.PC_EVEC.litValue()
     else BigInt(0))):_*)
-  private def mtvec = regs(CSR.mtvec.litValue())
-  private def mepc  = regs(CSR.mepc.litValue())
-  private def mepc_=(data: BigInt) { regs(CSR.mepc.litValue()) = data }
-  private def mcause = regs(CSR.mcause.litValue())
-  private def mcause_=(data: BigInt) { regs(CSR.mcause.litValue()) = data }
-  private def mbadaddr = regs(CSR.mbadaddr.litValue())
-  private def mbadaddr_=(data:BigInt) { regs(CSR.mbadaddr.litValue()) = data }
+  private def mtvec = regs(CSR.mtvec)
+  private def mepc  = regs(CSR.mepc)
+  private def mepc_=(data: BigInt) { regs(CSR.mepc) = data }
+  private def mcause = regs(CSR.mcause)
+  private def mcause_=(data: BigInt) { regs(CSR.mcause) = data }
+  private def mbadaddr = regs(CSR.mbadaddr)
+  private def mbadaddr_=(data:BigInt) { regs(CSR.mbadaddr) = data }
   private def status(prv: BigInt, ie: BigInt, prv1: BigInt, ie1: BigInt) {
-    regs(CSR.mstatus.litValue()) = (prv1 << 4) | (ie1 << 3) | (prv << 1) | ie
+    regs(CSR.mstatus) = (prv1 << 4) | (ie1 << 3) | (prv << 1) | ie
   }
   private def ip(mtip: BigInt, msip: BigInt) {
-    regs(CSR.mip.litValue()) = mtip << 7 | msip << 3
+    regs(CSR.mip) = mtip << 7 | msip << 3
   }
   private def ie(mtie: BigInt, msie: BigInt) {
-    regs(CSR.mie.litValue()) = mtie << 7 | msie << 3
+    regs(CSR.mie) = mtie << 7 | msie << 3
   }
-  private def prv1 = (regs(CSR.mstatus.litValue()) >> 4) & 0x3
-  private def ie1 = (regs(CSR.mstatus.litValue()) >> 3) & 0x1
-  private def prv = (regs(CSR.mstatus.litValue()) >> 1) & 0x3
-  private def ie = regs(CSR.mstatus.litValue()) & 0x1
+  private def prv1 = (regs(CSR.mstatus) >> 4) & 0x3
+  private def ie1  = (regs(CSR.mstatus) >> 3) & 0x1
+  private def prv  = (regs(CSR.mstatus) >> 1) & 0x3
+  private def ie   = regs(CSR.mstatus) & 0x1
   private def read(addr: BigInt) = regs getOrElse (addr, BigInt(0))
 
   private def count(instret: Boolean) {
     // TODO: overflow
-    regs(CSR.time.litValue())   += 1
-    regs(CSR.timew.litValue())  += 1
-    regs(CSR.mtime.litValue())  += 1
-    regs(CSR.cycle.litValue())  += 1
-    regs(CSR.cyclew.litValue()) += 1
+    regs(CSR.time)   += 1
+    regs(CSR.timew)  += 1
+    regs(CSR.mtime)  += 1
+    regs(CSR.cycle)  += 1
+    regs(CSR.cyclew) += 1
     if (instret) {
-      regs(CSR.instret.litValue())  += 1
-      regs(CSR.instretw.litValue()) += 1
+      regs(CSR.instret)  += 1
+      regs(CSR.instretw) += 1
     }
   }
 
@@ -59,35 +59,35 @@ object GoldCSR {
     } else if (addr == CSR.mie.litValue()) {
       ie((data >> 7) & 0x1, (data >> 3) & 0x1)
     } else if (addr == CSR.mepc.litValue()) {
-      regs(CSR.mepc.litValue()) = data & -4
+      regs(CSR.mepc) = data & -4
     } else if (addr == CSR.mcause.litValue()) {
-      regs(CSR.mcause.litValue()) = data & (BigInt(1) << 31 | 0xf)
+      regs(CSR.mcause) = data & (BigInt(1) << 31 | 0xf)
     } else if (addr == CSR.timew.litValue() || addr == CSR.mtime.litValue()) {
-      regs(CSR.time.litValue())  = data
-      regs(CSR.timew.litValue()) = data
-      regs(CSR.mtime.litValue()) = data
+      regs(CSR.time)  = data
+      regs(CSR.timew) = data
+      regs(CSR.mtime) = data
     } else if (addr == CSR.timehw.litValue() || addr == CSR.mtimeh.litValue()) {
-      regs(CSR.timeh.litValue())  = data
-      regs(CSR.timehw.litValue()) = data
-      regs(CSR.mtimeh.litValue()) = data
+      regs(CSR.timeh)  = data
+      regs(CSR.timehw) = data
+      regs(CSR.mtimeh) = data
     } else if (addr == CSR.cyclew.litValue()) {
-      regs(CSR.cycle.litValue())  = data
-      regs(CSR.cyclew.litValue()) = data
+      regs(CSR.cycle)  = data
+      regs(CSR.cyclew) = data
     } else if (addr == CSR.cyclehw.litValue()) {
-      regs(CSR.cycleh.litValue())  = data
-      regs(CSR.cyclehw.litValue()) = data
+      regs(CSR.cycleh)  = data
+      regs(CSR.cyclehw) = data
     } else if (addr == CSR.instretw.litValue()) {
-      regs(CSR.instret.litValue())  = data
-      regs(CSR.instretw.litValue()) = data
+      regs(CSR.instret)  = data
+      regs(CSR.instretw) = data
     } else if (addr == CSR.instrethw.litValue()) {
-      regs(CSR.instreth.litValue())  = data
-      regs(CSR.instrethw.litValue()) = data
+      regs(CSR.instreth)  = data
+      regs(CSR.instrethw) = data
     } else regs(addr) = data
   }
 
   def apply(in: CSRIn) = {
-    val csr_addr =  in.inst >> 20
-    val rs1_addr = (in.inst >> 15) & 0x1f
+    val csr_addr = csr(in.inst)
+    val rs1_addr = rs1(in.inst)
     val privValid = ((csr_addr >> 8) & 0x3) <= prv
     val privInst  = in.cmd == CSR.P.litValue()
     val isEcall  = privInst && (csr_addr & 0x1) == 0 && ((csr_addr >> 8) & 0x1) == 0
@@ -111,21 +111,20 @@ object GoldCSR {
       else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
       else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
       else BigInt(0)
-    val isInstRet = in.inst != Instructions.NOP.litValue() &&
-                    (!exception || isEcall || isEbreak)
+    val isInstRet = (in.inst != nop).isTrue && (!exception || isEcall || isEbreak)
     count(isInstRet)
     if (exception) {
       mepc = in.pc & -4
-      mcause = if (iaddrInvalid) Cause.InstAddrMisaligned.litValue()
-        else if (laddrInvalid) Cause.LoadAddrMisaligned.litValue()
-        else if (saddrInvalid) Cause.StoreAddrMisaligned.litValue()
-        else if (isEcall) Cause.Ecall.litValue() + prv
-        else if (isEbreak) Cause.Breakpoint.litValue() 
-        else Cause.IllegalInst.litValue()
-      status(CSR.PRV_M.litValue(), 0, prv, ie)
+      mcause = if (iaddrInvalid) Cause.InstAddrMisaligned
+        else if (laddrInvalid) Cause.LoadAddrMisaligned
+        else if (saddrInvalid) Cause.StoreAddrMisaligned
+        else if (isEcall) Cause.Ecall + prv
+        else if (isEbreak) Cause.Breakpoint 
+        else Cause.IllegalInst
+      status(CSR.PRV_M, 0, prv, ie)
       if (iaddrInvalid || laddrInvalid || saddrInvalid) mbadaddr = in.addr
     } else if (isEret) {
-      status(prv1, ie1, CSR.PRV_U.litValue(), 1)
+      status(prv1, ie1, CSR.PRV_U, 1)
     } else if (wen) {
       write(csr_addr, wdata) 
     }
@@ -133,8 +132,7 @@ object GoldCSR {
   }
 }
 
-
-class CSRTests(c: CSR) extends Tester(c) with RISCVCommon {
+class CSRTests(c: CSR) extends Tester(c) with RandInsts {
   override val insts = 
     (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
@@ -189,12 +187,11 @@ class CSRTests(c: CSR) extends Tester(c) with RISCVCommon {
 
   for (inst <- insts) {
     val value = int(rnd.nextInt)
-    val ctrl = GoldControl(inst)
-    val in   = new CSRIn(ctrl(11), value, inst.litValue(), 
-      rand_addr, int(rnd.nextInt | 0x3),
-      ctrl(12), ctrl(0) == Control.PC_ALU.litValue(), ctrl(7), ctrl(8))
+    val ctrl = GoldControl(new ControlIn(inst, false))
+    val in   = new CSRIn(ctrl.csr_cmd, value, inst, rand_addr, int(rnd.nextInt|0x3), 
+      ctrl.illegal, ctrl.pc_check, ctrl.st_type, ctrl.ld_type)
     println("*** inst: %s, csr: %s, value: %x ***".format(
-      dasm(inst), csrNames getOrElse (csr(inst), csr(inst).toString(16)), value))
+      dasm(inst), csrName(csr(inst)), value))
     poke(in)
     expect(GoldCSR(in))
     step(1) // update registers

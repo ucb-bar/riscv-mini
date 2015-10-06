@@ -3,10 +3,115 @@ package mini
 import Chisel._
 import Chisel.AdvTester._
 import Instructions._
+import RISCVCommon._
 import scala.io.Source
 import scala.collection.mutable.HashMap
 
-trait RISCVCommon {
+object RISCVCommon {
+  implicit def boolToBoolean(x: Bool) = x.isTrue
+  def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
+  def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
+  def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
+  def csr(inst: UInt) =  (inst.litValue() >> 20)
+  def reg(x: Int) = UInt(x, 5)
+  def imm(x: Int) = SInt(x, 21)
+  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
+  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
+  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
+  val csrRegs = CSR.regs map (_.litValue())
+  private val csrMap  = (csrRegs zip List(
+    "cycle", "time", "instret", "cycleh", "timeh", "instreth",
+    "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
+    "mcpuid", "mimpid","mhartid", "mtvec", "mtdeleg", "mie",
+    "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
+    "mtohost", "mfromhost", "mstatus"
+  )).toMap
+  def csrName(csr: BigInt) = csrMap getOrElse (csr, csr.toString(16))
+
+  private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
+    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
+    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
+  private val instFmts = List(
+    (x: UInt) => "AUIPC x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
+    (x: UInt) => "LUI x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
+    (x: UInt) => "JAL x%d, %x".format(rd(x), GoldImmGen.jimm(x)),
+    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
+    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
+    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
+    (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "FENCE",
+    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x))
+  )
+  def dasm(x: UInt) = {
+    def iter(l: List[(BitPat, UInt => String)]): String = l match {
+      case Nil => "???(%s)".format(x.litValue().toString(16))
+      case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
+    }
+    if (x === FENCEI) "FENCEI"
+    else if (x === ECALL) "ECALL"
+    else if (x === EBREAK) "EBREAK"
+    else if (x === ERET) "ERET"
+    else if (x === NOP) "NOP"
+    else iter(instPats zip instFmts)
+  }
+  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
+    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
+  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
+  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
+  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
+    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
+  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
+    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
+  def U(op: UInt, rd: Int, i: Int) = 
+    Cat(imm(i), reg(rd), op)
+  def J(rd: Int, i: Int) = 
+    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), Opcode.JAL)
+  def JR(rd: Int, rs1: Int, i: Int) = 
+    Cat(imm(i)(11, 0), reg(rs1), UInt(0, 3), reg(rd), Opcode.JALR)
+  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
+    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
+}
+
+trait RandInsts {
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
   implicit def boolToBoolean(x: Bool) = x.isTrue
@@ -23,12 +128,6 @@ trait RISCVCommon {
   def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
   def rand_inst = UInt(rnd.nextInt())
   def rand_addr = UInt(rnd.nextInt())
-
-  def reg(x: Int) = UInt(x, 5)
-  def imm(x: Int) = SInt(x, 21)
-  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
-  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
-  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
 
   def insts = List(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
@@ -77,183 +176,7 @@ trait RISCVCommon {
     Cat(rand_csr, rand_rs1, Funct3.CSRRCI, rand_rd, Opcode.SYSTEM),
     ECALL, EBREAK, ERET, nop, rand_inst
   )
-
-  val y      = BigInt(1)
-  val n      = BigInt(0)
-
-  val pc_4   = BigInt(0)
-  val pc_alu = BigInt(1)
-  val pc_0   = BigInt(2)
-  val pc_epc = BigInt(3)
-
-  val a_xxx  = BigInt(0)
-  val a_pc   = BigInt(0)
-  val a_rs1  = BigInt(1)
-
-  val b_xxx  = BigInt(0)
-  val b_imm  = BigInt(0)
-  val b_rs2  = BigInt(1)
-
-  val imm_x  = BigInt(0)
-  val imm_i  = BigInt(1)
-  val imm_s  = BigInt(2)
-  val imm_u  = BigInt(3)
-  val imm_j  = BigInt(4)
-  val imm_b  = BigInt(5)
-  val imm_z  = BigInt(6)
-
-  val alu_add    = BigInt(0)
-  val alu_sub    = BigInt(1)
-  val alu_and    = BigInt(2)
-  val alu_or     = BigInt(3)
-  val alu_xor    = BigInt(4)
-  val alu_slt    = BigInt(5)
-  val alu_sll    = BigInt(6)
-  val alu_sltu   = BigInt(7)
-  val alu_srl    = BigInt(8)
-  val alu_sra    = BigInt(9)
-  val alu_copy_a = BigInt(10)
-  val alu_copy_b = BigInt(11)
-  val alu_xxx    = BigInt(15)
-
-  val br_xxx = BigInt(0)
-  val br_ltu = BigInt(1)
-  val br_lt  = BigInt(2)
-  val br_eq  = BigInt(3)
-  val br_geu = BigInt(4)
-  val br_ge  = BigInt(5)
-  val br_ne  = BigInt(6)
-
-  val st_xxx = BigInt(0)
-  val st_sw  = BigInt(1)
-  val st_sh  = BigInt(2)
-  val st_sb  = BigInt(3)
-
-  val ld_xxx = BigInt(0)
-  val ld_lw  = BigInt(1)
-  val ld_lh  = BigInt(2)
-  val ld_lb  = BigInt(3)
-  val ld_lhu = BigInt(4)
-  val ld_lbu = BigInt(5)
-
-  val wb_alu = BigInt(0)
-  val wb_mem = BigInt(1)
-  val wb_pc4 = BigInt(2)
-  val wb_csr = BigInt(3)
-
-  val csr_n = BigInt(0)
-  val csr_w = BigInt(1)
-  val csr_s = BigInt(2)
-  val csr_c = BigInt(3)
-  val csr_p = BigInt(4) 
-
-  def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
-  def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
-  def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
-  def csr(inst: UInt) =  (inst.litValue() >> 20)
-
-  val csrRegs = CSR.regs map (_.litValue())
-  val csrNames = (csrRegs zip List(
-    "cycle", "time", "instret", "cycleh", "timeh", "instreth",
-    "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
-    "mcpuid", "mimpid","mhartid", "mtvec", "mtdeleg", "mie",
-    "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
-    "mtohost", "mfromhost", "mstatus"
-  )).toMap
-
-  def csrPrv(csr: BigInt, prv: BigInt) = ((csr >> 8) & 0x3) <= prv
-  def csrVal(csr: BigInt) = csrRegs contains csr
-  def csrRO(csr: BigInt) = ((csr >> 10) & 0x3) == 0x3 || 
-      csr == CSR.mtvec.litValue() || csr == CSR.mtdeleg.litValue()    
-
-  private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU, 
-    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
-    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
-
-  private val instFmts = List(
-    (x: UInt) => "AUIPC x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
-    (x: UInt) => "LUI x%d, %x".format(rd(x), GoldImmGen.uimm(x)),
-    (x: UInt) => "JAL x%d, %x".format(rd(x), GoldImmGen.jimm(x)),
-    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), GoldImmGen.bimm(x)),
-    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
-    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
-    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), GoldImmGen.simm(x)),
-    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), GoldImmGen.iimm(x)),
-    (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "FENCE",
-    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
-    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
-    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
-    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
-    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x)),
-    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csrNames getOrElse (csr(x), csr(x).toString(16)), rs1(x))
-  )
-
-  def dasm(x: UInt) = {
-    def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => "???(%s)".format(x.litValue().toString(16))
-      case (p, f) :: tail => if (x === p) f(x) else iter(tail)  
-    }
-    if (x === FENCEI) "FENCEI"
-    else if (x === ECALL) "ECALL"
-    else if (x === EBREAK) "EBREAK"
-    else if (x === ERET) "ERET"
-    else if (x === NOP) "NOP"
-    else iter(instPats zip instFmts)
-  }
-
-  val pc_start = Const.PC_START.litValue().toInt
-  val pc_utvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_U.litValue().toInt * 0x40
-  val pc_mtvec = Const.PC_EVEC.litValue().toInt + CSR.PRV_M.litValue().toInt * 0x40
-
-  def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def RS(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
-    Cat(Funct7.S, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
-  def I(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.ITYPE)
-  def L(funct3: UInt, rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), funct3, reg(rd), Opcode.LOAD)
-  def S(funct3: UInt, rs2: Int, rs1: Int, i: Int) =
-    Cat(imm(i)(11, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 0), Opcode.STORE)
-  def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
-    Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
-  def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
-  def J(rd: Int, i: Int) = 
-    Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), Opcode.JAL)
-  def JR(rd: Int, rs1: Int, i: Int) = 
-    Cat(imm(i)(11, 0), reg(rs1), UInt(0, 3), reg(rd), Opcode.JALR)
-  def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
-    Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
+  def dasm(x: UInt) = RISCVCommon.dasm(x)
 }
 
 abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolean = false) extends Processable {
@@ -304,13 +227,13 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
   }
 }
 
-trait MemTests extends RISCVCommon with AdvTests {
+trait MemTests extends AdvTests with RandInsts {
   abstract class Tests
   case object SimpleTests extends Tests
   case object ISATests extends Tests
   case object Benchmarks extends Tests
   case object LoadMem extends Tests
-
+  val pc_start = Const.PC_START.litValue().toInt
   val bypassTest = List.fill(pc_start/4){fin} ++ List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1

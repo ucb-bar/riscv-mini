@@ -115,7 +115,7 @@ class Datapath extends Module with CoreParams {
   // Load
   val loffset = ew_alu(1) << UInt(4) | ew_alu(0) << UInt(3)
   val lshift  = io.dcache.resp.bits.data >> loffset
-  val load    =  MuxLookup(io.ctrl.ld_type, io.dcache.resp.bits.data.zext, Seq(
+  val load    = MuxLookup(io.ctrl.ld_type, io.dcache.resp.bits.data.zext, Seq(
     LD_LH  -> lshift(15, 0).toSInt, LD_LB  -> lshift(7, 0).toSInt,
     LD_LHU -> lshift(15, 0).zext,   LD_LBU -> lshift(7, 0).zext) )
     

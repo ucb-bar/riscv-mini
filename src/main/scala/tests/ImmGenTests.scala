@@ -35,13 +35,13 @@ object GoldImmGen {
     else if (in.sel == IMM_Z.litValue()) zimm(in.inst) else iimm(in.inst) & -2)
 }
 
-class ImmGenTests[+T <: ImmGen](c: T) extends Tester(c) with RISCVCommon {
+class ImmGenTests[+T <: ImmGen](c: T) extends Tester(c) with RandInsts {
   for (inst <- insts) {
-    val ctrl = GoldControl(inst)
-    val gold = GoldImmGen(new ImmGenIn(inst, ctrl(3)))
+    val ctrl = GoldControl(new ControlIn(inst, false))
+    val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
     println("*** %s ***".format(dasm(inst)))
-    poke(c.io.inst, inst)
-    poke(c.io.sel,  ctrl(3))
+    poke(c.io.inst,  inst)
+    poke(c.io.sel,   ctrl.imm_sel)
     expect(c.io.out, gold.out) 
   }
 }

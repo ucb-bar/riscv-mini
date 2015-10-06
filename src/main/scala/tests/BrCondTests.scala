@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import RISCVCommon._
 
 case class BrCondIn(brType: BigInt, rs1: BigInt, rs2: BigInt)
 case class BrCondOut(taken: Boolean)
@@ -16,8 +17,9 @@ object GoldBrCond {
     else if (in.brType == BR_GEU.litValue()) in.rs1 >= in.rs2 else false)
 }
 
-class BrCondTests[+T <: BrCond](c: T) extends Tester(c) with RISCVCommon {
-  override val insts = (List.fill(10){List(
+class BrCondTests[+T <: BrCond](c: T) extends Tester(c) {
+  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
+  val insts = (List.fill(10){List(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),
     B(Funct3.BLT, 0, 0, 0),
@@ -28,10 +30,10 @@ class BrCondTests[+T <: BrCond](c: T) extends Tester(c) with RISCVCommon {
   for (inst <- insts) {
     val a = int(rnd.nextInt)
     val b = int(rnd.nextInt)
-    val ctrl = GoldControl(inst)
-    val gold = GoldBrCond(new BrCondIn(ctrl(5), a, b))
+    val ctrl = GoldControl(new ControlIn(inst,false))
+    val gold = GoldBrCond(new BrCondIn(ctrl.br_type, a, b))
     println("*** %s -> A: %x, B: %x ***".format(dasm(inst), a, b))
-    poke(c.io.br_type, ctrl(5))
+    poke(c.io.br_type, ctrl.br_type)
     poke(c.io.rs1, a)
     poke(c.io.rs2, b)
     expect(c.io.taken, gold.taken) 
