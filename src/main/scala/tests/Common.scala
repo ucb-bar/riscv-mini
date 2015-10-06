@@ -111,7 +111,7 @@ object RISCVCommon {
     Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 }
 
-trait RandInsts {
+trait RandInsts extends Tests {
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
   implicit def boolToBoolean(x: Bool) = x.isTrue
@@ -119,7 +119,6 @@ trait RandInsts {
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
   /* Define tests */
-  def rnd: scala.util.Random
   def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
   def rand_rs2 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_rs1 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
@@ -128,6 +127,7 @@ trait RandInsts {
   def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
   def rand_inst = UInt(rnd.nextInt())
   def rand_addr = UInt(rnd.nextInt())
+  def rand_data = int(rnd.nextInt())
 
   def insts = List(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),

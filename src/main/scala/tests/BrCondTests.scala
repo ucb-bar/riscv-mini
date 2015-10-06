@@ -17,9 +17,8 @@ object GoldBrCond {
     else if (in.brType == BR_GEU.litValue()) in.rs1 >= in.rs2 else false)
 }
 
-class BrCondTests[+T <: BrCond](c: T) extends Tester(c) {
-  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
-  val insts = (List.fill(10){List(
+class BrCondTests[+T <: BrCond](c: T) extends Tester(c) with RandInsts {
+  override val insts = (List.fill(10){List(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),
     B(Funct3.BLT, 0, 0, 0),
@@ -28,9 +27,9 @@ class BrCondTests[+T <: BrCond](c: T) extends Tester(c) {
     B(Funct3.BGEU, 0, 0, 0))}).flatten
 
   for (inst <- insts) {
-    val a = int(rnd.nextInt)
-    val b = int(rnd.nextInt)
-    val ctrl = GoldControl(new ControlIn(inst,false))
+    val a = rand_data
+    val b = rand_data
+    val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldBrCond(new BrCondIn(ctrl.br_type, a, b))
     println("*** %s -> A: %x, B: %x ***".format(dasm(inst), a, b))
     poke(c.io.br_type, ctrl.br_type)

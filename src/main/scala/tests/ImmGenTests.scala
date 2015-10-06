@@ -37,7 +37,7 @@ object GoldImmGen {
 
 class ImmGenTests[+T <: ImmGen](c: T) extends Tester(c) with RandInsts {
   for (inst <- insts) {
-    val ctrl = GoldControl(new ControlIn(inst, false))
+    val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
     println("*** %s ***".format(dasm(inst)))
     poke(c.io.inst,  inst)

@@ -161,7 +161,12 @@ class CSRTests(c: CSR) extends Tester(c) with RandInsts {
     S(Funct3.SH, int(rand_rd), int(rand_rs1), int(rand_rs2)),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     // illegal inst
-    rand_inst, SYS(Funct3.CSRRC, 0, CSR.mcause, 0))
+    rand_inst, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    // Check counters
+    SYS(Funct3.CSRRC, 0, CSR.time, 0),
+    SYS(Funct3.CSRRC, 0, CSR.cycle, 0),
+    SYS(Funct3.CSRRC, 0, CSR.instret, 0),
+    SYS(Funct3.CSRRC, 0, CSR.mfromhost, 0))
 
   def poke(in: CSRIn) {
     poke(c.io.cmd,      in.cmd)
@@ -184,12 +189,13 @@ class CSRTests(c: CSR) extends Tester(c) with RandInsts {
 
   c.csrFile foreach (x => poke(x._2, 0))
   poke(c.io.stall, 0)
+  poke(c.io.host.fromhost.valid, 0)
 
   for (inst <- insts) {
-    val value = int(rnd.nextInt)
-    val ctrl = GoldControl(new ControlIn(inst, false))
+    val value = rand_data
+    val ctrl = GoldControl(new ControlIn(inst))
     val in   = new CSRIn(ctrl.csr_cmd, value, inst, rand_addr, int(rnd.nextInt|0x3), 
-      ctrl.illegal, ctrl.pc_check, ctrl.st_type, ctrl.ld_type)
+      ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
     println("*** inst: %s, csr: %s, value: %x ***".format(
       dasm(inst), csrName(csr(inst)), value))
     poke(in)
