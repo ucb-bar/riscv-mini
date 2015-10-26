@@ -333,17 +333,17 @@ trait MemTests extends AdvTests with RandInsts {
     args foreach {
       case "+verbose" => verbose = true 
       case "+simple" => tests = SimpleTests
-      case arg if arg.substring(0, 5) == "+isa=" =>
+      case arg if arg.slice(0, 5) == "+isa=" =>
         tests = ISATests
         file = arg.substring(5)
         genTests(isaTests, file)
-      case arg if arg.substring(0, 8) == "+bmarks=" =>
+      case arg if arg.slice(0, 8) == "+bmarks=" =>
         tests = Benchmarks
         file = arg.substring(8)
         genTests(bmarksTest, file)
-      case arg if arg.substring(0, 12) == "+max-cycles=" =>
+      case arg if arg.slice(0, 12) == "+max-cycles=" =>
         maxcycles = arg.substring(12).toInt
-      case arg if arg.substring(0, 9) == "+loadmem=" =>
+      case arg if arg.slice(0, 9) == "+loadmem=" =>
         tests = LoadMem
         file = arg.substring(9)
       case _ => 
