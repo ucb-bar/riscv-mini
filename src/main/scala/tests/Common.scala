@@ -396,10 +396,7 @@ trait MemTests extends AdvTests with RandInsts {
 
   def run(host: HostIO, maxcycles: Int, verbose: Boolean) = {
     val startTime = System.nanoTime
-    val ok = do_until {
-      val log = testOutputString
-      if (verbose && !log.isEmpty) println(log)
-    } (peek(host.tohost), maxcycles)
+    val ok = eventually(peek(host.tohost), maxcycles)
     val tohost = peek(host.tohost)
     val endTime = System.nanoTime
     val simTime = (endTime - startTime) / 1000000000.0
