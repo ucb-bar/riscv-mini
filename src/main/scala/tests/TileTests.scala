@@ -1,85 +1,55 @@
 package mini
 
 import Chisel._
-import junctions.MemIO
+import Chisel.AdvTester._
+import junctions.{MemReqCmd, MemData, MemResp}
+import scala.collection.mutable.{Queue => ScalaQueue}
 
-trait TileTests extends MemCommon {
-  private var memrw     = false
-  private var memtag    = 0 
-  private var memaddr   = 0 
-  private var memcycles = -1
+case class TestMemReq(addr: Int, tag: BigInt, rw: Boolean) {
+  override def toString = "[Mem Req] %s addr: %x, tag: %x".format(if (rw) "write" else "read", addr, tag)
+}
+case class TestMemData(data: BigInt) {
+  override def toString = "[Mem Data] data: %x".format(data)
+}
+case class TestMemResp(data: BigInt, tag: BigInt) {
+  override def toString = "[Mem Data] data: %x, tag: %x".format(data, tag)
+}
 
-  def tick(c: Tile, verbose: Boolean) {
-    if (memcycles > 0) {
-      poke(c.io.mem.req_cmd.ready, 0)
-      poke(c.io.mem.req_data.ready, 0)
-      poke(c.io.mem.resp.valid, 0)  
-      memcycles -= 1
-    } else if (memcycles < 0) {
-      if (peek(c.io.mem.req_cmd.valid)) {
-        memrw   = peek(c.io.mem.req_cmd.bits.rw) 
-        memtag  = peek(c.io.mem.req_cmd.bits.tag)
-        memaddr = peek(c.io.mem.req_cmd.bits.addr) << c.blen
-        // Memread
-        if (!memrw) {
-          memcycles = 0
-          poke(c.io.mem.req_cmd.ready, 1)
-        }
-      }
-      if (peek(c.io.mem.req_data.valid) == 1) {
-        val data = peek(c.io.mem.req_data.bits.data)
-        if (verbose) println("MEM[%x] <- %s".format(memaddr, data.toString(16)))
-        poke(c.io.mem.req_cmd.ready, 1)
-        poke(c.io.mem.req_data.ready, 1)
-        writeMem(memaddr, data)
-        memcycles = -1
-      }
-    } else {
-      if (!memrw) {
-        val read = readMem(memaddr)
-        if (verbose) println("MEM[%x] -> %s".format(memaddr, read.toString(16)))
-        poke(c.io.mem.resp.bits.data, read)
-        poke(c.io.mem.resp.bits.tag, memtag)
-        poke(c.io.mem.resp.valid, 1)
-      }
-      memcycles -= 1
-    }
-    step(1)
-    poke(c.io.mem.req_cmd.ready, 0)
-    poke(c.io.mem.req_data.ready, 0)
-    poke(c.io.mem.resp.valid, 0)
-  }
-
-  def tick(n: Int, verbose: Boolean): Unit
-
-  def run(c: Tile, maxcycles: Int, verbose: Boolean) = {
-    // pokeAt(c.core.dpath.regFile.regs, 0, 0)
-    var tohost = BigInt(0)
-    val startTime = System.nanoTime
-    do {
-      tick(1, verbose)
-      val log = testOutputString
-      if (verbose && !log.isEmpty) println(log)
-      tohost = peek(c.io.htif.host.tohost)
-    } while (tohost == 0 && cycles < maxcycles)
-    val endTime = System.nanoTime
-    val simTime = (endTime - startTime) / 1000000000.0
-    val simSpeed = cycles / simTime
-    val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
-    val ok = tohost == 1
-    println("*** %s *** (%s) after %d simulation cycles".format(
-            if (ok) "PASSED" else "FAILED", reason, cycles))
-    println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
-    ok
+class TileMem(cmdQ: ScalaQueue[TestMemReq],
+             dataQ: ScalaQueue[TestMemData],
+             respQ: ScalaQueue[TestMemResp],
+             word_width: Int = 16, depth: Int = 1 << 20) extends SimMem(word_width, depth) {
+  def process {
+    if (!cmdQ.isEmpty && !dataQ.isEmpty && cmdQ.front.rw) {
+      val cmd = cmdQ.dequeue
+      val data = dataQ.dequeue
+      write(cmd.addr, data.data)
+    } else if (!cmdQ.isEmpty && !cmdQ.front.rw) {
+      val cmd = cmdQ.dequeue
+      respQ enqueue new TestMemResp(read(cmd.addr), cmd.tag)
+    } 
   }
 }
 
-class TileTester(c: Tile, args: Array[String]) extends MemTester(c, args, 16) with TileTests {
-  def tick(n: Int, verbose: Boolean) {
-    (0 until n) foreach (_ => tick(c, verbose)) 
-  }
+class TileTester(c: Tile, args: Array[String]) extends AdvTester(c, false) with MemTests {
+  val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, 
+    (cmd: MemReqCmd) => new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
+  val dataHandler = new DecoupledSink(c.io.mem.req_data, 
+    (data: MemData) => new TestMemData(peek(data.data)))
+  val respHandler = new DecoupledSource(c.io.mem.resp,
+    (resp: MemResp, in: TestMemResp) => {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
+  val mem = new TileMem(cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 16)
+  preprocessors += mem
+  cmdHandler.process()
+  dataHandler.process()
+  respHandler.process()
   def regFile(x: Int) = peekAt(c.core.dpath.regFile.regs, x)
+  def loadMem(testname: String) = mem.loadMem(testname)
+  def loadMem(test: Seq[UInt]) = mem.loadMem(test)
   def runTests(maxcycles: Int, verbose: Boolean) {
-    ok &= run(c, maxcycles, verbose)
-  } 
+    cycles = 0
+    ok &= run(c.io.htif.host, maxcycles, verbose)
+  }
+  val (file, tests, maxcycles, verbose) = parseOpts(args)
+  start(file, tests, maxcycles, verbose)
 }
