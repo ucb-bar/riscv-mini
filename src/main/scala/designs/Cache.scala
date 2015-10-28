@@ -68,6 +68,7 @@ class Cache extends Module with CacheParams {
   
   val hit = Wire(Bool())
   val wen = is_write && (hit || is_allocd) && !io.cpu.abort || is_alloc 
+  val ren = !wen && (is_idle || is_read) && io.cpu.req.valid 
 
   val addr     = io.cpu.req.bits.addr
   val idx      = addr(slen+blen-1, blen)
@@ -75,8 +76,8 @@ class Cache extends Module with CacheParams {
   val idx_reg  = addr_reg(slen+blen-1, blen)
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
-  val rmeta = metaMem.read(idx, !wen)
-  val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, !wen).toBits).reverse), 
+  val rmeta = metaMem.read(idx, ren)
+  val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, ren).toBits).reverse), 
                               RegNext(io.mem.resp.bits.data)) // bypass refilled data
   
   hit := v(idx_reg) && rmeta.tag === tag_reg 
