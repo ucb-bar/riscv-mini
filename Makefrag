@@ -42,51 +42,51 @@ Core-bmarks-v:
 
 Tile-simple-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=1000" \
 	| tee $(log_dir)/$@.out
 	
 Tile-simple-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=500" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +simple +verbose +max-cycles=1000" \
 	| tee $(log_dir)/$@.out
 
 Tile-isa-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=15000" \
 	| tee $(log_dir)/$@.out
 
 Tile-isa-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +isa=$(isa_dir) +verbose +max-cycles=15000" \
 	| tee $(log_dir)/$@.out
 
 Tile-bmarks-cpp: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=1500000" \
 	| tee $(log_dir)/$@.out
 
 Tile-bmarks-v: 
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) +bmarks=$(bmarks_dir) +max-cycles=1500000" \
 	| tee $(log_dir)/$@.out
 
 $(addsuffix -cpp, $(isa_tests)): %-cpp: $(isa_dir)/%.hex
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=15000" \
 	| tee $(log_dir)/$@.out
 
 $(addsuffix -v, $(isa_tests)): %-v: $(isa_dir)/%.hex
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=3000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +verbose +max-cycles=15000" \
 	| tee $(log_dir)/$@.out
 
 $(addsuffix -cpp, $(bmarks)): %-cpp: $(bmarks_dir)/%.hex
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(C_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=1500000" \
 	| tee $(log_dir)/$@.out
 
 $(addsuffix -v, $(bmarks)): %-v: $(bmarks_dir)/%.hex
 	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=500000" \
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run Tile $(V_FLAGS) $(DEBUG_FLAGS) +loadmem=$< +max-cycles=1500000" \
 	| tee $(log_dir)/$@.out
 

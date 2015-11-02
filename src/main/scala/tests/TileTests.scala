@@ -31,6 +31,29 @@ class TileMem(cmdQ: ScalaQueue[TestMemReq],
   }
 }
 
+class TileSlowMem(cmdQ: ScalaQueue[TestMemReq],
+             dataQ: ScalaQueue[TestMemData],
+             respQ: ScalaQueue[TestMemResp],
+    latency: Int, word_width: Int = 16, depth: Int = 1 << 20) extends SimMem(word_width, depth) {
+  private val schedule = Array.fill(latency){ScalaQueue[TestMemResp]()}
+  private var cur_cycle = 0
+  def process {
+    if (!cmdQ.isEmpty && !dataQ.isEmpty && cmdQ.front.rw) {
+      val cmd = cmdQ.dequeue
+      val data = dataQ.dequeue
+      write(cmd.addr, data.data)
+    } else if (!cmdQ.isEmpty && !cmdQ.front.rw) {
+      val cmd = cmdQ.dequeue
+      val resp = new TestMemResp(read(cmd.addr), cmd.tag)
+      schedule((cur_cycle+latency-1) % latency) enqueue resp
+    }
+    while (!schedule(cur_cycle).isEmpty) { 
+      respQ enqueue schedule(cur_cycle).dequeue 
+    }
+    cur_cycle = (cur_cycle + 1) % latency
+  }
+}
+     
 class TileTester(c: Tile, args: Array[String]) extends AdvTester(c, false) with MemTests {
   val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, 
     (cmd: MemReqCmd) => new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
@@ -38,7 +61,7 @@ class TileTester(c: Tile, args: Array[String]) extends AdvTester(c, false) with 
     (data: MemData) => new TestMemData(peek(data.data)))
   val respHandler = new DecoupledSource(c.io.mem.resp,
     (resp: MemResp, in: TestMemResp) => {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
-  val mem = new TileMem(cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 16)
+  val mem = new TileSlowMem(cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 100, 16)
   preprocessors += mem
   cmdHandler.process()
   dataHandler.process()
