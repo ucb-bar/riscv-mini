@@ -8,20 +8,48 @@ bmarks_dir = $(base_dir)/riscv-bmarks
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
 
-C_FLAGS     := --targetDir $(gen_dir) --genHarness --compile --test --minimumCompatibility 3.0
-V_FLAGS     := $(C_FLAGS) --v
-DEBUG_FLAGS := --vcd --vcdMem --debug
-
-VPATH = $(src_dir):$(gen_dir):$(log_dir)
-
 include Makefrag-tests
-include Makefrag
+
+Core-compile-cpp:
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) c"
+
+Core-compile-v:
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) v"
+
+Tile-compile-cpp:
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) c"
+
+Tile-compile-v:
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) v"
+
+$(gen_dir)/Core: Core-compile-cpp
+
+$(gen_dir)/Tile: Tile-compile-cpp
+
+$(addprefix Core-, $(isa_tests)): Core-%: $(isa_dir)/%.hex $(gen_dir)/Core
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Core $(gen_dir) $* +loadmem=$< +verbose +max-cycles=15000" \
+	| tee $(log_dir)/$@.out
+
+$(addprefix Tile-, $(isa_tests)): Tile-%: $(isa_dir)/%.hex $(gen_dir)/Tile
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Tile $(gen_dir) $* +loadmem=$< +verbose +max-cycles=15000" \
+	| tee $(log_dir)/$@.out
+
+$(addprefix Core-, $(bmarks)): Core-%: $(bmarks_dir)/%.hex $(gen_dir)/Core
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Core $(gen_dir) $* +loadmem=$< +max-cycles=1500000" \
+	| tee $(log_dir)/$@.out
+
+$(addprefix Tile-, $(bmarks)): Tile-%: $(bmarks_dir)/%.hex $(gen_dir)/Tile
+	mkdir -p $(log_dir)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Tile $(gen_dir) $* +loadmem=$< +max-cycles=1500000" \
+	| tee $(log_dir)/$@.out
 
 clean:
-	rm -rf $(gen_dir) $(log_dir) *.key
+	rm -rf $(gen_dir) $(log_dir) test-outputs *.key
 
 cleanall: clean
 	rm -rf target project/target
 
 .PHONY: clean cleanall
-

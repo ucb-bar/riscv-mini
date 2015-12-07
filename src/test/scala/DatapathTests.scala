@@ -6,7 +6,7 @@ import RISCVCommon._
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
 
-object GoldDatapath {
+class GoldDatapath {
   // state
   private var pc   = Const.PC_START.litValue() - 4
   private val regs = Array.fill(32){BigInt(0)}
@@ -29,6 +29,8 @@ object GoldDatapath {
   private var illegal   = false
   private var pc_check  = false
 
+  private val goldCSR = new GoldCSR
+
   import Control._
 
   implicit def toBoolean(x: BigInt) = x != 0
@@ -45,7 +47,7 @@ object GoldDatapath {
           else if (ld_type == LD_LHU.litValue()) lhu
           else if (ld_type == LD_LBU.litValue()) lbu
           else in.dresp.data
-    val csr = GoldCSR(new CSRIn(csr_cmd, csr_in, ew_inst, ew_pc, ew_alu, illegal, pc_check, st_type, ld_type))
+    val csr = goldCSR(new CSRIn(csr_cmd, csr_in, ew_inst, ew_pc, ew_alu, illegal, pc_check, st_type, ld_type))
     val reg_write = if (wb_sel == WB_MEM.litValue()) load
                else if (wb_sel == WB_PC4.litValue()) ew_pc + 4
                else if (wb_sel == WB_CSR.litValue()) csr.value
@@ -156,11 +158,12 @@ class DatapathTests(c: Datapath) extends Tester(c) with RandInsts {
   poke(c.io.host.fromhost.bits,  rand_data)
   poke(c.io.host.fromhost.valid, 1)
 
+  val goldDatapath = new GoldDatapath
   var i = 0
   while (i < insts.size) {
     val inst = insts(i)
     val data = rand_data
-    val out = GoldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
+    val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
     println("*** %s (%x) ***".format(dasm(inst), inst.litValue()))
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.icache.resp.valid,     1)

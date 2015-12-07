@@ -8,7 +8,7 @@ case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigIn
                  illegal: Boolean, pc_check: Boolean, st_type: BigInt, ld_type: BigInt)
 case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
 
-object GoldCSR {
+class GoldCSR {
   implicit def uintToBigInt(x: UInt) = x.litValue()
   implicit def boolToBoolean(x: Bool) = x.isTrue
   private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
@@ -190,6 +190,7 @@ class CSRTests(c: CSR) extends Tester(c) with RandInsts {
   c.csrFile foreach (x => poke(x._2, 0))
   poke(c.io.stall, 0)
   poke(c.io.host.fromhost.valid, 0)
+  val goldCSR = new GoldCSR
 
   for (inst <- insts) {
     val value = rand_data
@@ -199,7 +200,7 @@ class CSRTests(c: CSR) extends Tester(c) with RandInsts {
     println("*** inst: %s, csr: %s, value: %x ***".format(
       dasm(inst), csrName(csr(inst)), value))
     poke(in)
-    expect(GoldCSR(in))
+    expect(goldCSR(in))
     step(1) // update registers
   } 
 }
