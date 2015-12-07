@@ -1,20 +1,21 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import Control._
 
-class BrCondIO extends CoreBundle {
+class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
   val rs1 = UInt(INPUT, xlen)
   val rs2 = UInt(INPUT, xlen)
   val br_type = UInt(INPUT, 3)
   val taken = Bool(OUTPUT)
 }
 
-abstract class BrCond extends Module {
+abstract class BrCond(implicit val p: Parameters) extends Module {
   val io = new BrCondIO
 }
 
-class BrCondSimple extends BrCond {
+class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {
   val eq   = io.rs1 === io.rs2
   val neq  = !eq
   val lt   = io.rs1.toSInt < io.rs2.toSInt
@@ -30,7 +31,7 @@ class BrCondSimple extends BrCond {
     ((io.br_type === BR_GEU) && geu)
 }
 
-class BrCondArea extends BrCond with CoreParams {
+class BrCondArea(implicit p: Parameters) extends BrCond()(p) with CoreParams {
   val diff = io.rs1 - io.rs2
   val neq  = diff.orR
   val eq   = !neq

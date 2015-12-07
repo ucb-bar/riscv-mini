@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 
 object Control {
   val Y = Bool(true)
@@ -120,7 +121,7 @@ object Control {
     WFI   -> List(PC_4  , A_XXX,  B_XXX, IMM_X, ALU_XXX   , BR_XXX, N, ST_XXX, LD_XXX, WB_ALU, N, CSR.N, N))
 }
 
-class ControlSignals extends CoreBundle {
+class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
   val inst      = UInt(INPUT, xlen)
   val pc_sel    = UInt(OUTPUT, 2) 
   val inst_kill = Bool(OUTPUT)
@@ -137,11 +138,11 @@ class ControlSignals extends CoreBundle {
   val illegal   = Bool(OUTPUT)
 }
 
-class ControlIO extends Bundle {
+class ControlIO(implicit p: Parameters) extends CoreBundle()(p) {
   val ctrl = new ControlSignals
 }
 
-class Control extends Module {
+class Control(implicit val p: Parameters) extends Module {
   val io = new ControlIO
   val ctrlSignals = ListLookup(io.ctrl.inst, Control.default, Control.map)
   val st_type  = Reg(io.ctrl.st_type)

@@ -1,19 +1,20 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import Control._
 
-class ImmGenIO extends CoreBundle {
+class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
   val inst = UInt(INPUT, xlen)
   val sel  = UInt(INPUT, 3)
   val out  = UInt(OUTPUT, xlen)
 }
 
-abstract class ImmGen extends Module {
+abstract class ImmGen(implicit val p: Parameters) extends Module {
   val io = new ImmGenIO
 }
 
-class ImmGenWire extends ImmGen {
+class ImmGenWire(implicit p: Parameters) extends ImmGen()(p) {
   val Iimm = io.inst(31, 20).toSInt
   val Simm = Cat(io.inst(31, 25), io.inst(11,7)).toSInt
   val Bimm = Cat(io.inst(31), io.inst(7), io.inst(30, 25), io.inst(11, 8), UInt(0,1)).toSInt
@@ -25,7 +26,7 @@ class ImmGenWire extends ImmGen {
     Seq(IMM_I -> Iimm, IMM_S -> Simm, IMM_B -> Bimm, IMM_U -> Uimm, IMM_J -> Jimm, IMM_Z -> Zimm))
 }
 
-class ImmGenMux extends ImmGen {
+class ImmGenMux(implicit p: Parameters) extends ImmGen()(p) {
   val sign = Mux(io.sel === IMM_Z, SInt(0), io.inst(31).toSInt)
   val b30_20 = Mux(io.sel === IMM_U, io.inst(30,20).toSInt, sign)
   val b19_12 = Mux(io.sel != IMM_U && io.sel != IMM_J, sign, io.inst(19,12).toSInt)

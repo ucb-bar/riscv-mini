@@ -1,18 +1,19 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import junctions.MemIO
 
-class HTIFIO extends Bundle {
+class HTIFIO(implicit p: Parameters) extends junctions.ParameterizedBundle {
   val host = new HostIO
 }
 
-class TileIO extends Bundle {
+class TileIO(implicit p: Parameters) extends junctions.ParameterizedBundle {
   val htif = new HTIFIO
   val mem  = new MemIO 
 }
 
-class Tile extends Module with CacheParams {
+class Tile(implicit val p: Parameters) extends Module with CacheParams {
   val io     = new TileIO
   val core   = Module(new Core)
   val icache = Module(new Cache)

@@ -1,15 +1,16 @@
 package mini
 
 import Chisel._
-import junctions.MemIO
+import cde.Parameters
+import junctions.{ParameterizedBundle, MemIO}
 
-class MemArbiterIO extends Bundle {
+class MemArbiterIO(implicit val p: Parameters) extends ParameterizedBundle()(p) {
   val icache = (new MemIO).flip
   val dcache = (new MemIO).flip
   val mem    =  new MemIO
 }
 
-class MemArbiter extends Module {
+class MemArbiter(implicit val p: Parameters) extends Module {
   val io = new MemArbiterIO
 
   val s_IDLE :: s_ICACHE_WAIT :: s_DCACHE_WAIT :: Nil = Enum(UInt(), 3)

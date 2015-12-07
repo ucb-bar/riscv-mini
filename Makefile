@@ -1,5 +1,5 @@
 base_dir   = $(abspath .)
-src_dir    = $(base_dir)/src/main/scala/designs
+src_dir    = $(base_dir)/src/main/scala/
 gen_dir    = $(base_dir)/generated-src
 log_dir    = $(base_dir)/logs
 isa_dir    = $(base_dir)/riscv-tests/isa
@@ -10,21 +10,21 @@ SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
 
 include Makefrag-tests
 
-Core-compile-cpp:
+Core-compile-cpp: $(gen_dir)/Core
+
+Tile-compile-cpp: $(gen_dir)/Tile
+
+$(gen_dir)/Core: $(wildcard $(src_dir)/*.scala)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) c"
 
-Core-compile-v:
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) v"
-
-Tile-compile-cpp:
+$(gen_dir)/Tile: $(wildcard $(src_dir)/*.scala)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) c"
 
-Tile-compile-v:
+Core-compile-v: $(wildcard $(src_dir)/*.scala)
+	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) v"
+
+Tile-compile-v: $(wildcard $(src_dir)/*.scala)
 	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) v"
-
-$(gen_dir)/Core: Core-compile-cpp
-
-$(gen_dir)/Tile: Tile-compile-cpp
 
 $(addprefix Core-, $(isa_tests)): Core-%: $(isa_dir)/%.hex $(gen_dir)/Core
 	mkdir -p $(log_dir)

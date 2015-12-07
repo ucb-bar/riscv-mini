@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 
 object ALU {
   val ALU_ADD    = UInt(0, 4)
@@ -18,7 +19,7 @@ object ALU {
   val ALU_XXX    = UInt(15, 4)
 }
 
-class ALUIo extends CoreBundle {
+class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
   val A = UInt(INPUT, xlen)
   val B = UInt(INPUT, xlen)
   val alu_op = UInt(INPUT, 4)
@@ -28,11 +29,11 @@ class ALUIo extends CoreBundle {
 
 import ALU._
 
-abstract class ALU extends Module with CoreParams {
+abstract class ALU(implicit val p: Parameters) extends Module with CoreParams {
   val io = new ALUIo
 }
 
-class ALUSimple extends ALU {
+class ALUSimple(implicit p: Parameters) extends ALU()(p) {
   val shamt = io.B(4,0).toUInt
 
   io.out := MuxLookup(io.alu_op, io.B, Seq(
@@ -51,7 +52,7 @@ class ALUSimple extends ALU {
   io.sum := io.A + Mux(io.alu_op(0), -io.B, io.B)
 }
 
-class ALUArea extends ALU { 
+class ALUArea(implicit p: Parameters) extends ALU()(p) { 
   val sum = io.A + Mux(io.alu_op(0), -io.B, io.B)
   val cmp = Mux(io.A(xlen-1) === io.B(xlen-1), sum(xlen-1),
             Mux(io.alu_op(1), io.B(xlen-1), io.A(xlen-1)))

@@ -1,37 +1,38 @@
 package mini
 
 import Chisel._
+import cde.{Parameters, Field}
 import junctions.MemIO
 
 case object NWays extends Field[Int]
 case object NSets extends Field[Int]
 case object CacheBlockBytes extends Field[Int]
 
-class CacheReq extends CoreBundle {
+class CacheReq(implicit p: Parameters) extends CoreBundle()(p) {
   val addr = UInt(width=xlen)
   val data = UInt(width=xlen)
   val mask = UInt(width=xlen/8)
 }
 
-class CacheResp extends CoreBundle {
+class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
   val data = UInt(width=xlen)
 }
 
-class CacheIO extends Bundle {
+class CacheIO (implicit p: Parameters) extends junctions.ParameterizedBundle()(p) {
   val abort = Bool(INPUT)
   val req   = Valid(new CacheReq).flip
   val resp  = Valid(new CacheResp)
 }
 
-class CacheModuleIO extends Bundle {
+class CacheModuleIO(implicit p: Parameters) extends junctions.ParameterizedBundle()(p) {
   val cpu = new CacheIO
   val mem = new MemIO
 }
 
-trait CacheParams extends UsesParameters with CoreParams {
-  val nWays  = params(NWays) // Not used...
-  val nSets  = params(NSets)
-  val bBytes = params(CacheBlockBytes)
+trait CacheParams extends CoreParams {
+  val nWays  = p(NWays) // Not used...
+  val nSets  = p(NSets)
+  val bBytes = p(CacheBlockBytes)
   val bBits  = bBytes << 3
   val blen   = log2Up(bBytes)
   val slen   = log2Up(nSets)
@@ -41,12 +42,12 @@ trait CacheParams extends UsesParameters with CoreParams {
   val byteOffsetBits = log2Up(wBytes) 
 } 
 
-class MetaData extends Bundle with CacheParams {
+class MetaData(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p) with CacheParams {
   val dirty = Bool()
   val tag   = UInt(width=tlen)
 }
 
-class Cache extends Module with CacheParams {
+class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val io = new CacheModuleIO
   // cache states
   val s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_REFILL :: Nil = Enum(UInt(), 5)

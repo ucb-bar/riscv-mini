@@ -1,26 +1,27 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 
 object Const {
   val PC_START = UInt(0x200)
   val PC_EVEC  = UInt(0x100)
 }
 
-class DatapathIO extends Bundle {
+class DatapathIO(implicit p: Parameters) extends CoreBundle()(p) {
   val host = new HostIO
   val icache = (new CacheIO).flip
   val dcache = (new CacheIO).flip
   val ctrl = (new ControlSignals).flip
 }
 
-class Datapath extends Module with CoreParams {
+class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val io      = new DatapathIO
   val csr     = Module(new CSR)
   val regFile = Module(new RegFile) 
-  val alu     = params(BuildALU)()
-  val immGen  = params(BuildImmGen)()
-  val brCond  = params(BuildBrCond)()
+  val alu     = p(BuildALU)(p)
+  val immGen  = p(BuildImmGen)(p)
+  val brCond  = p(BuildBrCond)(p)
 
   import Control._
 

@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import scala.collection.immutable.ListMap
 
 object CSR {
@@ -71,7 +72,7 @@ object Cause {
   val Ecall               = UInt(0x8)
 }
 
-class CSRIO extends CoreBundle {
+class CSRIO(implicit p: Parameters)  extends CoreBundle()(p) {
   val stall = Bool(INPUT)
   val cmd   = UInt(INPUT, 3)
   val in    = UInt(INPUT, xlen)
@@ -91,7 +92,7 @@ class CSRIO extends CoreBundle {
   val host = new HostIO
 }
 
-class CSR extends Module with CoreParams {
+class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val io = new CSRIO
 
   val csr_addr = io.inst(31, 20)

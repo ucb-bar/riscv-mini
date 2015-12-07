@@ -1,16 +1,17 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import junctions._
 
-object Config {
+object Config extends cde.Config {
   val params = Parameters.empty alter (
     (key, site, here, up) => key match {
       // Core
       case XLEN => 32
-      case BuildALU    => () => Module(new ALUArea)
-      case BuildImmGen => () => Module(new ImmGenWire)
-      case BuildBrCond => () => Module(new BrCondArea)
+      case BuildALU    => (p: Parameters) => Module(new ALUArea()(p))
+      case BuildImmGen => (p: Parameters) => Module(new ImmGenWire()(p))
+      case BuildBrCond => (p: Parameters) => Module(new BrCondArea()(p))
       // Cache
       case NWays => 1 // TODO: set-associative
       case NSets => 256 

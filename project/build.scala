@@ -8,6 +8,7 @@ object MiniBuild extends Build {
     parallelExecution in Test := true
   )
   lazy val chisel    = project
-  lazy val junctions = project.dependsOn(chisel)
+  lazy val cde       = project.dependsOn(chisel)
+  lazy val junctions = project.dependsOn(cde)
   lazy val root      = (project in file(".")).settings(settings:_*).dependsOn(junctions)
 }

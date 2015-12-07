@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import cde.Parameters
 import org.scalatest.FunSuite
 import scala.reflect.ClassTag
 
@@ -15,7 +16,7 @@ class MiniTestSuite extends FunSuite {
   def launchTester[M <: Module : ClassTag, T <: Tester[M]](b: String, t: M => T, debug: Boolean=true) {
     val args = Array("--backend", b) ++ baseArgs ++ (if (debug) debugArgs else Array[String]())
     val ctor = implicitly[ClassTag[M]].runtimeClass.getConstructors.head
-    chiselMainTest(args, () => Module(ctor.newInstance().asInstanceOf[M])(Config.params))(t)
+    chiselMainTest(args, () => Module(ctor.newInstance(Config.params).asInstanceOf[M]))(t)
   }
 
   def launchCppTester[M <: Module : ClassTag, T <: Tester[M]](t: M => T, debug: Boolean=true) {
