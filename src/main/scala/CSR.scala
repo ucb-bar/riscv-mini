@@ -203,7 +203,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   when(time.andR) { timeh := timeh + UInt(1) }
   cycle := cycle + UInt(1)
   when(cycle.andR) { cycleh := cycleh + UInt(1) }
-  val isInstRet = io.inst != Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
+  val isInstRet = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
   when(isInstRet) { instret := instret + UInt(1) }
   when(isInstRet && instret.andR) { instreth := instreth + UInt(1) }
 

@@ -29,7 +29,7 @@ class ImmGenWire(implicit p: Parameters) extends ImmGen()(p) {
 class ImmGenMux(implicit p: Parameters) extends ImmGen()(p) {
   val sign = Mux(io.sel === IMM_Z, SInt(0), io.inst(31).toSInt)
   val b30_20 = Mux(io.sel === IMM_U, io.inst(30,20).toSInt, sign)
-  val b19_12 = Mux(io.sel != IMM_U && io.sel != IMM_J, sign, io.inst(19,12).toSInt)
+  val b19_12 = Mux(io.sel =/= IMM_U && io.sel =/= IMM_J, sign, io.inst(19,12).toSInt)
   val b11 = Mux(io.sel === IMM_U || io.sel === IMM_Z, SInt(0),
             Mux(io.sel === IMM_J, io.inst(20).toSInt,
             Mux(io.sel === IMM_B, io.inst(7).toSInt, sign)))

@@ -54,8 +54,8 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(UInt(0, nSets))
-  val metaMem  = SeqMem(new MetaData, nSets)
-  val dataMem  = Seq.fill(nWords)(SeqMem(Vec(UInt(width=8), wBytes), nSets))
+  val metaMem  = SeqMem(nSets, new MetaData)
+  val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(width=8))))
 
   val addr_reg = Reg(io.cpu.req.bits.addr)
   val cpu_data = Reg(io.cpu.req.bits.data)
