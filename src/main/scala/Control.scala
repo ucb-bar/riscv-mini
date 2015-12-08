@@ -142,7 +142,7 @@ class ControlIO(implicit p: Parameters) extends CoreBundle()(p) {
   val ctrl = new ControlSignals
 }
 
-class Control(implicit val p: Parameters) extends Module {
+class Control(implicit p: Parameters) extends Module {
   val io = new ControlIO
   val ctrlSignals = ListLookup(io.ctrl.inst, Control.default, Control.map)
   val st_type  = Reg(io.ctrl.st_type)

@@ -11,7 +11,7 @@ class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
   val taken = Bool(OUTPUT)
 }
 
-abstract class BrCond(implicit val p: Parameters) extends Module {
+abstract class BrCond(implicit p: Parameters) extends Module {
   val io = new BrCondIO
 }
 
@@ -31,7 +31,7 @@ class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {
     ((io.br_type === BR_GEU) && geu)
 }
 
-class BrCondArea(implicit p: Parameters) extends BrCond()(p) with CoreParams {
+class BrCondArea(implicit val p: Parameters) extends BrCond()(p) with CoreParams {
   val diff = io.rs1 - io.rs2
   val neq  = diff.orR
   val eq   = !neq

@@ -4,7 +4,7 @@ import Chisel._
 import cde.Parameters
 import junctions._
 
-object Config extends cde.Config {
+object Config {
   val params = Parameters.empty alter (
     (key, site, here, up) => key match {
       // Core

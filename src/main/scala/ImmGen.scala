@@ -10,7 +10,7 @@ class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
   val out  = UInt(OUTPUT, xlen)
 }
 
-abstract class ImmGen(implicit val p: Parameters) extends Module {
+abstract class ImmGen(implicit p: Parameters) extends Module {
   val io = new ImmGenIO
 }
 
