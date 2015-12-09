@@ -15,21 +15,20 @@ object Main {
     val runArgs = Array("--backend", "null", "--test", "--vcd", "--vcdMem", "--debug",
       "--testCommand", s"${dir}/${mod}", s"+vpdfile=${dir}/${args(3)}.vpd", "+vpdmem")
     val testerArgs = args drop 4
-    // val config = new MiniConfig
-    // val params = cde.Parameters.root(config.toInstance)
+    implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
     args(0) match {
       case "compile" => mod match {
         case "Core" =>
-          chiselMain(compileArgs, () => Module(new Core()(Config.params)))
+          chiselMain(compileArgs, () => Module(new Core))
         case "Tile" =>
-          chiselMain(compileArgs, () => Module(new Tile()(Config.params)))
+          chiselMain(compileArgs, () => Module(new Tile))
         case _ =>
       }
       case "test" => mod match {
         case "Core" =>
-          chiselMainTest(runArgs, () => Module(new Core()(Config.params)))(c => new CoreTester(c, testerArgs))
+          chiselMainTest(runArgs, () => Module(new Core))(c => new CoreTester(c, testerArgs))
         case "Tile" =>
-          chiselMainTest(runArgs, () => Module(new Tile()(Config.params)))(c => new TileTester(c, testerArgs))
+          chiselMainTest(runArgs, () => Module(new Tile))(c => new TileTester(c, testerArgs))
         case _ =>
       }
     }
