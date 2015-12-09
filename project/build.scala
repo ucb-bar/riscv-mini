@@ -5,7 +5,7 @@ object MiniBuild extends Build {
   override lazy val settings = super.settings ++ Seq(
     scalaVersion := "2.11.6",
     scalacOptions ++= Seq("-deprecation","-unchecked"),
-    parallelExecution in Test := true
+    parallelExecution in Test := false
   )
   lazy val chisel    = project
   lazy val cde       = project.dependsOn(chisel)

@@ -4,7 +4,7 @@ import Chisel._
 import org.scalatest.FunSuite
 import scala.reflect.ClassTag
 
-class MiniTestSuite extends FunSuite {
+abstract class MiniTestSuite extends FunSuite {
   private val dir = new java.io.File("test-outputs")
   private val baseArgs = Array(
     "--targetDir", dir.getPath.toString,
@@ -26,7 +26,9 @@ class MiniTestSuite extends FunSuite {
   def launchVeriTester[M <: Module : ClassTag, T <: Tester[M]](t: M => T, debug: Boolean=true) {
     launchTester("v", t, debug)
   }
+}
 
+class UnitTestSuite extends MiniTestSuite {
   test("ALUSimple Cpp Test") {
     launchCppTester((c: ALUSimple) => new ALUTests(c))
   }
@@ -61,7 +63,6 @@ class MiniTestSuite extends FunSuite {
     launchCppTester((c: Core) => new CoreSimpleTests(c))
   }
 
-
   test("ALUSimple Verilog Test") {
     launchVeriTester((c: ALUSimple) => new ALUTests(c))
   }
@@ -95,32 +96,36 @@ class MiniTestSuite extends FunSuite {
   test("Core Simple Verilog Tests") {
     launchVeriTester((c: Core) => new CoreSimpleTests(c))
   }
+}
 
+class ISATestSuite extends MiniTestSuite {
   test("Core ISA Cpp Tests") {
     launchCppTester((c: Core) => new CoreTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=3000")), false)
   }
-  test("Core Benchmark Cpp Tests") {
-    launchCppTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
-  }
- 
   test("Core ISA Verilog Tests") {
     launchVeriTester((c: Core) => new CoreTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=3000")), false)
-  }
-  test("Core Benchmark Verilog Tests") {
-    launchVeriTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
   }
 
   test("Tile ISA Cpp Tests") {
     launchCppTester((c: Tile) => new TileTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=15000")), false)
   }
-  test("Tile Benchmark Cpp Tests") {
-    launchCppTester((c: Tile) => new TileTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=1500000")), false)
-  }
-
   test("Tile ISA Verilog Tests") {
     launchVeriTester((c: Tile) => new TileTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=15000")), false)
+  }
+}
+
+class BenchmarkTestSuite extends MiniTestSuite {
+  test("Core Benchmark Cpp Tests") {
+    launchCppTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
+  }
+  test("Core Benchmark Verilog Tests") {
+    launchVeriTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
+  }
+
+  test("Tile Benchmark Cpp Tests") {
+    launchCppTester((c: Tile) => new TileTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=1500000")), false)
   }
   test("Tile Benchmark Verilog Tests") {
     launchVeriTester((c: Tile) => new TileTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=1500000")), false)
   }
-} 
+}
