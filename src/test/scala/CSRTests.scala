@@ -1,16 +1,14 @@
 package mini
 
 import Chisel._
-import RISCVCommon._
 import scala.collection.mutable.HashMap
 
 case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
                  illegal: Boolean, pc_check: Boolean, st_type: BigInt, ld_type: BigInt)
 case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
 
-class GoldCSR {
+class GoldCSR extends RISCVCommon {
   implicit def uintToBigInt(x: UInt) = x.litValue()
-  implicit def boolToBoolean(x: Bool) = x.isTrue
   private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
     (if (reg === CSR.mcpuid) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
     else if (reg === CSR.mstatus) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
@@ -111,7 +109,7 @@ class GoldCSR {
       else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
       else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
       else BigInt(0)
-    val isInstRet = (in.inst != nop).isTrue && (!exception || isEcall || isEbreak)
+    val isInstRet = (in.inst =/= nop).isTrue && (!exception || isEcall || isEbreak)
     count(isInstRet)
     if (exception) {
       mepc = in.pc & -4
@@ -132,7 +130,8 @@ class GoldCSR {
   }
 }
 
-class CSRTests(c: CSR) extends Tester(c) with RandInsts {
+class CSRTests(c: CSR, log: Option[java.io.PrintStream]) 
+    extends LogTester(c, log) with RandInsts {
   override val insts = 
     (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
@@ -197,8 +196,8 @@ class CSRTests(c: CSR) extends Tester(c) with RandInsts {
     val ctrl = GoldControl(new ControlIn(inst))
     val in   = new CSRIn(ctrl.csr_cmd, value, inst, rand_addr, int(rnd.nextInt|0x3), 
       ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
-    println("*** inst: %s, csr: %s, value: %x ***".format(
-      dasm(inst), csrName(csr(inst)), value))
+    addEvent(new DumpEvent(
+      s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value)))
     poke(in)
     expect(goldCSR(in))
     step(1) // update registers

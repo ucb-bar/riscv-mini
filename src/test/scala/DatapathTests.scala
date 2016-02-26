@@ -1,12 +1,11 @@
 package mini
 
 import Chisel._
-import RISCVCommon._
 
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
 
-class GoldDatapath {
+class GoldDatapath extends RISCVCommon {
   // state
   private var pc   = Const.PC_START.litValue() - 4
   private val regs = Array.fill(32){BigInt(0)}
@@ -111,7 +110,8 @@ class GoldDatapath {
   }
 }
 
-class DatapathTests(c: Datapath) extends Tester(c) with RandInsts {
+class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None) 
+    extends LogTester(c, log) with RandInsts {
   def poke(ctrl: ControlOut) {
     poke(c.io.ctrl.pc_sel,    ctrl.pc_sel)
     poke(c.io.ctrl.inst_kill, ctrl.inst_kill) 
@@ -158,13 +158,13 @@ class DatapathTests(c: Datapath) extends Tester(c) with RandInsts {
   poke(c.io.host.fromhost.bits,  rand_data)
   poke(c.io.host.fromhost.valid, 1)
 
-  val goldDatapath = new GoldDatapath
   var i = 0
+  val goldDatapath = new GoldDatapath
   while (i < insts.size) {
     val inst = insts(i)
     val data = rand_data
     val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
-    println("*** %s (%x) ***".format(dasm(inst), inst.litValue()))
+    addEvent(new DumpEvent(s"*** ${dasm(inst)} (%x) ***".format(inst.litValue())))
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.icache.resp.valid,     1)
     poke(c.io.dcache.resp.bits.data, data)

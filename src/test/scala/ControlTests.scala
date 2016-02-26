@@ -35,7 +35,8 @@ object GoldControl {
     })
 }
 
-class ControlTests(c: Control) extends Tester(c) with RandInsts { 
+class ControlTests(c: Control, log: Option[java.io.PrintStream]) 
+    extends LogTester(c, log) with RandInsts { 
   def expect(ctrl: ControlOut) {
     expect(c.io.ctrl.pc_sel,    ctrl.pc_sel)
     expect(c.io.ctrl.A_sel,     ctrl.a_sel)
@@ -53,7 +54,7 @@ class ControlTests(c: Control) extends Tester(c) with RandInsts {
   }
 
   for ((inst, i) <- insts.zipWithIndex) {
-    println("***** %s *****".format(dasm(inst)))
+    addEvent(new DumpEvent(s"***** ${dasm(inst)} *****"))
     poke(c.io.ctrl.inst, inst.litValue())
     expect(GoldControl(new ControlIn(inst)))
   }

@@ -1,5 +1,5 @@
 generated-src
-test-outputs
+test-*
 target
 project/target
 logs

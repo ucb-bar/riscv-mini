@@ -3,7 +3,8 @@ package mini
 import Chisel._
 import scala.collection.mutable.HashMap
 
-class CoreSimpleTests(c: Core) extends Tester(c) with RandInsts {
+class CoreSimpleTests(c: Core, log: Option[java.io.PrintStream]) 
+    extends LogTester(c, log) with RandInsts {
   val evec = Const.PC_EVEC.litValue()
   def doTest(test: List[UInt]) {
     val mem = HashMap[Int, Byte]() // mock memory
@@ -21,8 +22,8 @@ class CoreSimpleTests(c: Core) extends Tester(c) with RandInsts {
       val iaddr = peek(c.io.icache.req.bits.addr)
       val daddr = peek(c.io.dcache.req.bits.addr)
       val idx = (iaddr - Const.PC_START.litValue()).toInt / 4
-      val inst = if (iaddr == evec + (3 << 6)) RISCVCommon.fin 
-            else if (idx < test.size && idx >= 0) test(idx) else RISCVCommon.nop
+      val inst = if (iaddr == evec + (3 << 6)) fin 
+            else if (idx < test.size && idx >= 0) test(idx) else nop
       val dout = ((0 until 4) foldLeft BigInt(0)){
         (res, i) => res | int(mem getOrElse(daddr+i, 0.toByte)) << 8*i }
       val dwe = peek(c.io.dcache.req.bits.mask)
@@ -32,17 +33,17 @@ class CoreSimpleTests(c: Core) extends Tester(c) with RandInsts {
       
       step(1)
       if (ire) {
-        println("FEED: " + dasm(inst))
+        addEvent(new DumpEvent(s"FEED: ${dasm(inst)}"))
         poke(c.io.icache.resp.bits.data, inst.litValue())
       }
       if (dre) {
         if (dwe) {
           (0 until 4) filter (i => (dwe >> i) & 1) foreach { i => 
             mem(daddr+i) = (din >> 8*i).toByte
-            println("MEM[%x] <- %x".format(daddr+i, mem(daddr+i)))
+            addEvent(new DumpEvent("MEM[%x] <- %x".format(daddr+i, mem(daddr+i))))
           }
         } else {
-          println("MEM[%x] -> %x".format(daddr, dout))
+          addEvent(new DumpEvent("MEM[%x] -> %x".format(daddr, dout)))
           poke(c.io.dcache.resp.bits.data, dout)
         }
       }

@@ -4,7 +4,7 @@ version := "2.0"
 
 name := "riscv-mini"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
 // Provide a managed dependency on chisel if -DchiselVersion="" is supplied on the command line.
 libraryDependencies ++= (Seq("chisel").map {

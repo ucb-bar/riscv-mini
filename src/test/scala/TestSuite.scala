@@ -1,131 +1,149 @@
 package mini
 
 import Chisel._
-import org.scalatest.FunSuite
-import scala.reflect.ClassTag
+import java.io.{File, PrintStream}
+import sys.process.stringSeqToProcess
 
-abstract class MiniTestSuite extends FunSuite {
-  private val dir = new java.io.File("test-outputs")
+abstract class MiniTestSuite extends org.scalatest.FlatSpec {
+  private val outDir = new File("test-outs")
+  private val logDir = new File("test-logs")
+  private val dumpDir = new File("test-dumps")
   private val baseArgs = Array(
-    "--targetDir", dir.getPath.toString,
-    "--minimumCompatibility", "3.0",
-    "--genHarness", "--compile", "--test")
-  private val debugArgs = Array("--debug", "--vcd", "--vcdMem")
+    "--targetDir", outDir.getPath.toString,
+    "--minimumCompatibility", "3.0", "--genHarness", 
+    "--compile", "--compileInitializationUnoptimized")
+  private def testArgs(b: String) = baseArgs ++ Array("--backend", b)
+  private def debugArgs(b: String) = testArgs(b) ++ Array("--debug", "--vcd", "--vcdMem")
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
 
-  def launchTester[M <: Module : ClassTag, T <: Tester[M]](b: String, t: M => T, debug: Boolean=true) {
-    val args = Array("--backend", b) ++ baseArgs ++ (if (debug) debugArgs else Array[String]())
-    val ctor = implicitly[ClassTag[M]].runtimeClass.getConstructors.head
-    val params = cde.Parameters.root((new MiniConfig).toInstance)
-    chiselMainTest(args, () => Module(ctor.newInstance(params).asInstanceOf[M]))(t)
+  val isaTests = (List("simple", "add", "addi", "auipc", "and", "andi", // TODO: "fence_i",
+    "sb", "sh", "sw", "lb", "lbu", "lh", "lhu", "lui", "lw",
+    "beq", "bge", "bgeu", "blt", "bltu", "bne", "j", "jal", "jalr",
+    "or", "ori", "sll", "slli", "slt", "slti", "sra", "srai", "sub", "xor", "xori"
+  ) map (t => s"rv32ui-p-${t}")) ++ (List(
+    "sbreak", "scall", "illegal", "ma_fetch", "ma_addr", "csr" //, TODO: "timer"
+  ) map (t => s"rv32mi-p-${t}"))
+
+  val bmarkTests = List(
+    "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
+  )
+
+  def elaborate[T <: Module](c: => T, b: String, debug: Boolean=false): T = {
+    val args = if (debug) debugArgs(b) else testArgs(b)
+    chiselMain(args, () => Module(c))
   }
 
-  def launchCppTester[M <: Module : ClassTag, T <: Tester[M]](t: M => T, debug: Boolean=true) {
-    launchTester("c", t, debug)
+  def elaborateCpp[T <: Module](c: => T, debug: Boolean=false) = elaborate(c, "c", debug)
+
+  def elaborateVerilog[T <: Module](c: => T, debug: Boolean=false) = elaborate(c, "v", debug)
+
+  private def checkUnitTests[T <: Module](c: => T, log: Option[PrintStream] = None) {
+    assert(c match {
+      case m: ALU      => (new ALUTests(m, log)).finish
+      case m: BrCond   => (new BrCondTests(m, log)).finish
+      case m: ImmGen   => (new ImmGenTests(m, log)).finish
+      case m: Control  => (new ControlTests(m, log)).finish
+      case m: CSR      => (new CSRTests(m, log)).finish
+      case m: Datapath => (new DatapathTests(m, log)).finish
+      case m: Cache    => (new CacheTests(m, log)).finish
+      case m: Core     => (new CoreSimpleTests(m, log)).finish
+      case _ => false
+    })
   }
 
-  def launchVeriTester[M <: Module : ClassTag, T <: Tester[M]](t: M => T, debug: Boolean=true) {
-    launchTester("v", t, debug)
+  def runUnitTests[M <: Module](c: => M) {
+    behavior of (s"${c.getClass.getName}")
+    it should "pass Chisel Emulator" in {
+      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-cpp.log")
+      checkUnitTests(elaborateCpp(c, true), Some(log))
+    }
+    it should "pass Verilog Simulator" in {
+      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-v.log")
+      checkUnitTests(elaborateVerilog(c, true), Some(log))
+    }
   }
+
+  def runTester[T <: Module](c: T, dir: File, tests: List[String], maxcycles: Long = 500000) {
+    val simulator = Driver.backend match {
+      case _: VerilogBackend => "Verilog Simulation"
+      case _: CppBackend     => "Chisel Emulator"
+      case _                 => "???"
+    }
+    val postfix = if (Driver.isVCD) "for Debugging" else ""
+    behavior of s"${c.getClass.getName} with ${simulator} ${postfix}"
+    assert(dir.exists)
+    val dirPath = dir.getPath.toString
+    tests map { test =>
+      val loadmem = s"${dir.getPath}/${test}.hex"
+      val postfix = Driver.backend match {case _: VerilogBackend => "v" case _: CppBackend => "cpp"}
+      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-${test}-${postfix}.log")
+      val vcd = s"${dumpDir}/${c.getClass.getName}-${test}-${postfix}.vcd"
+      val vpd = s"${dumpDir}/${c.getClass.getName}-${test}-${postfix}.vpd"
+      val dump = Driver.backend match {
+        case _: VerilogBackend => Some(vpd)
+        case _: CppBackend     => Some(vcd)
+        case _                 => None
+      }
+      val args = new MiniTestArgs(loadmem, maxcycles, log=Some(log), dumpFile=dump) 
+      if (!(new File(loadmem).exists)) {
+        assert(Seq("make", "-C", dir.getPath.toString, s"{test}.hex", 
+                   """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
+      }
+      println(s"runs ${test} on ${simulator} of ${c.getClass.getName}")
+      test -> (c match {
+        case core: Core => (new CoreTester(core, args)).finish
+        case tile: Tile => (new TileTester(tile, args)).finish
+      })
+    } foreach {case (test, pass) =>
+      it should s"pass ${test}" in { assert(pass) }
+    }
+  }
+
+  if (!logDir.exists) logDir.mkdir
+  if (!dumpDir.exists) dumpDir.mkdir
 }
 
 class UnitTestSuite extends MiniTestSuite {
-  test("ALUSimple Cpp Test") {
-    launchCppTester((c: ALUSimple) => new ALUTests(c))
-  }
-  test("ALUArea Cpp Test") {
-    launchCppTester((c: ALUArea) => new ALUTests(c))
-  }
-  test("BrCondSimple Cpp Test") {
-    launchCppTester((c: BrCondSimple) => new BrCondTests(c))
-  }
-  test("BrCondArea Cpp Test") {
-    launchCppTester((c: BrCondArea) => new BrCondTests(c))
-  }
-  test("ImmGenWire Cpp Test") {
-    launchCppTester((c: ImmGenWire) => new ImmGenTests(c))
-  }
-  test("ImmGenMux Cpp Test") {
-    launchCppTester((c: ImmGenMux) => new ImmGenTests(c))
-  }
-  test("Control Cpp Test") {
-    launchCppTester((c: Control) => new ControlTests(c))
-  }
-  test("CSR Cpp Test") {
-    launchCppTester((c: CSR) => new CSRTests(c))
-  }
-  test("Datapath Cpp Test") {
-    launchCppTester((c: Datapath) => new DatapathTests(c))
-  }
-  test("Cache Cpp Test") {
-    launchCppTester((c: Cache) => new CacheTests(c))
-  }
-  test("Core Simple Cpp Tests") {
-    launchCppTester((c: Core) => new CoreSimpleTests(c))
-  }
-
-  test("ALUSimple Verilog Test") {
-    launchVeriTester((c: ALUSimple) => new ALUTests(c))
-  }
-  test("ALUArea Verilog Test") {
-    launchVeriTester((c: ALUArea) => new ALUTests(c))
-  }
-  test("BrCondSimple Verilog Test") {
-    launchVeriTester((c: BrCondSimple) => new BrCondTests(c))
-  }
-  test("BrCondArea Verilog Test") {
-    launchVeriTester((c: BrCondArea) => new BrCondTests(c))
-  }
-  test("ImmGenWire Verilog Test") {
-    launchVeriTester((c: ImmGenWire) => new ImmGenTests(c))
-  }
-  test("ImmGenMux Verilog Test") {
-    launchVeriTester((c: ImmGenMux) => new ImmGenTests(c))
-  }
-  test("Control Verilog Test") {
-    launchVeriTester((c: Control) => new ControlTests(c))
-  }
-  test("CSR Verilog Test") {
-    launchVeriTester((c: CSR) => new CSRTests(c))
-  }
-  test("Datapath Verilog Test") {
-    launchVeriTester((c: Datapath) => new DatapathTests(c))
-  }
-  test("Cache Verilog Test") {
-    launchVeriTester((c: Cache) => new CacheTests(c))
-  } 
-  test("Core Simple Verilog Tests") {
-    launchVeriTester((c: Core) => new CoreSimpleTests(c))
-  }
+  runUnitTests(new ALUSimple)
+  runUnitTests(new ALUArea)
+  runUnitTests(new BrCondSimple)
+  runUnitTests(new BrCondArea)
+  runUnitTests(new ImmGenWire)
+  runUnitTests(new ImmGenMux)
+  runUnitTests(new Control)
+  runUnitTests(new CSR)
+  runUnitTests(new Cache)
+  runUnitTests(new Core)
 }
 
 class ISATestSuite extends MiniTestSuite {
-  test("Core ISA Cpp Tests") {
-    launchCppTester((c: Core) => new CoreTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=3000")), false)
-  }
-  test("Core ISA Verilog Tests") {
-    launchVeriTester((c: Core) => new CoreTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=3000")), false)
-  }
-
-  test("Tile ISA Cpp Tests") {
-    launchCppTester((c: Tile) => new TileTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=15000")), false)
-  }
-  test("Tile ISA Verilog Tests") {
-    launchVeriTester((c: Tile) => new TileTester(c, Array("+isa=riscv-tests/isa", "+max-cycles=15000")), false)
-  }
+  val dir = new File("riscv-tests/isa")
+  runTester(elaborateCpp(new Core), dir, isaTests, 15000)
+  runTester(elaborateCpp(new Tile), dir, isaTests, 15000)
+  runTester(elaborateVerilog(new Core), dir, isaTests, 15000)
+  runTester(elaborateVerilog(new Tile), dir, isaTests, 15000)
 }
 
-class BenchmarkTestSuite extends MiniTestSuite {
-  test("Core Benchmark Cpp Tests") {
-    launchCppTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
-  }
-  test("Core Benchmark Verilog Tests") {
-    launchVeriTester((c: Core) => new CoreTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=500000")), false)
-  }
+class ISADebugTestSuite extends MiniTestSuite {
+  val dir = new File("riscv-tests/isa")
+  runTester(elaborateCpp(new Core, true), dir, isaTests, 15000)
+  runTester(elaborateCpp(new Tile, true), dir, isaTests, 15000)
+  runTester(elaborateVerilog(new Core, true), dir, isaTests, 15000)
+  runTester(elaborateVerilog(new Tile, true), dir, isaTests, 15000)
+}
 
-  test("Tile Benchmark Cpp Tests") {
-    launchCppTester((c: Tile) => new TileTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=1500000")), false)
-  }
-  test("Tile Benchmark Verilog Tests") {
-    launchVeriTester((c: Tile) => new TileTester(c, Array("+bmarks=riscv-bmarks/", "+max-cycles=1500000")), false)
-  }
+class BmarkTestSuite extends MiniTestSuite {
+  val dir = new File("riscv-bmarks")
+  runTester(elaborateCpp(new Core), dir, bmarkTests)
+  runTester(elaborateCpp(new Tile), dir, bmarkTests)
+  runTester(elaborateVerilog(new Core), dir, bmarkTests)
+  runTester(elaborateVerilog(new Tile), dir, bmarkTests)
+}
+
+class BmarkDebugTestSuite extends MiniTestSuite {
+  val dir = new File("riscv-bmarks")
+  runTester(elaborateCpp(new Core, true), dir, bmarkTests)
+  runTester(elaborateCpp(new Tile, true), dir, bmarkTests)
+  runTester(elaborateVerilog(new Core, true), dir, bmarkTests)
+  runTester(elaborateVerilog(new Tile, true), dir, bmarkTests)
 }

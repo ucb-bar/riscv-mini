@@ -71,10 +71,12 @@ class GoldCache(nSets: Int, bBytes: Int, xlen: Int) extends Processable {
   } 
 }
 
-class MainMem(cacheCmdQ: ScalaQueue[TestMemReq], goldCmdQ: ScalaQueue[TestMemReq],
-              cacheDataQ: ScalaQueue[TestMemData], goldDataQ: ScalaQueue[TestMemData],
-              cacheRespQ: ScalaQueue[TestMemResp], goldRespQ: ScalaQueue[TestMemResp],
-              word_width: Int = 16, depth: Int = 1 << 20) extends SimMem(word_width, depth, true) {
+class MainMem(
+    cacheCmdQ: ScalaQueue[TestMemReq], goldCmdQ: ScalaQueue[TestMemReq],
+    cacheDataQ: ScalaQueue[TestMemData], goldDataQ: ScalaQueue[TestMemData],
+    cacheRespQ: ScalaQueue[TestMemResp], goldRespQ: ScalaQueue[TestMemResp],
+    log: Option[java.io.PrintStream] = None, word_width: Int = 16, depth: Int = 1 << 20) 
+    extends SimMem(word_width, depth, log) {
   def process {
     if (!cacheCmdQ.isEmpty && !cacheDataQ.isEmpty && cacheCmdQ.front.rw &&
         !goldCmdQ.isEmpty  && !goldDataQ.isEmpty  && goldCmdQ.front.rw) {
@@ -98,7 +100,7 @@ class MainMem(cacheCmdQ: ScalaQueue[TestMemReq], goldCmdQ: ScalaQueue[TestMemReq
   }
 }
 
-class CacheTests(c: Cache) extends AdvTester(c) {
+class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvTester(c, log == None) {
   val req_h = new ValidSource(c.io.cpu.req,
     (req: CacheReq, in: TestCacheReq) => { 
       reg_poke(req.addr, in.addr) 
@@ -115,10 +117,15 @@ class CacheTests(c: Cache) extends AdvTester(c) {
  
   val gold = new GoldCache(c.nSets, c.bBytes, c.xlen)
   val mem = new MainMem(cmd_h.outputs, gold.mem_cmds, data_h.outputs, gold.mem_data,
-                        mem_resp_h.inputs, gold.mem_resps, c.bBytes)
+                        mem_resp_h.inputs, gold.mem_resps, log, c.bBytes)
   preprocessors += gold
   preprocessors += mem
   
+  log match {
+    case None =>
+    case Some(f) => addObserver(new Observer(file=f))
+  }
+
   def rand_tag = rnd.nextInt(1 << c.tlen)
   def rand_idx = rnd.nextInt(1 << c.slen)
   def rand_off = rnd.nextInt(1 << c.blen) & -4
@@ -134,14 +141,13 @@ class CacheTests(c: Cache) extends AdvTester(c) {
     }
   }
 
-  var testCnt = 0
+  private var testCnt = 0
   def test(tag: Int, idx: Int, off: Int, mask: Int = 0) = {
-    println("***** TEST %d *****".format(testCnt))
-    testCnt += 1
+    addEvent(new DumpEvent(s"***** TEST ${testCnt} *****"))
     val req = new TestCacheReq(addr(tag, idx, off), int(rnd.nextInt), mask)
     req_h.inputs enqueue req
     gold.cpu_reqs enqueue req
-    println(req)
+    addEvent(new DumpEvent(req.toString))
 
     // cache access
     req_h.process
@@ -152,12 +158,13 @@ class CacheTests(c: Cache) extends AdvTester(c) {
       val goldResp  = gold.cpu_resps.dequeue
       if (mask == 0) {
         assert(cacheResp.data == goldResp.data, 
-               "\n*Cache* => %s\n*Gold* => %s".format(cacheResp, goldResp))
-        println(cacheResp)
+          s"\n*Cache* => ${cacheResp}\n*Gold* => ${goldResp}")
+        addEvent(new DumpEvent(cacheResp.toString))
       }
     }
     resp_h.outputs.clear
     gold.cpu_resps.clear
+    testCnt += 1
   }
 
   val tags = Vector(rand_tag, rand_tag, rand_tag)

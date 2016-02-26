@@ -1,3 +1,5 @@
+default: compile
+
 base_dir   = $(abspath .)
 src_dir    = $(base_dir)/src/main/scala/
 gen_dir    = $(base_dir)/generated-src
@@ -8,46 +10,32 @@ bmarks_dir = $(base_dir)/riscv-bmarks
 SBT       = sbt
 SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
 
-include Makefrag-tests
+compile: $(gen_dir)/Tile.v
 
-Core-compile-cpp: $(gen_dir)/Core
+$(gen_dir)/Tile.v: $(wildcard $(src_dir)/*.scala)
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "run $(gen_dir)"
 
-Tile-compile-cpp: $(gen_dir)/Tile
+all:
+	cd $(base_dir) && \
+	$(SBT) $(SBT_FLAGS) "test-only $(addprefix mini., $(addsuffix Suite, UnitTest ISATest BmarkTest))"
 
-$(gen_dir)/Core: $(wildcard $(src_dir)/*.scala)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) c"
+unit:
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.UnitTestSuite"
 
-$(gen_dir)/Tile: $(wildcard $(src_dir)/*.scala)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) c"
+isa:
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.ISATestSuite"
 
-Core-compile-v: $(wildcard $(src_dir)/*.scala)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Core $(gen_dir) v"
+bmark:
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.BmarkTestSuite"
 
-Tile-compile-v: $(wildcard $(src_dir)/*.scala)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run compile Tile $(gen_dir) v"
+isa-debug:
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.ISADebugTestSuite"
 
-$(addprefix Core-, $(isa_tests)): Core-%: $(isa_dir)/%.hex $(gen_dir)/Core
-	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Core $(gen_dir) $* +loadmem=$< +verbose +max-cycles=15000" \
-	| tee $(log_dir)/$@.out
-
-$(addprefix Tile-, $(isa_tests)): Tile-%: $(isa_dir)/%.hex $(gen_dir)/Tile
-	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Tile $(gen_dir) $* +loadmem=$< +verbose +max-cycles=15000" \
-	| tee $(log_dir)/$@.out
-
-$(addprefix Core-, $(bmarks)): Core-%: $(bmarks_dir)/%.hex $(gen_dir)/Core
-	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Core $(gen_dir) $* +loadmem=$< +max-cycles=1500000" \
-	| tee $(log_dir)/$@.out
-
-$(addprefix Tile-, $(bmarks)): Tile-%: $(bmarks_dir)/%.hex $(gen_dir)/Tile
-	mkdir -p $(log_dir)
-	cd $(base_dir) ; $(SBT) $(SBT_FLAGS) "run test Tile $(gen_dir) $* +loadmem=$< +max-cycles=1500000" \
-	| tee $(log_dir)/$@.out
+bmark-debug:
+	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.BmarkDebugTestSuite"
 
 clean:
-	rm -rf $(gen_dir) $(log_dir) test-outputs *.key
+	rm -rf $(gen_dir) test-* *.key
 
 cleanall: clean
 	rm -rf target project/target

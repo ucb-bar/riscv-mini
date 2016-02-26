@@ -4,12 +4,116 @@ import Chisel._
 import Chisel.AdvTester._
 import scala.collection.mutable.HashMap
 
-trait RandInsts extends Tests {
-  import RISCVCommon._
+trait RISCVCommon {
+  import Instructions._
+  implicit def boolToBoolean(x: Bool) = x.isTrue
+  def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
+  def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
+  def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
+  def csr(inst: UInt) =  (inst.litValue() >> 20)
+  def reg(x: Int) = UInt(x, 5)
+  def imm(x: Int) = SInt(x, 21)
+  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
+  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
+  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
+  val csrRegs = CSR.regs map (_.litValue())
+  private val csrMap  = (csrRegs zip List(
+    "cycle", "time", "instret", "cycleh", "timeh", "instreth",
+    "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
+    "mcpuid", "mimpid","mhartid", "mtvec", "mtdeleg", "mie",
+    "mtimecmp", "mtime", "mtimeh", "mscratch", "mepc", "mcause", "mbadaddr", "mip",
+    "mtohost", "mfromhost", "mstatus"
+  )).toMap
+  def csrName(csr: BigInt) = csrMap getOrElse (csr, csr.toString(16))
+
+  private def inst_31(inst: UInt)    = UInt((inst.litValue() >> 31) & 0x1,  1)
+  private def inst_30_25(inst: UInt) = UInt((inst.litValue() >> 25) & 0x3f, 6)
+  private def inst_24_21(inst: UInt) = UInt((inst.litValue() >> 21) & 0xf,  4)
+  private def inst_20(inst: UInt)    = UInt((inst.litValue() >> 20) & 0x1,  1)
+  private def inst_19_12(inst: UInt) = UInt((inst.litValue() >> 12) & 0xff, 8)
+  private def inst_11_8(inst: UInt)  = UInt((inst.litValue() >> 8)  & 0xf,  4)
+  private def inst_7(inst: UInt)     = UInt((inst.litValue() >> 7)  & 0x1,  1)
+
+  def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
+                             inst_30_25(inst), inst_24_21(inst), inst_20(inst)).litValue()
+  def simm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
+                             inst_30_25(inst), inst_11_8(inst), inst_7(inst)).litValue()
+  def bimm(inst: UInt) = Cat(Cat(Seq.fill(20){inst_31(inst)}),
+                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1)).litValue()
+  def uimm(inst: UInt) = Cat(inst_31(inst), inst_30_25(inst), inst_24_21(inst),
+                             inst_20(inst), inst_19_12(inst), UInt(0, 12)).litValue()
+  def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst),
+                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
+  def zimm(inst: UInt) = (inst.litValue() >> 15) & 0x1f
+
+  private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU,
+    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
+    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
+  private val instFmts = List(
+    (x: UInt) => "AUIPC x%d, %x".format(rd(x), uimm(x)),
+    (x: UInt) => "LUI x%d, %x".format(rd(x), uimm(x)),
+    (x: UInt) => "JAL x%d, %x".format(rd(x), jimm(x)),
+    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), iimm(x)),
+    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
+    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
+    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
+    (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
+    (x: UInt) => "FENCE",
+    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
+    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x))
+  )
+
+  def dasm(x: UInt) = {
+    def iter(l: List[(BitPat, UInt => String)]): String = l match {
+      case Nil => "???(%s)".format(x.litValue().toString(16))
+      case (p, f) :: tail => if (x === p) f(x) else iter(tail)
+    }
+    if (x === FENCEI) "FENCEI"
+    else if (x === ECALL) "ECALL"
+    else if (x === EBREAK) "EBREAK"
+    else if (x === ERET) "ERET"
+    else if (x === NOP) "NOP"
+    else iter(instPats zip instFmts)
+  }
+}
+
+trait RandInsts extends Tests with RISCVCommon {
   import Instructions._
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
-  implicit def boolToBoolean(x: Bool) = x.isTrue
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
@@ -71,7 +175,6 @@ trait RandInsts extends Tests {
     Cat(rand_csr, rand_rs1, Funct3.CSRRCI, rand_rd, Opcode.SYSTEM),
     ECALL, EBREAK, ERET, nop, rand_inst
   )
-  def dasm(x: UInt) = RISCVCommon.dasm(x)
 
   def RU(funct3: UInt, rd: Int, rs1: Int, rs2: Int) = 
     Cat(Funct7.U, reg(rs2), reg(rs1), funct3, reg(rd), Opcode.RTYPE)
@@ -122,4 +225,12 @@ trait RandInsts extends Tests {
     bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
     exceptionTest -> Array((1, 2), (2, 3), (3, 4))
   )
+}
+
+class LogTester[+T <: Module](c: T, log: Option[java.io.PrintStream]) 
+    extends Tester(c, log == None) {
+  log match {
+    case None =>
+    case Some(f) => addObserver(new Observer(file=f))
+  }
 }
