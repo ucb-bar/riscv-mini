@@ -20,5 +20,8 @@ class MiniConfig extends Config(
     case MIFDataBits  => here(CacheBlockBytes) << 3
     case MIFTagBits   => 5
     case MIFDataBeats => 0
+    // NastiIO
+    case UseNasti => true
+    case NastiKey => new NastiParameters(64, 32, 6) // Params from zynq
   }
 )

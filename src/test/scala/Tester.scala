@@ -2,8 +2,8 @@ package mini
 
 import Chisel._
 import Chisel.AdvTester._
+import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
-import junctions.{MemReqCmd, MemData, MemResp}
 import java.io.PrintStream
 
 case class TestCacheReq(addr: Int, data: BigInt, mask: BigInt) {
@@ -21,16 +21,31 @@ case class TestMemData(data: BigInt) {
 case class TestMemResp(data: BigInt, tag: BigInt) {
   override def toString = "[Mem Data] data: %x, tag: %x".format(data, tag)
 }
+case class TestNastiReadAddr(id: Int, addr: Int, size: Int, len: Int) {
+  override def toString = "[NastiReadAddr] id: %x, addr: %x, size: %x, len: %x".format(id, addr, size, len)
+}
+case class TestNastiWriteAddr(id: Int, addr: Int, size: Int, len: Int) {
+  override def toString = "[NastiWriteAddr] id: %x, addr: %x, size: %x, len: %x".format(id, addr, size, len)
+}
+case class TestNastiReadData(id: Int, data: BigInt, last: Boolean) {
+  override def toString = "[NastiReadData] id: %x, data: %x, last: %s".format(id, data, last)
+}
+case class TestNastiWriteData(data: BigInt, last: Boolean) {
+  override def toString = "[NastiWriteData] data: %x, last: %s".format(data, last)
+}
+case class TestNastiWriteResp(id: Int, resp: Int) {
+  override def toString = "[Nasti Write Resp] id: %x, resp: %x".format(id, resp)
+}
 
 abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, 
     log: Option[PrintStream] = None) extends Processable {
   require(word_width % 4 == 0, "word_width should be divisible by 4")
   implicit def toBigInt(x: UInt) = x.litValue()
   private val addrMask = (1 << log2Up(depth))-1
-  protected val off = log2Up(word_width)
   private val mem = Array.fill(depth){BigInt(0)}
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
   private def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+  protected val off = log2Up(word_width)
   protected val f = log getOrElse System.out
 
   def read(addr: Int) = {
@@ -176,8 +191,10 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
   if (!run(c.io.host, args.maxcycles, args.log getOrElse System.out)) fail
 }
 
-class TileMem(
-    cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
+class TileMagicMem(
+    cmdQ:  ScalaQueue[TestMemReq], 
+    dataQ: ScalaQueue[TestMemData], 
+    respQ: ScalaQueue[TestMemResp],
     log: Option[PrintStream], word_width: Int = 16, depth: Int = 1 << 20) 
     extends SimMem(word_width, depth, log) {
   def process {
@@ -188,12 +205,37 @@ class TileMem(
     } else if (!cmdQ.isEmpty && !cmdQ.front.rw) {
       val cmd = cmdQ.dequeue
       respQ enqueue new TestMemResp(read(cmd.addr), cmd.tag)
-    } 
+    }
   }
 }
 
-class TileSlowMem(
-    cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
+class NastiMagicMem(
+    arQ: ScalaQueue[TestNastiReadAddr],  rQ: ScalaQueue[TestNastiReadData],
+    awQ: ScalaQueue[TestNastiWriteAddr], wQ: ScalaQueue[TestNastiWriteData],
+    log: Option[PrintStream], word_width: Int = 16, depth: Int = 1 << 20) 
+    extends SimMem(word_width, depth, log) {
+  private var aw: Option[TestNastiWriteAddr] = None
+  def process = aw match {
+    case Some(p) if wQ.size >= p.len =>
+      assert((1 << p.size) == word_width)
+      (0 until p.len) foreach (i => 
+        write((p.addr >> off) + i, wQ.dequeue.data)) 
+      aw = None
+    case None if !awQ.isEmpty => aw = Some(awQ.dequeue)
+    case None if !arQ.isEmpty =>
+      val ar = arQ.dequeue
+      (0 until ar.len) foreach (i =>
+        rQ enqueue new TestNastiReadData(
+          ar.id, read((ar.addr >> off) + i), i == (ar.len - 1)))
+f.println(rQ.front)
+    case _ =>
+  }
+}
+     
+class TileMem(
+    cmdQ:  ScalaQueue[TestMemReq], 
+    dataQ: ScalaQueue[TestMemData], 
+    respQ: ScalaQueue[TestMemResp],
     log: Option[PrintStream], latency: Int, word_width: Int = 16, depth: Int = 1 << 20) 
     extends SimMem(word_width, depth, log) {
   private val schedule = Array.fill(latency){ScalaQueue[TestMemResp]()}
@@ -214,26 +256,83 @@ class TileSlowMem(
     cur_cycle = (cur_cycle + 1) % latency
   }
 }
-     
+
+class NastiMem(
+    arQ: ScalaQueue[TestNastiReadAddr],  rQ: ScalaQueue[TestNastiReadData],
+    awQ: ScalaQueue[TestNastiWriteAddr], wQ: ScalaQueue[TestNastiWriteData],
+    log: Option[PrintStream], latency: Int, word_width: Int = 16, depth: Int = 1 << 20) 
+    extends SimMem(word_width, depth, log) {
+  private var aw: Option[TestNastiWriteAddr] = None
+  private val schedule = Array.fill(latency){ScalaQueue[TestNastiReadData]()}
+  private var cur_cycle = 0
+  def process { 
+    aw match {
+      case Some(p) if wQ.size >= p.len =>
+        assert((1 << p.size) == word_width)
+        (0 until p.len) foreach (i => 
+          write((p.addr >> off) + i, wQ.dequeue.data)) 
+        aw = None
+      case None if !awQ.isEmpty => aw = Some(awQ.dequeue)
+      case None if !arQ.isEmpty =>
+        val ar = arQ.dequeue
+        (0 until ar.len) foreach (i =>
+          schedule((cur_cycle+latency-1) % latency) enqueue new TestNastiReadData(
+            ar.id, read((ar.addr >> off) + i), i == (ar.len - 1)))
+      case _ =>
+    }
+    while (!schedule(cur_cycle).isEmpty) {
+      rQ enqueue schedule(cur_cycle).dequeue
+    }
+    cur_cycle = (cur_cycle + 1) % latency
+  }
+}
+
 class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
     c, testCmd=args.testCmd, dumpFile=args.dumpFile) with MiniTests {
-  val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, 
-    (cmd: MemReqCmd) => new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
-  val dataHandler = new DecoupledSink(c.io.mem.req_data, 
-    (data: MemData) => new TestMemData(peek(data.data)))
-  val respHandler = new DecoupledSource(c.io.mem.resp,
-    (resp: MemResp, in: TestMemResp) => {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
-  val mem = new TileSlowMem(cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, args.log, 5, 16)
+  lazy val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, (cmd: MemReqCmd) => 
+    new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
+  lazy val dataHandler = new DecoupledSink(c.io.mem.req_data, (data: MemData) => 
+    new TestMemData(peek(data.data)))
+  lazy val respHandler = new DecoupledSource(c.io.mem.resp, (resp: MemResp, in: TestMemResp) => 
+    {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
+  lazy val mem = new TileMem(
+    cmdHandler.outputs, 
+    dataHandler.outputs, 
+    respHandler.inputs, 
+    args.log, 5, c.icache.bBytes)
+  
+  lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
+    new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
+  lazy val awHandler = new DecoupledSink(c.io.nasti.aw, (aw: NastiWriteAddressChannel) =>
+    new TestNastiWriteAddr(peek(aw.id), peek(aw.addr), peek(aw.size), peek(aw.len)))
+  lazy val wHandler = new DecoupledSink(c.io.nasti.w, (w: NastiWriteDataChannel) =>
+    new TestNastiWriteData(peek(w.data), peek(w.last)))
+  lazy val rHandler = new DecoupledSource(c.io.nasti.r, 
+    (r: NastiReadDataChannel, in: TestNastiReadData) => 
+      {reg_poke(r.id, in.id) ; reg_poke(r.data, in.data) ; reg_poke(r.last, in.last)})
+  lazy val nasti = new NastiMem(
+    arHandler.outputs, rHandler.inputs,
+    awHandler.outputs, wHandler.outputs,
+    args.log, 5, c.icache.nBytes)
 
   args.log match {
     case None =>
     case Some(f) => addObserver(new Observer(file=f))
   }
 
-  mem loadMem args.loadmem
-  preprocessors += mem
-  cmdHandler.process()
-  dataHandler.process()
-  respHandler.process()
+  if (c.core.useNasti) {
+    nasti loadMem args.loadmem
+    preprocessors += nasti
+    arHandler.process()
+    awHandler.process()
+    rHandler.process()
+    wHandler.process()
+  } else {
+    mem loadMem args.loadmem
+    preprocessors += mem
+    cmdHandler.process()
+    dataHandler.process()
+    respHandler.process()
+  }
   if (!run(c.io.htif.host, args.maxcycles, args.log getOrElse System.out)) fail
 }
