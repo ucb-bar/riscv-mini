@@ -50,11 +50,17 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20,
 
   def read(addr: Int) = {
     val data = mem(addr & addrMask)
-    f.println("MEM[%x] => %x".format(addr & addrMask, data))
+    log match {
+      case None =>
+      case Some(f) => f.println("MEM[%x] => %x".format(addr & addrMask, data))
+    }
     data
   }
-  def write(addr: Int, data: BigInt) { 
-    f.println("MEM[%x] <= %x".format(addr & addrMask, data))
+  def write(addr: Int, data: BigInt) {
+    log match {
+      case None =>
+      case Some(f) => f.println("MEM[%x] <= %x".format(addr & addrMask, data))
+    }
     mem(addr & addrMask) = data 
   }
   def loadMem(test: Seq[UInt]) {
@@ -91,7 +97,7 @@ trait MiniTests extends AdvTests {
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
-  def run(host: HostIO, maxcycles: Long, f: PrintStream) = {
+  def run(host: HostIO, maxcycles: Long, log: Option[PrintStream] = None) = {
     val startTime = System.nanoTime
     val ok = eventually(peek(host.tohost), maxcycles)
     val tohost = peek(host.tohost)
@@ -99,6 +105,7 @@ trait MiniTests extends AdvTests {
     val simTime = (endTime - startTime) / 1000000000.0
     val simSpeed = cycles / simTime
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
+    val f = log getOrElse System.out
     f.println("*** %s *** (%s) after %d simulation cycles".format(
             if (ok) "PASSED" else "FAILED", reason, cycles))
     f.println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
@@ -116,7 +123,10 @@ class CoreMem(
   private var wrData = BigInt(0)
   def process {
     if (isWr && abort == 0) {
-      f.println("MEM[%x] <- %s".format(wrAddr, wrData))
+      log match {
+        case None =>
+        case Some(f) => f.println("MEM[%x] <- %s".format(wrAddr, wrData))
+      }
       write(wrAddr, wrData)
     } 
     isWr = false
@@ -124,7 +134,10 @@ class CoreMem(
     if (!ireqQ.isEmpty) {
       val ireq = ireqQ.dequeue
       val inst = read(ireq.addr>>off)
-      f.println("MEM[%x] -> %s".format(ireq.addr, dasm(UInt(inst))))
+      log match {
+        case None =>
+        case Some(f) => f.println("MEM[%x] -> %s".format(ireq.addr, dasm(UInt(inst))))
+      }
       irespQ.enqueue(new TestCacheResp(inst))
     } else {
       irespQ.enqueue(new TestCacheResp(BigInt(0)))
@@ -146,7 +159,10 @@ class CoreMem(
     } else if (!dreqQ.isEmpty) {
       val dreq = dreqQ.dequeue
       val data = read(dreq.addr>>off)
-      f.println("MEM[%x] -> %s".format(dreq.addr, data))
+      log match {
+        case None =>
+        case Some(f) => f.println("MEM[%x] -> %s".format(dreq.addr, data))
+      }
       drespQ.enqueue(new TestCacheResp(data))
     } else {
       drespQ.enqueue(new TestCacheResp(BigInt(0)))
@@ -157,12 +173,17 @@ class CoreMem(
 case class MiniTestArgs(
   loadmem: String, 
   maxcycles: Long = 500000, 
+  dumpFile: Option[String] = None,
+  logFile: Option[String] = None,
   testCmd: Option[String] = Driver.testCommand,
-  log: Option[java.io.PrintStream] = None,
-  dumpFile: Option[String] = None)
+  verbose: Boolean = true)
 
 class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
-    c, testCmd=args.testCmd, dumpFile=args.dumpFile) with MiniTests {
+    c, false, 16, args.testCmd, args.dumpFile) with MiniTests {
+  val log = args.logFile match {
+    case None    => System.out
+    case Some(f) => new PrintStream(f)
+  }
   val ireqHandler = new ValidSink(c.io.icache.req, 
     (req: CacheReq) => new TestCacheReq(peek(req.addr), peek(req.data), peek(req.mask)))
   val dreqHandler = new ValidSink(c.io.dcache.req, 
@@ -172,13 +193,10 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
   val drespHandler = new ValidSource(c.io.dcache.resp,
     (resp: CacheResp, in: TestCacheResp) => reg_poke(resp.data, in.data))
   val mem = new CoreMem(ireqHandler.outputs, irespHandler.inputs, 
-    dreqHandler.outputs, drespHandler.inputs, peek(c.io.dcache.abort), args.log, 4)
+    dreqHandler.outputs, drespHandler.inputs, peek(c.io.dcache.abort), 
+    if (args.verbose) Some(log) else None, 4)
 
-  args.log match {
-    case None =>
-    case Some(f) => addObserver(new Observer(file=f))
-  }
-
+  if (args.verbose) addObserver(new Observer(file=log))
   mem loadMem args.loadmem
   preprocessors += mem
   wire_poke(c.io.icache.resp.valid, true)
@@ -188,7 +206,7 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
   mem.process()
   irespHandler.process()
   drespHandler.process()
-  if (!run(c.io.host, args.maxcycles, args.log getOrElse System.out)) fail
+  if (!run(c.io.host, args.maxcycles, Some(log))) fail
 }
 
 class TileMagicMem(
@@ -227,7 +245,6 @@ class NastiMagicMem(
       (0 until ar.len) foreach (i =>
         rQ enqueue new TestNastiReadData(
           ar.id, read((ar.addr >> off) + i), i == (ar.len - 1)))
-f.println(rQ.front)
     case _ =>
   }
 }
@@ -288,7 +305,11 @@ class NastiMem(
 }
 
 class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
-    c, testCmd=args.testCmd, dumpFile=args.dumpFile) with MiniTests {
+    c, false, 16, args.testCmd, args.dumpFile) with MiniTests {
+  val log = args.logFile match {
+    case None    => System.out
+    case Some(f) => new PrintStream(f)
+  }
   lazy val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, (cmd: MemReqCmd) => 
     new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
   lazy val dataHandler = new DecoupledSink(c.io.mem.req_data, (data: MemData) => 
@@ -296,10 +317,8 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
   lazy val respHandler = new DecoupledSource(c.io.mem.resp, (resp: MemResp, in: TestMemResp) => 
     {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   lazy val mem = new TileMem(
-    cmdHandler.outputs, 
-    dataHandler.outputs, 
-    respHandler.inputs, 
-    args.log, 5, c.icache.bBytes)
+    cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 
+    if (args.verbose) Some(log) else None, 5, c.icache.bBytes)
   
   lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
     new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
@@ -313,13 +332,9 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
   lazy val nasti = new NastiMem(
     arHandler.outputs, rHandler.inputs,
     awHandler.outputs, wHandler.outputs,
-    args.log, 5, c.icache.nBytes)
+    if (args.verbose) Some(log) else None, 5, c.icache.nBytes)
 
-  args.log match {
-    case None =>
-    case Some(f) => addObserver(new Observer(file=f))
-  }
-
+  if (args.verbose) addObserver(new Observer(file=log))
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
     preprocessors += nasti
@@ -334,5 +349,5 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
     dataHandler.process()
     respHandler.process()
   }
-  if (!run(c.io.htif.host, args.maxcycles, args.log getOrElse System.out)) fail
+  if (!run(c.io.htif.host, args.maxcycles, Some(log))) fail
 }

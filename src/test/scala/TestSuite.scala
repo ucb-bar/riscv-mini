@@ -4,17 +4,10 @@ import Chisel._
 import java.io.{File, PrintStream}
 import sys.process.stringSeqToProcess
 
-abstract class MiniTestSuite extends org.scalatest.FlatSpec {
-  private val outDir = new File("test-outs")
-  private val logDir = new File("test-logs")
-  private val dumpDir = new File("test-dumps")
-  private val baseArgs = Array(
-    "--targetDir", outDir.getPath.toString,
-    "--minimumCompatibility", "3.0", "--genHarness", 
-    "--compile", "--compileInitializationUnoptimized")
-  private def testArgs(b: String) = baseArgs ++ Array("--backend", b)
-  private def debugArgs(b: String) = testArgs(b) ++ Array("--debug", "--vcd", "--vcdMem")
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+trait RiscVTests {
+  trait TestType
+  case object ISATests extends TestType
+  case object BmarkTests extends TestType
 
   val isaTests = (List("simple", "add", "addi", "auipc", "and", "andi", // TODO: "fence_i",
     "sb", "sh", "sw", "lb", "lbu", "lh", "lhu", "lui", "lw",
@@ -27,6 +20,19 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec {
   val bmarkTests = List(
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
+}
+
+abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
+  private val outDir = new File("test-outs")
+  private val logDir = new File("test-logs")
+  private val dumpDir = new File("test-dumps")
+  private val baseArgs = Array(
+    "--targetDir", outDir.getPath.toString,
+    "--minimumCompatibility", "3.0", "--genHarness", 
+    "--compile", "--compileInitializationUnoptimized")
+  private def testArgs(b: String) = baseArgs ++ Array("--backend", b)
+  private def debugArgs(b: String) = testArgs(b) ++ Array("--debug", "--vcd", "--vcdMem")
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
 
   def elaborate[T <: Module](c: => T, b: String, debug: Boolean=false): T = {
     val args = if (debug) debugArgs(b) else testArgs(b)
@@ -63,7 +69,11 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec {
     }
   }
 
-  def runTester[T <: Module](c: T, dir: File, tests: List[String], maxcycles: Long = 500000) {
+  def runTester[T <: Module](c: T, t: TestType) {
+    val (dir, tests, maxcycles) = t match {
+      case ISATests   => (new java.io.File("riscv-tests/isa"), isaTests, 15000L)
+      case BmarkTests => (new java.io.File("riscv-bmarks"), bmarkTests, 500000L)
+    }
     val simulator = Driver.backend match {
       case _: VerilogBackend => "Verilog Simulation"
       case _: CppBackend     => "Chisel Emulator"
@@ -75,18 +85,17 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec {
     val dirPath = dir.getPath.toString
     tests map { test =>
       val loadmem = s"${dir.getPath}/${test}.hex"
-      val postfix = Driver.backend match {case _: VerilogBackend => "v" case _: CppBackend => "cpp"}
-      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-${test}-${postfix}.log")
-      val vcd = s"${dumpDir}/${c.getClass.getName}-${test}-${postfix}.vcd"
-      val vpd = s"${dumpDir}/${c.getClass.getName}-${test}-${postfix}.vpd"
-      val dump = Driver.backend match {
-        case _: VerilogBackend => Some(vpd)
-        case _: CppBackend     => Some(vcd)
-        case _                 => None
+      val (log, dump) = Driver.backend match {
+        case _: CppBackend     => (
+          Some(s"${logDir.getPath}/${c.getClass.getName}-${test}-cpp.log"),
+          Some(s"${dumpDir.getPath}/${c.getClass.getName}-${test}-cpp.vcd"))
+        case _: VerilogBackend => (
+          Some(s"${logDir.getPath}/${c.getClass.getName}-${test}-v.log"),
+          Some(s"${dumpDir.getPath}/${c.getClass.getName}-${test}-v.vcd"))
       }
-      val args = new MiniTestArgs(loadmem, maxcycles, log=Some(log), dumpFile=dump) 
+      val args = new MiniTestArgs(loadmem, maxcycles, dump, log)
       if (!(new File(loadmem).exists)) {
-        assert(Seq("make", "-C", dir.getPath.toString, s"{test}.hex", 
+        assert(Seq("make", "-C", dir.getPath.toString, s"${test}.hex", 
                    """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
       }
       println(s"runs ${test} on ${simulator} of ${c.getClass.getName}")
@@ -117,33 +126,33 @@ class UnitTestSuite extends MiniTestSuite {
 }
 
 class ISATestSuite extends MiniTestSuite {
-  val dir = new File("riscv-tests/isa")
-  runTester(elaborateCpp(new Core), dir, isaTests, 15000)
-  runTester(elaborateCpp(new Tile), dir, isaTests, 15000)
-  runTester(elaborateVerilog(new Core), dir, isaTests, 15000)
-  runTester(elaborateVerilog(new Tile), dir, isaTests, 15000)
+  val t = ISATests
+  runTester(elaborateCpp(new Core), t)
+  runTester(elaborateCpp(new Tile), t)
+  runTester(elaborateVerilog(new Core), t)
+  runTester(elaborateVerilog(new Tile), t)
 }
 
 class ISADebugTestSuite extends MiniTestSuite {
-  val dir = new File("riscv-tests/isa")
-  runTester(elaborateCpp(new Core, true), dir, isaTests, 15000)
-  runTester(elaborateCpp(new Tile, true), dir, isaTests, 15000)
-  runTester(elaborateVerilog(new Core, true), dir, isaTests, 15000)
-  runTester(elaborateVerilog(new Tile, true), dir, isaTests, 15000)
+  val t = ISATests
+  runTester(elaborateCpp(new Core, true), t)
+  runTester(elaborateCpp(new Tile, true), t)
+  runTester(elaborateVerilog(new Core, true), t)
+  runTester(elaborateVerilog(new Tile, true), t)
 }
 
 class BmarkTestSuite extends MiniTestSuite {
-  val dir = new File("riscv-bmarks")
-  runTester(elaborateCpp(new Core), dir, bmarkTests)
-  runTester(elaborateCpp(new Tile), dir, bmarkTests)
-  runTester(elaborateVerilog(new Core), dir, bmarkTests)
-  runTester(elaborateVerilog(new Tile), dir, bmarkTests)
+  val t = BmarkTests
+  runTester(elaborateCpp(new Core), t)
+  runTester(elaborateCpp(new Tile), t)
+  runTester(elaborateVerilog(new Core), t)
+  runTester(elaborateVerilog(new Tile), t)
 }
 
 class BmarkDebugTestSuite extends MiniTestSuite {
-  val dir = new File("riscv-bmarks")
-  runTester(elaborateCpp(new Core, true), dir, bmarkTests)
-  runTester(elaborateCpp(new Tile, true), dir, bmarkTests)
-  runTester(elaborateVerilog(new Core, true), dir, bmarkTests)
-  runTester(elaborateVerilog(new Tile, true), dir, bmarkTests)
+  val t = BmarkTests
+  runTester(elaborateCpp(new Core, true), t)
+  runTester(elaborateCpp(new Tile, true), t)
+  runTester(elaborateVerilog(new Core, true), t)
+  runTester(elaborateVerilog(new Tile, true), t)
 }
