@@ -8,7 +8,7 @@ isa_dir    = $(base_dir)/riscv-tests/isa
 bmarks_dir = $(base_dir)/riscv-bmarks
 
 SBT       = sbt
-SBT_FLAGS = -Dsbt.log.noformat=true -DchiselVersion=latest.release
+SBT_FLAGS = -DchiselVersion=latest.release
 
 compile: $(gen_dir)/Tile.v
 

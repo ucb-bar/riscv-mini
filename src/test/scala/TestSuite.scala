@@ -58,13 +58,14 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
   }
 
   def runUnitTests[M <: Module](c: => M) {
+    val modName = c.getClass.getSimpleName
     behavior of (s"${c.getClass.getName}")
     it should "pass Chisel Emulator" in {
-      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-cpp.log")
+      val log = new PrintStream(s"${logDir.getPath}/${modName}-cpp.log")
       checkUnitTests(elaborateCpp(c, true), Some(log))
     }
     it should "pass Verilog Simulator" in {
-      val log = new PrintStream(s"${logDir.getPath}/${c.getClass.getName}-v.log")
+      val log = new PrintStream(s"${logDir.getPath}/${modName}-v.log")
       checkUnitTests(elaborateVerilog(c, true), Some(log))
     }
   }
@@ -79,26 +80,26 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
       case _: CppBackend     => "Chisel Emulator"
       case _                 => "???"
     }
-    val postfix = if (Driver.isVCD) "for Debugging" else ""
-    behavior of s"${c.getClass.getName} with ${simulator} ${postfix}"
+    val modName = c.getClass.getSimpleName
+    behavior of s"${modName} on ${simulator}"
     assert(dir.exists)
     val dirPath = dir.getPath.toString
     tests map { test =>
       val loadmem = s"${dir.getPath}/${test}.hex"
       val (log, dump) = Driver.backend match {
         case _: CppBackend     => (
-          Some(s"${logDir.getPath}/${c.getClass.getName}-${test}-cpp.log"),
-          Some(s"${dumpDir.getPath}/${c.getClass.getName}-${test}-cpp.vcd"))
+          Some(s"${logDir.getPath}/${modName}-${test}-cpp.log"),
+          Some(s"${dumpDir.getPath}/${modName}-${test}-cpp.vcd"))
         case _: VerilogBackend => (
-          Some(s"${logDir.getPath}/${c.getClass.getName}-${test}-v.log"),
-          Some(s"${dumpDir.getPath}/${c.getClass.getName}-${test}-v.vcd"))
+          Some(s"${logDir.getPath}/${modName}-${test}-v.log"),
+          Some(s"${dumpDir.getPath}/${modName}-${test}-v.vcd"))
       }
       val args = new MiniTestArgs(loadmem, maxcycles, dump, log)
       if (!(new File(loadmem).exists)) {
         assert(Seq("make", "-C", dir.getPath.toString, s"${test}.hex", 
                    """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
       }
-      println(s"runs ${test} on ${simulator} of ${c.getClass.getName}")
+      println(s"runs ${test} on ${simulator} of ${modName}")
       test -> (c match {
         case core: Core => (new CoreTester(core, args)).finish
         case tile: Tile => (new TileTester(tile, args)).finish
