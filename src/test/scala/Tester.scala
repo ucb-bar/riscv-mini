@@ -210,19 +210,20 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
 }
 
 class TileMagicMem(
-    cmdQ:  ScalaQueue[TestMemReq], 
-    dataQ: ScalaQueue[TestMemData], 
-    respQ: ScalaQueue[TestMemResp],
-    log: Option[PrintStream], word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
+    cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
+    log: Option[PrintStream], beats: Int, databits: Int, depth: Int = 1 << 20) 
+    extends SimMem(beats*databits/8, depth, log) {
+  private val mask = (BigInt(1) << databits) - 1
   def process {
-    if (!cmdQ.isEmpty && !dataQ.isEmpty && cmdQ.front.rw) {
-      val cmd = cmdQ.dequeue
-      val data = dataQ.dequeue
-      write(cmd.addr, data.data)
+    if (!cmdQ.isEmpty && cmdQ.front.rw && dataQ.size >= beats) {
+      val cmd  = cmdQ.dequeue
+      write(cmd.addr, ((0 until beats) foldLeft BigInt(0))((data, i) =>
+        data | dataQ.dequeue.data << i*databits))
     } else if (!cmdQ.isEmpty && !cmdQ.front.rw) {
-      val cmd = cmdQ.dequeue
-      respQ enqueue new TestMemResp(read(cmd.addr), cmd.tag)
+      val cmd  = cmdQ.dequeue
+      val data = read(cmd.addr)
+      (0 until beats) foreach (i => respQ enqueue 
+        new TestMemResp((data >> i*databits) & mask, cmd.tag))
     }
   }
 }
@@ -234,38 +235,39 @@ class NastiMagicMem(
     extends SimMem(word_width, depth, log) {
   private var aw: Option[TestNastiWriteAddr] = None
   def process = aw match {
-    case Some(p) if wQ.size >= p.len =>
+    case Some(p) if wQ.size > p.len =>
       assert((1 << p.size) == word_width)
-      (0 until p.len) foreach (i => 
+      (0 to p.len) foreach (i => 
         write((p.addr >> off) + i, wQ.dequeue.data)) 
       aw = None
     case None if !awQ.isEmpty => aw = Some(awQ.dequeue)
     case None if !arQ.isEmpty =>
       val ar = arQ.dequeue
-      (0 until ar.len) foreach (i =>
+      (0 to ar.len) foreach (i =>
         rQ enqueue new TestNastiReadData(
-          ar.id, read((ar.addr >> off) + i), i == (ar.len - 1)))
+          ar.id, read((ar.addr >> off) + i), i == ar.len))
     case _ =>
   }
 }
      
 class TileMem(
-    cmdQ:  ScalaQueue[TestMemReq], 
-    dataQ: ScalaQueue[TestMemData], 
-    respQ: ScalaQueue[TestMemResp],
-    log: Option[PrintStream], latency: Int, word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
+    cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
+    log: Option[PrintStream], latency: Int, beats: Int, databits: Int, depth: Int = 1 << 20) 
+    extends SimMem(beats*databits/8, depth, log) {
+  private val mask = (BigInt(1) << databits) - 1
   private val schedule = Array.fill(latency){ScalaQueue[TestMemResp]()}
   private var cur_cycle = 0
   def process {
-    if (!cmdQ.isEmpty && !dataQ.isEmpty && cmdQ.front.rw) {
+    if (!cmdQ.isEmpty && cmdQ.front.rw && dataQ.size >= beats) {
       val cmd = cmdQ.dequeue
-      val data = dataQ.dequeue
-      write(cmd.addr, data.data)
+      write(cmd.addr, ((0 until beats) foldLeft BigInt(0))((data, i) =>
+        data | dataQ.dequeue.data << i*databits))
     } else if (!cmdQ.isEmpty && !cmdQ.front.rw) {
       val cmd = cmdQ.dequeue
-      val resp = new TestMemResp(read(cmd.addr), cmd.tag)
-      schedule((cur_cycle+latency-1) % latency) enqueue resp
+      val data = read(cmd.addr)
+      (0 until beats) foreach (i =>
+        schedule((cur_cycle+latency-1) % latency) enqueue 
+          new TestMemResp((data >> i*databits) & mask, cmd.tag))
     }
     while (!schedule(cur_cycle).isEmpty) { 
       respQ enqueue schedule(cur_cycle).dequeue 
@@ -284,17 +286,17 @@ class NastiMem(
   private var cur_cycle = 0
   def process { 
     aw match {
-      case Some(p) if wQ.size >= p.len =>
+      case Some(p) if wQ.size > p.len =>
         assert((1 << p.size) == word_width)
-        (0 until p.len) foreach (i => 
+        (0 to p.len) foreach (i => 
           write((p.addr >> off) + i, wQ.dequeue.data)) 
         aw = None
       case None if !awQ.isEmpty => aw = Some(awQ.dequeue)
       case None if !arQ.isEmpty =>
         val ar = arQ.dequeue
-        (0 until ar.len) foreach (i =>
-          schedule((cur_cycle+latency-1) % latency) enqueue new TestNastiReadData(
-            ar.id, read((ar.addr >> off) + i), i == (ar.len - 1)))
+        (0 to ar.len) foreach (i =>
+          schedule((cur_cycle+latency-1) % latency) enqueue 
+            new TestNastiReadData(ar.id, read((ar.addr >> off) + i), i == ar.len))
       case _ =>
     }
     while (!schedule(cur_cycle).isEmpty) {
@@ -318,7 +320,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
     {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   lazy val mem = new TileMem(
     cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 
-    if (args.verbose) Some(log) else None, 5, c.icache.bBytes)
+    if (args.verbose) Some(log) else None, 5, c.mifDataBeats, c.mifDataBits)
   
   lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
     new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
@@ -332,7 +334,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
   lazy val nasti = new NastiMem(
     arHandler.outputs, rHandler.inputs,
     awHandler.outputs, wHandler.outputs,
-    if (args.verbose) Some(log) else None, 5, c.icache.nBytes)
+    if (args.verbose) Some(log) else None, 5, c.nastiXDataBits/8)
 
   if (args.verbose) addObserver(new Observer(file=log))
   if (c.core.useNasti) {

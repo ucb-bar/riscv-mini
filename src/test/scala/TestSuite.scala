@@ -136,9 +136,9 @@ class ISATestSuite extends MiniTestSuite {
 
 class ISADebugTestSuite extends MiniTestSuite {
   val t = ISATests
-  runTester(elaborateCpp(new Core, true), t)
+  // runTester(elaborateCpp(new Core, true), t)
   runTester(elaborateCpp(new Tile, true), t)
-  runTester(elaborateVerilog(new Core, true), t)
+  // runTester(elaborateVerilog(new Core, true), t)
   runTester(elaborateVerilog(new Tile, true), t)
 }
 
@@ -152,8 +152,8 @@ class BmarkTestSuite extends MiniTestSuite {
 
 class BmarkDebugTestSuite extends MiniTestSuite {
   val t = BmarkTests
-  runTester(elaborateCpp(new Core, true), t)
+  // runTester(elaborateCpp(new Core, true), t)
   runTester(elaborateCpp(new Tile, true), t)
-  runTester(elaborateVerilog(new Core, true), t)
+  // runTester(elaborateVerilog(new Core, true), t)
   runTester(elaborateVerilog(new Tile, true), t)
 }

@@ -5,13 +5,9 @@ import Chisel.AdvTester._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
 
-class GoldCache(nSets: Int, bBytes: Int, xlen: Int, nBytes: Int, 
-    useNasti: Boolean=false) extends Processable {
+class GoldCache(nSets: Int, bBytes: Int, xlen: Int, nastiBytes: Int) extends Processable {
   val cpu_reqs = ScalaQueue[TestCacheReq]()
   val cpu_resps = ScalaQueue[TestCacheResp]()
-  val mem_cmds = ScalaQueue[TestMemReq]() 
-  val mem_data = ScalaQueue[TestMemData]()
-  val mem_resps = ScalaQueue[TestMemResp]()
   val nasti_ar = ScalaQueue[TestNastiReadAddr]()
   val nasti_aw = ScalaQueue[TestNastiWriteAddr]()
   val nasti_r = ScalaQueue[TestNastiReadData]()
@@ -24,10 +20,10 @@ class GoldCache(nSets: Int, bBytes: Int, xlen: Int, nBytes: Int,
   private val d    = Array.fill(nSets){false}
   private val blen = log2Up(bBytes)
   private val slen = log2Up(nSets)
-  private val nsize  = log2Up(nBytes)
-  private val nlen   = bBytes/nBytes
+  private val nastiSize = log2Up(nastiBytes)
+  private val nastiLen  = bBytes/nastiBytes - 1
   private val dataMask = (BigInt(1) << xlen) - 1
-  require(nlen > 0)
+  require(nastiLen >= 0)
 
   def process {
     if (!cpu_reqs.isEmpty) {
@@ -52,83 +48,39 @@ class GoldCache(nSets: Int, bBytes: Int, xlen: Int, nBytes: Int,
           cpu_resps enqueue new TestCacheResp((read >> (xlen * (off >> 2))) & dataMask)
         }
       } else {
-        if (useNasti) {
-          if (d(idx)) {
-            val addr = ((tags(idx) << slen | idx)) << blen
-            val size = 8 * (1 << nsize)
-            val mask = (BigInt(1) << size) - 1
-            nasti_aw enqueue new TestNastiWriteAddr(0, addr, nsize, nlen)
-            (0 until nlen) foreach { i =>
-              val w_data = (data(idx) >> (i * size)) & mask
-              nasti_w enqueue new TestNastiWriteData(w_data, i == (nlen-1))
-            }
+        if (d(idx)) {
+          val addr = ((tags(idx) << slen | idx)) << blen
+          val size = 8 * (1 << nastiSize)
+          val mask = (BigInt(1) << size) - 1
+          nasti_aw enqueue new TestNastiWriteAddr(0, addr, nastiSize, nastiLen)
+          (0 to nastiLen) foreach { i =>
+            val w_data = (data(idx) >> (i * size)) & mask
+            nasti_w enqueue new TestNastiWriteData(w_data, i == nastiLen)
           }
-          nasti_ar enqueue new TestNastiReadAddr(0, (req.addr >>> blen) << blen, nsize, nlen)
-        } else {
-          if (d(idx)) {
-            val addr = (tags(idx) << slen | idx) & ((1<<(xlen-blen))-1)
-            mem_cmds enqueue new TestMemReq(addr, 0, true)
-            mem_data enqueue new TestMemData(data(idx))
-          }
-          mem_cmds enqueue new TestMemReq(req.addr >>> blen, 0, false)
         }
+        nasti_ar enqueue new TestNastiReadAddr(0, (req.addr >>> blen) << blen, nastiSize, nastiLen)
         waitQ enqueue req
       }
     } 
-    if (!mem_resps.isEmpty || nasti_r.size >= nlen) {
-      assert(!waitQ.isEmpty, s"nasti_r.size = ${nasti_r.size}")
-      assert(mem_resps.isEmpty && useNasti)
+    if (nasti_r.size > nastiLen) {
+      assert(!waitQ.isEmpty)
       val req = waitQ.dequeue
       val idx = (req.addr >> blen) & ((1 << slen)-1)
       val tag = (req.addr >> (blen + slen))
       v(idx)    = true
       tags(idx) = tag
-      data(idx) = if (useNasti) {
-        ((0 until nlen) foldLeft BigInt(0)){(res, i) =>
-          val read = nasti_r.dequeue
-          assert(i != (nlen-1) || read.last, s"[${i}] NastReadData: ${read}")
-          res | (read.data << (i * 8 * (1 << nsize)))
-        }
-      } else mem_resps.dequeue.data
+      data(idx) = ((0 to nastiLen) foldLeft BigInt(0)){(res, i) =>
+        val read = nasti_r.dequeue
+        assert(i != nastiLen || read.last, s"[${i}] NastReadData: ${read}")
+        res | (read.data << (i * 8 * (1 << nastiSize)))
+      }
       cpu_reqs enqueue req
       process
     }
   } 
 }
 
-class MemIOMem(
-    cacheCmdQ:  ScalaQueue[TestMemReq],  goldCmdQ: ScalaQueue[TestMemReq],
-    cacheDataQ: ScalaQueue[TestMemData], goldDataQ: ScalaQueue[TestMemData],
-    cacheRespQ: ScalaQueue[TestMemResp], goldRespQ: ScalaQueue[TestMemResp],
-    log: Option[java.io.PrintStream] = None, word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
-  def process {
-    if (!cacheCmdQ.isEmpty && !cacheDataQ.isEmpty && cacheCmdQ.front.rw &&
-        !goldCmdQ.isEmpty  && !goldDataQ.isEmpty  && goldCmdQ.front.rw) {
-      val cacheCmd  = cacheCmdQ.dequeue
-      val goldCmd   = goldCmdQ.dequeue
-      val cacheData = cacheDataQ.dequeue
-      val goldData  = goldDataQ.dequeue
-      assert(cacheCmd.addr == goldCmd.addr, 
-        s"\n*Cache* => ${cacheCmd}\n*Gold*  => ${goldCmd}")
-      assert(cacheData.data == cacheData.data, 
-        s"\n*Cache => ${cacheData}\n*Gold*  => ${goldData}")
-      write(cacheCmd.addr, cacheData.data)
-    } else if (!cacheCmdQ.isEmpty && !cacheCmdQ.front.rw &&
-               !goldCmdQ.isEmpty  && !goldCmdQ.front.rw) {
-      val cacheCmd = cacheCmdQ.dequeue
-      val goldCmd  = goldCmdQ.dequeue
-      assert(cacheCmd.addr == goldCmd.addr, 
-        s"\n*Cache* => ${cacheCmd}\n*Gold*  => ${goldCmd}")
-      val data = read(cacheCmd.addr)
-      val resp = new TestMemResp(data, cacheCmd.tag)
-      cacheRespQ enqueue resp
-      goldRespQ  enqueue resp
-    }
-  }
-}
-
-class NastiIOMem(
+class Mem(
     cache_ar_Q: ScalaQueue[TestNastiReadAddr],  gold_ar_Q: ScalaQueue[TestNastiReadAddr],
     cache_aw_Q: ScalaQueue[TestNastiWriteAddr], gold_aw_Q: ScalaQueue[TestNastiWriteAddr],
     cache_r_Q: ScalaQueue[TestNastiReadData],   gold_r_Q: ScalaQueue[TestNastiReadData],
@@ -147,7 +99,7 @@ class NastiIOMem(
           s"\n*Cache* => ${cache_w}\n*Gold*  => ${gold_w}")
         assert(i != p.len || cache_w.last, cache_w.toString)
         data | (cache_w.data << size)
-      })
+     })
       aw = None
     case None if !cache_aw_Q.isEmpty && !gold_aw_Q.isEmpty =>
       val cache_aw = cache_aw_Q.dequeue
@@ -160,6 +112,7 @@ class NastiIOMem(
       val gold_ar  = gold_ar_Q.dequeue
       assert(cache_ar == gold_ar, 
         s"\n*Cache* => ${cache_ar}\n*Gold*  => ${gold_ar}")
+      log foreach (_ println "haak => ${cache_ar}")
       val size = 8 * (1 << cache_ar.size)
       val addr = cache_ar.addr >> off
       val mask = (BigInt(1) << size) - 1
@@ -183,39 +136,27 @@ class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvT
     reg_poke(req.addr, in.addr) ; reg_poke(req.data, in.data) ; reg_poke(req.mask, in.mask)})
   val resp_h = new ValidSink(c.io.cpu.resp,
     (resp: CacheResp) => new TestCacheResp(peek(resp.data)))
-  // MemIO
-  lazy val cmd_h = new DecoupledSink(c.io.mem.req_cmd,
-    (cmd: MemReqCmd) => new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
-  lazy val data_h = new DecoupledSink(c.io.mem.req_data,
-    (cmd: MemData) => new TestMemData(peek(cmd.data)))
-  lazy val mem_resp_h = new DecoupledSource(c.io.mem.resp,
-    (resp: MemResp, in: TestMemResp) => {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   // NastiIO
-  lazy val ar_h = new DecoupledSink(c.io.nasti.ar, 
+  val ar_h = new DecoupledSink(c.io.nasti.ar, 
     (ar: NastiReadAddressChannel) => new TestNastiReadAddr(
       peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
-  lazy val aw_h = new DecoupledSink(c.io.nasti.aw, 
+  val aw_h = new DecoupledSink(c.io.nasti.aw, 
     (aw: NastiWriteAddressChannel) => new TestNastiWriteAddr(
       peek(aw.id), peek(aw.addr), peek(aw.size), peek(aw.len)))
-  lazy val w_h = new DecoupledSink(c.io.nasti.w, (w: NastiWriteDataChannel) => 
+  val w_h = new DecoupledSink(c.io.nasti.w, (w: NastiWriteDataChannel) => 
     new TestNastiWriteData(peek(w.data), peek(w.last)))
-  lazy val r_h = new DecoupledSource(c.io.nasti.r, (r: NastiReadDataChannel, in: TestNastiReadData) => {
+  val r_h = new DecoupledSource(c.io.nasti.r, (r: NastiReadDataChannel, in: TestNastiReadData) => {
     reg_poke(r.id, in.id) ; reg_poke(r.data, in.data) ; reg_poke(r.last, in.last)})
  
-  val gold = new GoldCache(c.nSets, c.bBytes, c.xlen, c.nastiXDataBits/8, c.useNasti)
-  lazy val mem = new MemIOMem(
-    cmd_h.outputs,     gold.mem_cmds, 
-    data_h.outputs,    gold.mem_data,
-    mem_resp_h.inputs, gold.mem_resps, 
-    log, c.bBytes)
-  lazy val nasti = new NastiIOMem(
+  val gold = new GoldCache(c.nSets, c.bBytes, c.xlen, c.nastiXDataBits/8)
+  val mem = new Mem(
     ar_h.outputs, gold.nasti_ar,
     aw_h.outputs, gold.nasti_aw,
     r_h.inputs,   gold.nasti_r,
     w_h.outputs,  gold.nasti_w,
     log, c.bBytes)
   preprocessors += gold
-  preprocessors += (if (c.useNasti) nasti else mem)
+  preprocessors += mem
   
   log match {
     case None =>
@@ -233,11 +174,7 @@ class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvT
 
   def init(tags: Vector[Int], idxs: Vector[Int]) {
     for (tag <- tags ; idx <- idxs) {
-      if (c.useNasti) {
-        nasti.write((tag << c.slen | idx), rand_data)
-      } else {
-        mem.write(tag << c.slen | idx, rand_data)
-      }
+      mem.write(tag << c.slen | idx, rand_data)
     }
   }
 

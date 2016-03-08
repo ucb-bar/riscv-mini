@@ -17,11 +17,14 @@ class MiniConfig extends Config(
     case CacheBlockBytes => 4 * (here(XLEN) >> 3) // 4 x 32 bits = 16B
     // MemIO(memserdes.scala in junctions)
     case MIFAddrBits  => here(XLEN)
-    case MIFDataBits  => here(CacheBlockBytes) << 3
+    case MIFDataBits  => 64
     case MIFTagBits   => 5
-    case MIFDataBeats => 0
+    case MIFDataBeats => 8 * here(CacheBlockBytes) / here(MIFDataBits)
     // NastiIO
-    case UseNasti => true
-    case NastiKey => new NastiParameters(64, 32, 6) // Params from zynq
+    case UseNasti => false // true
+    case NastiKey => new NastiParameters(
+      idBits   = here(MIFTagBits),
+      dataBits = here(MIFDataBits),
+      addrBits = here(XLEN))
   }
 )
