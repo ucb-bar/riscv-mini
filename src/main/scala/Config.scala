@@ -21,7 +21,7 @@ class MiniConfig extends Config(
     case MIFTagBits   => 5
     case MIFDataBeats => 8 * here(CacheBlockBytes) / here(MIFDataBits)
     // NastiIO
-    case UseNasti => false // true
+    case UseNasti => true
     case NastiKey => new NastiParameters(
       idBits   = here(MIFTagBits),
       dataBits = here(MIFDataBits),
