@@ -88,7 +88,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata_buf = Reg(Vec.fill(mifDataBeats)(UInt(width=nastiXDataBits))) 
+  val rdata_buf = Reg(Vec(mifDataBeats, UInt(width=nastiXDataBits))) 
   val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, ren).toBits).reverse), 
                               rdata_buf.toBits) // bypass refilled data
   
@@ -118,7 +118,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     dataMem.zipWithIndex foreach { case (mem, i) =>
       val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
       mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
-      mem setName s"dataMem_${i}"
+      //TODO: mem setName s"dataMem_${i}"
     }
   }
 

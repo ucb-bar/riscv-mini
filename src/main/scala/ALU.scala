@@ -34,15 +34,15 @@ abstract class ALU(implicit val p: Parameters) extends Module with CoreParams {
 }
 
 class ALUSimple(implicit p: Parameters) extends ALU()(p) {
-  val shamt = io.B(4,0).toUInt
+  val shamt = io.B(4,0).asUInt
 
   io.out := MuxLookup(io.alu_op, io.B, Seq(
       ALU_ADD  -> (io.A + io.B),
       ALU_SUB  -> (io.A - io.B),
-      ALU_SRA  -> (io.A.toSInt >> shamt).toUInt,
+      ALU_SRA  -> (io.A.asSInt >> shamt).asUInt,
       ALU_SRL  -> (io.A >> shamt),
       ALU_SLL  -> (io.A << shamt),
-      ALU_SLT  -> (io.A.toSInt < io.B.toSInt),
+      ALU_SLT  -> (io.A.asSInt < io.B.asSInt),
       ALU_SLTU -> (io.A < io.B),
       ALU_AND  -> (io.A & io.B),
       ALU_OR   -> (io.A | io.B),
@@ -56,9 +56,9 @@ class ALUArea(implicit p: Parameters) extends ALU()(p) {
   val sum = io.A + Mux(io.alu_op(0), -io.B, io.B)
   val cmp = Mux(io.A(xlen-1) === io.B(xlen-1), sum(xlen-1),
             Mux(io.alu_op(1), io.B(xlen-1), io.A(xlen-1)))
-  val shamt  = io.B(4,0).toUInt
+  val shamt  = io.B(4,0).asUInt
   val shin   = Mux(io.alu_op(3), io.A, Reverse(io.A))
-  val shiftr = (Cat(io.alu_op(0) && shin(xlen-1), shin).toSInt >> shamt)(xlen-1, 0)
+  val shiftr = (Cat(io.alu_op(0) && shin(xlen-1), shin).asSInt >> shamt)(xlen-1, 0)
   val shiftl = Reverse(shiftr)
 
   val out = 

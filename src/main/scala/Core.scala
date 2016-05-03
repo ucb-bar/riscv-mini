@@ -33,7 +33,7 @@ class Core(implicit val p: Parameters) extends Module with CoreParams {
   val ctrl  = Module(new Control)
 
   io.host <> dpath.io.host
-  io.icache <> dpath.io.icache
-  io.dcache <> dpath.io.dcache
+  dpath.io.icache <> io.icache
+  dpath.io.dcache <> io.dcache
   dpath.io.ctrl <> ctrl.io.ctrl
 }

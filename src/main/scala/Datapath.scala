@@ -50,7 +50,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val pc   = RegInit(Const.PC_START - UInt(4, xlen)) 
   val npc  = Mux(stall, pc, Mux(csr.io.expt, csr.io.evec,
              Mux(io.ctrl.pc_sel === PC_EPC,  csr.io.epc,
-             Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum & SInt(-2), 
+             Mux(io.ctrl.pc_sel === PC_ALU || brCond.io.taken, alu.io.sum >> UInt(1) << UInt(1), 
              Mux(io.ctrl.pc_sel === PC_0, pc, pc + UInt(4))))))
   val inst = Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.resp.bits.data)
   pc                      := npc 
@@ -99,7 +99,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   brCond.io.br_type := io.ctrl.br_type
 
   // D$ access
-  val daddr   = Mux(stall, ew_alu, alu.io.sum) & SInt(-4)
+  val daddr   = Mux(stall, ew_alu, alu.io.sum) >> UInt(2) << UInt(2)
   val woffset = alu.io.sum(1) << UInt(4) | alu.io.sum(0) << UInt(3)
   io.dcache.req.valid     := !stall && (io.ctrl.st_type.orR || io.ctrl.ld_type.orR)
   io.dcache.req.bits.addr := daddr 
@@ -136,7 +136,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val loffset = ew_alu(1) << UInt(4) | ew_alu(0) << UInt(3)
   val lshift  = io.dcache.resp.bits.data >> loffset
   val load    = MuxLookup(ld_type, io.dcache.resp.bits.data.zext, Seq(
-    LD_LH  -> lshift(15, 0).toSInt, LD_LB  -> lshift(7, 0).toSInt,
+    LD_LH  -> lshift(15, 0).asSInt, LD_LB  -> lshift(7, 0).asSInt,
     LD_LHU -> lshift(15, 0).zext,   LD_LBU -> lshift(7, 0).zext) )
     
   // CSR access
@@ -150,13 +150,13 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   csr.io.pc_check := pc_check
   csr.io.ld_type  := ld_type
   csr.io.st_type  := st_type
-  csr.io.host     <> io.host
+  io.host <> csr.io.host 
 
   // Regfile Write
   val regWrite = MuxLookup(wb_sel, ew_alu.zext, Seq(
     WB_MEM -> load,
     WB_PC4 -> (ew_pc + UInt(4)).zext,
-    WB_CSR -> csr.io.out.zext) ) 
+    WB_CSR -> csr.io.out.zext) ).asUInt 
 
   regFile.io.wen   := wb_en && !stall && !csr.io.expt 
   regFile.io.waddr := wb_rd_addr
