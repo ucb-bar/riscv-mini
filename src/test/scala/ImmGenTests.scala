@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import Chisel.swtesters.ClassicTester
 
 case class ImmGenIn(inst: UInt, sel: BigInt)
 case class ImmGenOut(out: BigInt)
@@ -16,12 +17,12 @@ object GoldImmGen extends RISCVCommon {
 }
 
 
-class ImmGenTests[+T <: ImmGen](c: T, log: Option[java.io.PrintStream])
-    extends LogTester(c, log) with RandInsts { 
+class ImmGenTests[+T <: ImmGen](c: T) extends ClassicTester(c) with RandInsts {
+  type DUT = ImmGen
   for (inst <- insts) {
     val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
-    addEvent(new DumpEvent(s"*** ${dasm(inst)} ***"))
+    println(s"*** ${dasm(inst)} ***")
     poke(c.io.inst,  inst)
     poke(c.io.sel,   ctrl.imm_sel)
     expect(c.io.out, gold.out) 

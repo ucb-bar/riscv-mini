@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import Chisel.swtesters.ClassicTester
 
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
@@ -110,8 +111,8 @@ class GoldDatapath extends RISCVCommon {
   }
 }
 
-class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None) 
-    extends LogTester(c, log) with RandInsts {
+class DatapathTests(c: Datapath) extends ClassicTester(c) with RandInsts {
+  type DUT = Datapath
   def poke(ctrl: ControlOut) {
     poke(c.io.ctrl.pc_sel,    ctrl.pc_sel)
     poke(c.io.ctrl.inst_kill, ctrl.inst_kill) 
@@ -164,7 +165,7 @@ class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None)
     val inst = insts(i)
     val data = rand_data
     val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
-    addEvent(new DumpEvent(s"*** ${dasm(inst)} (%x) ***".format(inst.litValue())))
+    println(s"*** ${dasm(inst)} (%x) ***".format(inst.litValue()))
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.icache.resp.valid,     1)
     poke(c.io.dcache.resp.bits.data, data)

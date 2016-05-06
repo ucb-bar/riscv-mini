@@ -1,6 +1,7 @@
 package mini
 
 import Chisel._
+import Chisel.swtesters.ClassicTester
 
 case class ControlIn(inst: UInt)
 
@@ -25,18 +26,14 @@ object GoldControl {
   private val default = Control.default map (_.litValue())
   private val map = Control.map map (x => x._1 -> (x._2 map (_.litValue())))
   def apply(in: ControlIn) = new ControlOut(
-    map find {
-      case (x: BitPat, y) => (x === in.inst).isTrue
-      case (x: UInt,   y) => (x === in.inst).isTrue
-      case _ => false
-    } match {
+    map find (x => (x._1 === in.inst).litValue() == 1) match {
       case None => default
       case Some(p) => p._2
     })
 }
 
-class ControlTests(c: Control, log: Option[java.io.PrintStream]) 
-    extends LogTester(c, log) with RandInsts { 
+class ControlTests(c: Control) extends ClassicTester(c) with RandInsts {
+  type DUT = Control
   def expect(ctrl: ControlOut) {
     expect(c.io.ctrl.pc_sel,    ctrl.pc_sel)
     expect(c.io.ctrl.A_sel,     ctrl.a_sel)
@@ -54,7 +51,7 @@ class ControlTests(c: Control, log: Option[java.io.PrintStream])
   }
 
   for ((inst, i) <- insts.zipWithIndex) {
-    addEvent(new DumpEvent(s"***** ${dasm(inst)} *****"))
+    println(s"***** ${dasm(inst)} *****")
     poke(c.io.ctrl.inst, inst.litValue())
     expect(GoldControl(new ControlIn(inst)))
   }

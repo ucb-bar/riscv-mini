@@ -1,20 +1,23 @@
 package mini
 
 import Chisel._
+import Chisel.swtesters.ClassicTester
 import scala.collection.mutable.HashMap
 
-class CoreSimpleTests(c: Core, log: Option[java.io.PrintStream]) 
-    extends LogTester(c, log) with RandInsts {
+class CoreSimpleTests(c: Core) extends ClassicTester(c) with RandInsts {
+  type DUT = Core
   val evec = Const.PC_EVEC.litValue()
   def doTest(test: List[UInt]) {
     val mem = HashMap[Int, Byte]() // mock memory
     // Reset
     reset(5)
-    for (i <- 0 until c.dpath.regFile.regs.n) {
+    for (i <- 0 until c.dpath.regFile.regs.size) {
+      /* TODO:
       if (i == 0)
         pokeAt(c.dpath.regFile.regs, 0, i)
       else
-        pokeAt(c.dpath.regFile.regs, int(rnd.nextInt() & 0xffffffff), i)
+        pokeAt(c.dpath.regFile.regs, int(rnd.nextInt() & 0xffffffff), i) 
+      */
     }
 
     do {
@@ -33,17 +36,17 @@ class CoreSimpleTests(c: Core, log: Option[java.io.PrintStream])
       
       step(1)
       if (ire) {
-        addEvent(new DumpEvent(s"FEED: ${dasm(inst)}"))
+        println(s"FEED: ${dasm(inst)}")
         poke(c.io.icache.resp.bits.data, inst.litValue())
       }
       if (dre) {
         if (dwe) {
           (0 until 4) filter (i => (dwe >> i) & 1) foreach { i => 
             mem(daddr+i) = (din >> 8*i).toByte
-            addEvent(new DumpEvent("MEM[%x] <- %x".format(daddr+i, mem(daddr+i))))
+            println("MEM[%x] <- %x".format(daddr+i, mem(daddr+i)))
           }
         } else {
-          addEvent(new DumpEvent("MEM[%x] -> %x".format(daddr, dout)))
+          println("MEM[%x] -> %x".format(daddr, dout))
           poke(c.io.dcache.resp.bits.data, dout)
         }
       }

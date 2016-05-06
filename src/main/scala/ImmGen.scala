@@ -41,5 +41,5 @@ class ImmGenMux(implicit p: Parameters) extends ImmGen()(p) {
            Mux(io.sel === IMM_I, io.inst(20),
            Mux(io.sel === IMM_Z, io.inst(15), UInt(0))))
 
-  io.out := Cat(sign, b30_20, b19_12, b11, b10_5, b4_1, b0).asSInt
+  io.out := Cat(sign, b30_20, b19_12, b11, b10_5, b4_1, b0).asSInt.asUInt
 }

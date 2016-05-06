@@ -1,12 +1,11 @@
 package mini
 
 import Chisel._
-import Chisel.AdvTester._
 import scala.collection.mutable.HashMap
 
 trait RISCVCommon {
   import Instructions._
-  implicit def boolToBoolean(x: Bool) = x.isTrue
+  implicit def boolToBoolean(x: Bool) = x.litValue() == 1
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
@@ -110,12 +109,10 @@ trait RISCVCommon {
   }
 }
 
-trait RandInsts extends Tests with RISCVCommon {
+trait RandInsts extends Chisel.swtesters.ClassicTests with RISCVCommon {
   import Instructions._
-  implicit def bigIntToBoolean(x: BigInt) = x != 0
-  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
   implicit def bigIntToInt(x: BigInt) = x.toInt
-  implicit def uintToBigInt(x: UInt) = x.litValue()
+  implicit def bigIntToBoolean(x: BigInt) = x != 0
 
   /* Define tests */
   def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
@@ -128,7 +125,7 @@ trait RandInsts extends Tests with RISCVCommon {
   def rand_addr = UInt(rnd.nextInt())
   def rand_data = int(rnd.nextInt())
 
-  def insts = List(
+  def insts: List[UInt] = List(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),
@@ -225,12 +222,4 @@ trait RandInsts extends Tests with RISCVCommon {
     bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
     exceptionTest -> Array((1, 2), (2, 3), (3, 4))
   )
-}
-
-class LogTester[+T <: Module](c: T, log: Option[java.io.PrintStream]) 
-    extends Tester(c, log == None) {
-  log match {
-    case None =>
-    case Some(f) => addObserver(new Observer(file=f))
-  }
 }

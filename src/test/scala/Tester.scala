@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.AdvTester._
+import Chisel.swtesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
 import java.io.PrintStream
@@ -92,8 +92,7 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20,
 
 trait MiniTests extends AdvTests {
   implicit def bigIntToBoolean(x: BigInt) = x != 0
-  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
-  implicit def boolToBoolean(x: Bool) = x.isTrue
+  implicit def boolToBoolean(x: Bool) = x.litValue() == 1
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
@@ -175,11 +174,11 @@ case class MiniTestArgs(
   maxcycles: Long = 500000, 
   dumpFile: Option[String] = None,
   logFile: Option[String] = None,
-  testCmd: Option[String] = Driver.testCommand,
-  verbose: Boolean = true)
+  testCmd: Option[String] = None,
+  verbose: Boolean = false)
 
-class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
-    c, false, 16, args.testCmd, args.dumpFile) with MiniTests {
+class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c) with MiniTests {
+  type DUT = Core
   val log = args.logFile match {
     case None    => System.out
     case Some(f) => new PrintStream(f)
@@ -196,7 +195,6 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(
     dreqHandler.outputs, drespHandler.inputs, peek(c.io.dcache.abort), 
     if (args.verbose) Some(log) else None, 4)
 
-  if (args.verbose) addObserver(new Observer(file=log))
   mem loadMem args.loadmem
   preprocessors += mem
   wire_poke(c.io.icache.resp.valid, true)
@@ -306,8 +304,8 @@ class NastiMem(
   }
 }
 
-class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
-    c, false, 16, args.testCmd, args.dumpFile) with MiniTests {
+class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTests {
+  type DUT = Tile
   val log = args.logFile match {
     case None    => System.out
     case Some(f) => new PrintStream(f)
@@ -336,7 +334,6 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(
     awHandler.outputs, wHandler.outputs,
     if (args.verbose) Some(log) else None, 5, c.nastiXDataBits/8)
 
-  if (args.verbose) addObserver(new Observer(file=log))
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
     preprocessors += nasti
