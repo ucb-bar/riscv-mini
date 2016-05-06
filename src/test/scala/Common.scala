@@ -12,6 +12,11 @@ trait RISCVCommon {
   def csr(inst: UInt) =  (inst.litValue() >> 20)
   def reg(x: Int) = UInt(x, 5)
   def imm(x: Int) = SInt(x, 21)
+  def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
+    assert(x.isLit() && y.isLit())
+    Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
+  }
+  def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
   val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
@@ -97,14 +102,14 @@ trait RISCVCommon {
 
   def dasm(x: UInt) = {
     def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => "???(%s)".format(x.litValue().toString(16))
-      case (p, f) :: tail => if (x === p) f(x) else iter(tail)
+      case Nil => "???(%x)".format(x.litValue())
+      case (p, f) :: tail => if (p.value == (p.mask & x.litValue())) f(x) else iter(tail)
     }
-    if (x === FENCEI) "FENCEI"
-    else if (x === ECALL) "ECALL"
-    else if (x === EBREAK) "EBREAK"
-    else if (x === ERET) "ERET"
-    else if (x === NOP) "NOP"
+    if (x.litValue() == FENCEI.litValue()) "FENCEI"
+    else if (x.litValue() == ECALL.litValue()) "ECALL"
+    else if (x.litValue() == EBREAK.litValue()) "EBREAK"
+    else if (x.litValue() == ERET.litValue()) "ERET"
+    else if (x.litValue() == NOP.litValue()) "NOP"
     else iter(instPats zip instFmts)
   }
 }

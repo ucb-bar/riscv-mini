@@ -26,7 +26,7 @@ object GoldControl {
   private val default = Control.default map (_.litValue())
   private val map = Control.map map (x => x._1 -> (x._2 map (_.litValue())))
   def apply(in: ControlIn) = new ControlOut(
-    map find (x => (x._1 === in.inst).litValue() == 1) match {
+    map find (x => x._1.value == (x._1.mask & in.inst.litValue())) match {
       case None => default
       case Some(p) => p._2
     })
