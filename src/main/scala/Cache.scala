@@ -118,7 +118,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     dataMem.zipWithIndex foreach { case (mem, i) =>
       val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
       mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
-      //TODO: mem setName s"dataMem_${i}"
+      mem suggestName s"dataMem_${i}"
     }
   }
 

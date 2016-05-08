@@ -8,8 +8,8 @@ object MiniBuild extends Build {
   )
   lazy val chisel    = project
   lazy val firrtl    = project
-  lazy val testers   = project dependsOn (chisel, firrtl)
   lazy val cde       = project dependsOn chisel
   lazy val junctions = project dependsOn cde
+  lazy val testers   = project dependsOn (chisel, firrtl)
   lazy val root      = (project in file(".")).settings(settings:_*).dependsOn(junctions, testers)
 }
