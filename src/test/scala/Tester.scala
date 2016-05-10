@@ -318,7 +318,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
     {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   lazy val mem = new TileMem(
     cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 
-    if (args.verbose) Some(log) else None, 5, c.mifDataBeats, c.mifDataBits)
+    if (args.verbose) Some(log) else None, 5, c.icache.mifDataBeats, c.icache.mifDataBits)
   
   lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
     new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
@@ -332,7 +332,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
   lazy val nasti = new NastiMem(
     arHandler.outputs, rHandler.inputs,
     awHandler.outputs, wHandler.outputs,
-    if (args.verbose) Some(log) else None, 5, c.nastiXDataBits/8)
+    if (args.verbose) Some(log) else None, 5, c.icache.nastiXDataBits/8)
 
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
@@ -348,5 +348,5 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
     dataHandler.process()
     respHandler.process()
   }
-  if (!run(c.io.htif.host, args.maxcycles, Some(log))) fail
+  if (!run(c.io.host, args.maxcycles, Some(log))) fail
 }

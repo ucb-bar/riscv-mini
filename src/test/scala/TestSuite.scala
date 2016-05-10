@@ -89,12 +89,14 @@ class UnitTestSuite extends MiniTestSuite {
 
 class ISATestSuite extends MiniTestSuite {
   val t = ISATests
+  val params = cde.Parameters.root((new MiniConfig).toInstance)
   runTester(elaborate(new Core), t)
-  runTester(elaborate(new Tile), t)
+  runTester(elaborate(new Tile(params)), t)
 }
 
 class BmarkTestSuite extends MiniTestSuite {
   val t = BmarkTests
+  val params = cde.Parameters.root((new MiniConfig).toInstance)
   runTester(elaborate(new Core), t)
-  runTester(elaborate(new Tile), t)
+  runTester(elaborate(new Tile(params)), t)
 }
