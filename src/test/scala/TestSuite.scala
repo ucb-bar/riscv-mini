@@ -29,7 +29,7 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
   protected val logDir = new File("test-logs")
   protected val dumpDir = new File("test-dumps")
   protected val baseArgs = Array(
-    "--targetDir", outDir.getCanonicalPath.toString, "--genHarness", "--compile")
+    "--targetDir", outDir.getCanonicalPath.toString, "--v", "--genHarness", "--compile")
   implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
 
   def elaborate[T <: Module : ClassTag](c: => T, debug: Boolean=false): T = {
