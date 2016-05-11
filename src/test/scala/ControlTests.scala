@@ -35,24 +35,24 @@ object GoldControl {
 class ControlTests(c: Control) extends ClassicTester(c) with RandInsts {
   type DUT = Control
   def expect(ctrl: ControlOut) {
-    expect(c.io.ctrl.pc_sel,    ctrl.pc_sel)
-    expect(c.io.ctrl.A_sel,     ctrl.a_sel)
-    expect(c.io.ctrl.B_sel,     ctrl.b_sel)
-    expect(c.io.ctrl.imm_sel,   ctrl.imm_sel)
-    expect(c.io.ctrl.alu_op,    ctrl.alu_op)
-    expect(c.io.ctrl.br_type,   ctrl.br_type)
-    expect(c.io.ctrl.inst_kill, ctrl.inst_kill)
-    expect(c.io.ctrl.st_type,   ctrl.st_type)
-    expect(c.io.ctrl.ld_type,   ctrl.ld_type)
-    expect(c.io.ctrl.wb_sel,    ctrl.wb_sel)
-    expect(c.io.ctrl.wb_en,     ctrl.wb_en)
-    expect(c.io.ctrl.csr_cmd,   ctrl.csr_cmd)
-    expect(c.io.ctrl.illegal,   ctrl.illegal)
+    expect(c.io.pc_sel,    ctrl.pc_sel)
+    expect(c.io.A_sel,     ctrl.a_sel)
+    expect(c.io.B_sel,     ctrl.b_sel)
+    expect(c.io.imm_sel,   ctrl.imm_sel)
+    expect(c.io.alu_op,    ctrl.alu_op)
+    expect(c.io.br_type,   ctrl.br_type)
+    expect(c.io.inst_kill, ctrl.inst_kill)
+    expect(c.io.st_type,   ctrl.st_type)
+    expect(c.io.ld_type,   ctrl.ld_type)
+    expect(c.io.wb_sel,    ctrl.wb_sel)
+    expect(c.io.wb_en,     ctrl.wb_en)
+    expect(c.io.csr_cmd,   ctrl.csr_cmd)
+    expect(c.io.illegal,   ctrl.illegal)
   }
 
   for ((inst, i) <- insts.zipWithIndex) {
     println(s"***** ${dasm(inst)} *****")
-    poke(c.io.ctrl.inst, inst.litValue())
+    poke(c.io.inst, inst.litValue())
     expect(GoldControl(new ControlIn(inst)))
   }
 }

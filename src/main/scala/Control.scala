@@ -138,14 +138,10 @@ class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
   val illegal   = Bool(OUTPUT)
 }
 
-class ControlIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val ctrl = new ControlSignals
-}
-
 class Control(implicit p: Parameters) extends Module {
-  val io = new ControlIO
-  val ctrlSignals = ListLookup(io.ctrl.inst, Control.default, Control.map)
-  val st_type  = Reg(io.ctrl.st_type)
+  val io = new ControlSignals
+  val ctrlSignals = ListLookup(io.inst, Control.default, Control.map)
+  val st_type  = Reg(io.st_type)
   val ld_type  = Reg(ctrlSignals(8))
   val wb_sel   = Reg(ctrlSignals(9))
   val wb_en    = Reg(Bool())
@@ -154,21 +150,21 @@ class Control(implicit p: Parameters) extends Module {
   val pc_check = Reg(Bool())
 
   // Control signals for Fetch
-  io.ctrl.pc_sel    := ctrlSignals(0)
-  io.ctrl.inst_kill := ctrlSignals(6).toBool 
+  io.pc_sel    := ctrlSignals(0)
+  io.inst_kill := ctrlSignals(6).toBool 
 
   // Control signals for Execute
-  io.ctrl.A_sel   := ctrlSignals(1)
-  io.ctrl.B_sel   := ctrlSignals(2)
-  io.ctrl.imm_sel := ctrlSignals(3)
-  io.ctrl.alu_op  := ctrlSignals(4)
-  io.ctrl.br_type := ctrlSignals(5)
-  io.ctrl.st_type := ctrlSignals(7)
+  io.A_sel   := ctrlSignals(1)
+  io.B_sel   := ctrlSignals(2)
+  io.imm_sel := ctrlSignals(3)
+  io.alu_op  := ctrlSignals(4)
+  io.br_type := ctrlSignals(5)
+  io.st_type := ctrlSignals(7)
 
   // Control signals for Write Back
-  io.ctrl.ld_type := ctrlSignals(8)
-  io.ctrl.wb_sel  := ctrlSignals(9)
-  io.ctrl.wb_en   := ctrlSignals(10).toBool
-  io.ctrl.csr_cmd := ctrlSignals(11)
-  io.ctrl.illegal := ctrlSignals(12)
+  io.ld_type := ctrlSignals(8)
+  io.wb_sel  := ctrlSignals(9)
+  io.wb_en   := ctrlSignals(10).toBool
+  io.csr_cmd := ctrlSignals(11)
+  io.illegal := ctrlSignals(12)
 }

@@ -35,5 +35,5 @@ class Core(implicit val p: Parameters) extends Module with CoreParams {
   io.host <> dpath.io.host
   dpath.io.icache <> io.icache
   dpath.io.dcache <> io.dcache
-  dpath.io.ctrl <> ctrl.io.ctrl
+  dpath.io.ctrl <> ctrl.io
 }
