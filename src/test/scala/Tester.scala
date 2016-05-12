@@ -106,9 +106,9 @@ trait MiniTests extends AdvTests {
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
     val f = log getOrElse System.out
     f.println("*** %s *** (%s) after %d simulation cycles".format(
-            if (ok) "PASSED" else "FAILED", reason, cycles))
+            if (ok && tohost == 1) "PASSED" else "FAILED", reason, cycles))
     f.println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
-    ok
+    ok && tohost == 1
   }
 }
 

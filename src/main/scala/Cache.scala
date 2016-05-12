@@ -65,9 +65,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val cpu_mask = Reg(io.cpu.req.bits.mask)
 
   // Counters
-  require(nastiXDataBits == mifDataBits)
-  require(mifDataBeats > 0)
-  require(bBits / nastiXDataBits == mifDataBeats)
+  require(nastiXDataBits == mifDataBits, "$nastiXDataBits != $mifDataBits")
+  require(mifDataBeats > 0, s"$mifDataBeats <= 0")
+  require(bBits / nastiXDataBits == mifDataBeats, s"$bBits / $nastiXDataBits != $mifDataBeats")
   val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire(), mifDataBeats)
   val (write_count, write_wrap_out) = Counter(io.nasti.w.fire(), mifDataBeats)
 
