@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters._
+import Chisel.iotesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
 

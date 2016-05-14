@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 import scala.collection.mutable.HashMap
 
 class CoreSimpleTests(c: Core) extends ClassicTester(c) with RandInsts {

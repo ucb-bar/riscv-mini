@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 import scala.collection.mutable.HashMap
 
 case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 

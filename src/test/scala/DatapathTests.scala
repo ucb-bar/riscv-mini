@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)

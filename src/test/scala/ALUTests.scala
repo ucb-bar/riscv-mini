@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 
 case class ALUIn(op: BigInt, A: BigInt, B: BigInt)
 case class ALUOut(out: BigInt, sum: BigInt)

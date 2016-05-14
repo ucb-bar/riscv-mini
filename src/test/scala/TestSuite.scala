@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.{chiselMain, chiselMainTest, ClassicTester}
+import Chisel.iotesters.{chiselMain, chiselMainTest, ClassicTester}
 import java.io.{File, PrintStream}
 import sys.process.stringSeqToProcess
 import scala.reflect.ClassTag

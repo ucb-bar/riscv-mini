@@ -114,7 +114,7 @@ trait RISCVCommon {
   }
 }
 
-trait RandInsts extends Chisel.swtesters.ClassicTests with RISCVCommon {
+trait RandInsts extends Chisel.iotesters.ClassicTests with RISCVCommon {
   import Instructions._
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def bigIntToBoolean(x: BigInt) = x != 0

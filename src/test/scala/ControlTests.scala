@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 
 case class ControlIn(inst: UInt)
 

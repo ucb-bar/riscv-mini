@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.swtesters.ClassicTester
+import Chisel.iotesters.ClassicTester
 
 case class BrCondIn(brType: BigInt, rs1: BigInt, rs2: BigInt)
 case class BrCondOut(taken: Boolean)
