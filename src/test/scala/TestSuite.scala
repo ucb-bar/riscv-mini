@@ -45,17 +45,18 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
     }
   }
 
-  def runTester[M <: Module : ClassTag](c: M, t: TestType) {
+  def runTester[M <: Module : ClassTag](c: M, t: TestType, latency: Int = 5) {
     val (dir, tests, maxcycles) = t match {
       case ISATests   => (new java.io.File("riscv-tests/isa"), isaTests, 15000L)
-      case BmarkTests => (new java.io.File("riscv-bmarks"), bmarkTests, 500000L)
+      case BmarkTests => (new java.io.File("riscv-bmarks"), bmarkTests, 1500000L)
     }
     val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
     behavior of modName
     assert(dir.exists)
     tests map { test =>
       val loadmem = s"${dir}/${test}.hex"
-      val args = new MiniTestArgs(loadmem, maxcycles)
+      val args = new MiniTestArgs(loadmem, maxcycles,
+        logFile=Some(s"${logDir}/${test}.log"), memlatency=latency)
       if (!(new File(loadmem).exists)) {
         assert(Seq("make", "-C", dir.getPath.toString, s"${test}.hex", 
                    """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
