@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 import scala.collection.mutable.HashMap
 
 case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
@@ -10,10 +10,10 @@ case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
 
 class GoldCSR extends RISCVCommon {
   implicit def uintToBigInt(x: UInt) = x.litValue()
-  private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
-    (if (reg === CSR.mcpuid) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
-    else if (reg === CSR.mstatus) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
-    else if (reg === CSR.mtvec) Const.PC_EVEC.litValue()
+  private val regs = HashMap[BigInt, BigInt](CSR.regs map (_.litValue()) map (reg => reg ->
+    (if (reg == CSR.mcpuid.litValue()) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
+    else if (reg == CSR.mstatus.litValue()) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
+    else if (reg == CSR.mtvec.litValue()) Const.PC_EVEC.litValue()
     else BigInt(0))):_*)
   private def mtvec = regs(CSR.mtvec)
   private def mepc  = regs(CSR.mepc)
@@ -110,7 +110,7 @@ class GoldCSR extends RISCVCommon {
       else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
       else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
       else BigInt(0)
-    val isInstRet = (in.inst =/= nop).litValue() == 1 && (!exception || isEcall || isEbreak)
+    val isInstRet = in.inst.litValue() != nop.litValue() && (!exception || isEcall || isEbreak)
     count(isInstRet)
     if (exception) {
       mepc = in.pc & -4
@@ -131,8 +131,7 @@ class GoldCSR extends RISCVCommon {
   }
 }
 
-class CSRTests(c: CSR) extends ClassicTester(c) with RandInsts {
-  type DUT = CSR
+class CSRTests(c: CSR) extends PeekPokeTester(c) with RandInsts {
   override val insts: List[UInt] = 
     (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
@@ -199,7 +198,8 @@ class CSRTests(c: CSR) extends ClassicTester(c) with RandInsts {
       ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
     println(s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value))
     poke(in)
-    expect(goldCSR(in))
+    val good = goldCSR(in)
+    if (t > 0L) expect(good)
     step(1) // update registers
   } 
 }

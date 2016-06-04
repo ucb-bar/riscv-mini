@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 
 case class ControlIn(inst: UInt)
 
@@ -32,8 +32,7 @@ object GoldControl {
     })
 }
 
-class ControlTests(c: Control) extends ClassicTester(c) with RandInsts {
-  type DUT = Control
+class ControlTests(c: Control) extends PeekPokeTester(c) with RandInsts {
   def expect(ctrl: ControlOut) {
     expect(c.io.pc_sel,    ctrl.pc_sel)
     expect(c.io.A_sel,     ctrl.a_sel)

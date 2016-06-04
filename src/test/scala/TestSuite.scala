@@ -1,10 +1,11 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.{chiselMain, chiselMainTest, ClassicTester}
+import Chisel.iotesters.{chiselMain, chiselMainTest, PeekPokeTester}
 import java.io.{File, PrintStream}
 import sys.process.stringSeqToProcess
 import scala.reflect.ClassTag
+import org.scalatest.{FlatSpec, BeforeAndAfterAll, ParallelTestExecution}
 
 trait RiscVTests {
   trait TestType
@@ -22,81 +23,77 @@ trait RiscVTests {
   val bmarkTests = List(
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
+
+  val outDir = new File("test-outs") ; outDir.mkdirs
+  def baseArgs(dir: File) = Array(
+    "--targetDir", dir.getCanonicalPath.toString,
+    "--v", "--genHarness", "--compile", "--test")
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
 }
 
-abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
-  protected val outDir = new File("test-outs")
-  protected val logDir = new File("test-logs")
-  protected val dumpDir = new File("test-dumps")
-  protected val baseArgs = Array(
-    "--targetDir", outDir.getCanonicalPath.toString, "--v", "--genHarness", "--compile")
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
-
-  def elaborate[T <: Module : ClassTag](c: => T, debug: Boolean=false): T = {
-    val modName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-    chiselMain(baseArgs ++ Array("--testCommand", s"${outDir}/V${modName}"), () => c)
-  }
-
-  def runUnitTests[M <: Module : ClassTag](c: => M)(tester: M => ClassicTester[M]) {
+class UnitTestSuite extends org.scalatest.FlatSpec with RiscVTests {
+  def runUnitTests[M <: Module : ClassTag](c: => M)(tester: M => PeekPokeTester[M]) {
     val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
+    val dir = new File(s"$outDir/$modName")
     behavior of modName
     it should "pass verilator" in {
-      chiselMainTest(baseArgs, () => c)(tester)
+      val args = baseArgs(dir) ++ Array(
+        "--logFile", s"$dir/$modName-verilator.log")
+      chiselMainTest(args, () => c)(tester)
     }
   }
-
-  def runTester[M <: Module : ClassTag](c: M, t: TestType) {
-    val (dir, tests, maxcycles) = t match {
-      case ISATests   => (new java.io.File("riscv-tests/isa"), isaTests, 15000L)
-      case BmarkTests => (new java.io.File("riscv-bmarks"), bmarkTests, 500000L)
-    }
-    val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
-    behavior of modName
-    assert(dir.exists)
-    tests map { test =>
-      val loadmem = s"${dir}/${test}.hex"
-      val args = new MiniTestArgs(loadmem, maxcycles)
-      if (!(new File(loadmem).exists)) {
-        assert(Seq("make", "-C", dir.getPath.toString, s"${test}.hex", 
-                   """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
-      }
-      println(s"runs ${test} of ${modName}")
-      test -> (c match {
-        case core: Core => (new CoreTester(core, args)).finish
-        case tile: Tile => (new TileTester(tile, args)).finish
-      })
-    } foreach {case (test, pass) =>
-      it should s"pass ${test}" in { assert(pass) }
-    }
-  }
-
-  if (!logDir.exists) logDir.mkdir
-  if (!dumpDir.exists) dumpDir.mkdir
-}
-
-class UnitTestSuite extends MiniTestSuite {
   runUnitTests(new ALUSimple)(m => new ALUTests(m))
   runUnitTests(new ALUArea)(m => new ALUTests(m))
   runUnitTests(new BrCondSimple)(m => new BrCondTests(m))
   runUnitTests(new ImmGenWire)(m => new ImmGenTests(m))
   runUnitTests(new ImmGenMux)(m => new ImmGenTests(m))
   runUnitTests(new Control)(m => new ControlTests(m))
-  // runUnitTests(new CSR)(m => new CSRTests(m))
-  // runUnitTests(new Datapath)(m => new DatapathTests(m))
+  runUnitTests(new CSR)(m => new CSRTests(m))
+  runUnitTests(new Datapath)(m => new DatapathTests(m))
   runUnitTests(new Cache)(m => new CacheTests(m))
-  // runUnitTests(new Core)(m => new CoreSimpleTests(m))
+  runUnitTests(new Core)(m => new CoreSimpleTests(m))
 }
 
-class ISATestSuite extends MiniTestSuite {
-  val t = ISATests
-  val params = cde.Parameters.root((new MiniConfig).toInstance)
-  runTester(elaborate(new Core), t)
-  runTester(elaborate(new Tile(params)), t)
+abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests { 
+  def runTester[T <: Module : ClassTag](mod: => T, t: TestType) {
+    val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
+    val args = baseArgs(new File(s"$outDir/$dutName")) ++ Array("--noUpdate")
+    val dut = chiselMain(args, () => mod)
+    val (dir, tests, maxcycles) = t match {
+      case ISATests   => (new File("riscv-tests/isa"), isaTests, 15000L)
+      case BmarkTests => (new File("riscv-bmarks"), bmarkTests, 500000L)
+    }
+    assert(dir.exists)
+    behavior of dutName
+    tests foreach { t => it should s"pass $t" in {
+      val loadmem = s"$dir/$t.hex"
+      val logFile = Some(s"$outDir/$dutName/$t-verilator.log")
+      val waveform = Some(s"$outDir/$dutName/$t.vcd")
+      val args = new MiniTestArgs(loadmem, maxcycles, logFile=logFile, waveform=waveform)
+      if (!(new File(loadmem).exists)) {
+        assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
+                   """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
+      }
+      assert(dut match {
+        case core: Core => (new CoreTester(core, args)).finish
+        case tile: Tile => (new TileTester(tile, args)).finish
+      })
+    }}
+  }
 }
 
-class BmarkTestSuite extends MiniTestSuite {
-  val t = BmarkTests
-  val params = cde.Parameters.root((new MiniConfig).toInstance)
-  runTester(elaborate(new Core), t)
-  runTester(elaborate(new Tile(params)), t)
+class CoreISATestSuite extends MiniTestSuite {
+  runTester(new Core, ISATests)
+}
+
+class TileISATestSuite extends MiniTestSuite {
+  runTester(new Tile(p), ISATests)
+}
+
+class CoreBmarkTestSuite extends MiniTestSuite {
+  runTester(new Core, BmarkTests)
+}
+
+class TileBmarkTestSuite extends MiniTestSuite {
+  runTester(new Tile(p), BmarkTests)
 }

@@ -6,12 +6,14 @@ import scala.collection.mutable.HashMap
 trait RISCVCommon {
   import Instructions._
   implicit def boolToBoolean(x: Bool) = x.litValue() == 1
+  implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
+  implicit def uintToBitPat(u: UInt) = BitPat(u)
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
   def csr(inst: UInt) =  (inst.litValue() >> 20)
-  def reg(x: Int) = UInt(x, 5)
-  def imm(x: Int) = SInt(x, 21)
+  def reg(x: Int) = UInt(x & ((1 << 4) - 1), 5)
+  def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
   def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
     assert(x.isLit() && y.isLit())
     Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
@@ -114,7 +116,7 @@ trait RISCVCommon {
   }
 }
 
-trait RandInsts extends Chisel.iotesters.ClassicTests with RISCVCommon {
+trait RandInsts extends Chisel.iotesters.PeekPokeTests with RISCVCommon {
   import Instructions._
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def bigIntToBoolean(x: BigInt) = x != 0

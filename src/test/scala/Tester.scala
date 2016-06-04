@@ -37,8 +37,8 @@ case class TestNastiWriteResp(id: Int, resp: Int) {
   override def toString = "[Nasti Write Resp] id: %x, resp: %x".format(id, resp)
 }
 
-abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, 
-    log: Option[PrintStream] = None) extends Processable {
+abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: PrintStream) extends Processable {
   require(word_width % 4 == 0, "word_width should be divisible by 4")
   implicit def toBigInt(x: UInt) = x.litValue()
   private val addrMask = (1 << log2Up(depth))-1
@@ -46,21 +46,14 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20,
   private def int(b: Byte) = (BigInt((b >>> 1) & 0x7f) << 1) | b & 0x1
   private def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
   protected val off = log2Up(word_width)
-  protected val f = log getOrElse System.out
 
   def read(addr: Int) = {
     val data = mem(addr & addrMask)
-    log match {
-      case None =>
-      case Some(f) => f.println("MEM[%x] => %x".format(addr & addrMask, data))
-    }
+    if (verbose) logger println "MEM[%x] => %x".format(addr & addrMask, data)
     data
   }
   def write(addr: Int, data: BigInt) {
-    log match {
-      case None =>
-      case Some(f) => f.println("MEM[%x] <= %x".format(addr & addrMask, data))
-    }
+    if (verbose) logger println "MEM[%x] <= %x".format(addr & addrMask, data)
     mem(addr & addrMask) = data 
   }
   def loadMem(test: Seq[UInt]) {
@@ -96,7 +89,7 @@ trait MiniTests extends AdvTests {
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def uintToBigInt(x: UInt) = x.litValue()
 
-  def run(host: HostIO, maxcycles: Long, log: Option[PrintStream] = None) = {
+  def run(host: HostIO, maxcycles: Long) = {
     val startTime = System.nanoTime
     val ok = eventually(peek(host.tohost), maxcycles)
     val tohost = peek(host.tohost)
@@ -104,10 +97,9 @@ trait MiniTests extends AdvTests {
     val simTime = (endTime - startTime) / 1000000000.0
     val simSpeed = cycles / simTime
     val reason = if (cycles < maxcycles) "tohost = " + tohost else "timeout"
-    val f = log getOrElse System.out
-    f.println("*** %s *** (%s) after %d simulation cycles".format(
+    println("*** %s *** (%s) after %d simulation cycles".format(
             if (ok && tohost == 1) "PASSED" else "FAILED", reason, cycles))
-    f.println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
+    println("Time elapsed = %.1f s, Simulation Speed = %.2f Hz".format(simTime, simSpeed))
     ok && tohost == 1
   }
 }
@@ -115,17 +107,14 @@ trait MiniTests extends AdvTests {
 class CoreMem(
     ireqQ: ScalaQueue[TestCacheReq], irespQ: ScalaQueue[TestCacheResp],
     dreqQ: ScalaQueue[TestCacheReq], drespQ: ScalaQueue[TestCacheResp], abort: => BigInt, 
-    log: Option[PrintStream] = None, word_width: Int = 4, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) with RISCVCommon {
+    word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolean = true)(implicit logger: PrintStream)
+    extends SimMem(word_width, depth, verbose)(logger) with RISCVCommon {
   private var isWr = false
   private var wrAddr = 0
   private var wrData = BigInt(0)
   def process {
     if (isWr && abort == 0) {
-      log match {
-        case None =>
-        case Some(f) => f.println("MEM[%x] <- %s".format(wrAddr, wrData))
-      }
+      if (verbose) logger println "MEM[%x] <- %s".format(wrAddr, wrData)
       write(wrAddr, wrData)
     } 
     isWr = false
@@ -133,10 +122,7 @@ class CoreMem(
     if (!ireqQ.isEmpty) {
       val ireq = ireqQ.dequeue
       val inst = read(ireq.addr>>off)
-      log match {
-        case None =>
-        case Some(f) => f.println("MEM[%x] -> %s".format(ireq.addr, dasm(UInt(inst))))
-      }
+      if (verbose) logger println "MEM[%x] -> %s".format(ireq.addr, dasm(UInt(inst)))
       irespQ.enqueue(new TestCacheResp(inst))
     } else {
       irespQ.enqueue(new TestCacheResp(BigInt(0)))
@@ -158,10 +144,7 @@ class CoreMem(
     } else if (!dreqQ.isEmpty) {
       val dreq = dreqQ.dequeue
       val data = read(dreq.addr>>off)
-      log match {
-        case None =>
-        case Some(f) => f.println("MEM[%x] -> %s".format(dreq.addr, data))
-      }
+      logger println "MEM[%x] -> %s".format(dreq.addr, data)
       drespQ.enqueue(new TestCacheResp(data))
     } else {
       drespQ.enqueue(new TestCacheResp(BigInt(0)))
@@ -172,17 +155,13 @@ class CoreMem(
 case class MiniTestArgs(
   loadmem: String, 
   maxcycles: Long = 500000, 
-  dumpFile: Option[String] = None,
   logFile: Option[String] = None,
+  waveform: Option[String] = None,
   testCmd: Option[String] = None,
   verbose: Boolean = false)
 
-class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c) with MiniTests {
-  type DUT = Core
-  val log = args.logFile match {
-    case None    => System.out
-    case Some(f) => new PrintStream(f)
-  }
+class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c, args.verbose, 
+    logFile=args.logFile, waveform=args.waveform) with MiniTests {
   val ireqHandler = new ValidSink(c.io.icache.req, 
     (req: CacheReq) => new TestCacheReq(peek(req.addr), peek(req.data), peek(req.mask)))
   val dreqHandler = new ValidSink(c.io.dcache.req, 
@@ -193,7 +172,7 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c) with MiniTest
     (resp: CacheResp, in: TestCacheResp) => reg_poke(resp.data, in.data))
   val mem = new CoreMem(ireqHandler.outputs, irespHandler.inputs, 
     dreqHandler.outputs, drespHandler.inputs, peek(c.io.dcache.abort), 
-    if (args.verbose) Some(log) else None, 4)
+    4, verbose=args.verbose)
 
   mem loadMem args.loadmem
   preprocessors += mem
@@ -204,13 +183,13 @@ class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c) with MiniTest
   mem.process()
   irespHandler.process()
   drespHandler.process()
-  if (!run(c.io.host, args.maxcycles, Some(log))) fail
+  if (!run(c.io.host, args.maxcycles)) fail
 }
 
 class TileMagicMem(
     cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
-    log: Option[PrintStream], beats: Int, databits: Int, depth: Int = 1 << 20) 
-    extends SimMem(beats*databits/8, depth, log) {
+    beats: Int, databits: Int, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: PrintStream) extends SimMem(beats*databits/8, depth, verbose)(logger) {
   private val mask = (BigInt(1) << databits) - 1
   def process {
     if (!cmdQ.isEmpty && cmdQ.front.rw && dataQ.size >= beats) {
@@ -229,8 +208,8 @@ class TileMagicMem(
 class NastiMagicMem(
     arQ: ScalaQueue[TestNastiReadAddr],  rQ: ScalaQueue[TestNastiReadData],
     awQ: ScalaQueue[TestNastiWriteAddr], wQ: ScalaQueue[TestNastiWriteData],
-    log: Option[PrintStream], word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
+    word_width: Int = 16, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: PrintStream) extends SimMem(word_width, depth, verbose)(logger) {
   private var aw: Option[TestNastiWriteAddr] = None
   def process = aw match {
     case Some(p) if wQ.size > p.len =>
@@ -250,8 +229,8 @@ class NastiMagicMem(
      
 class TileMem(
     cmdQ: ScalaQueue[TestMemReq], dataQ: ScalaQueue[TestMemData], respQ: ScalaQueue[TestMemResp],
-    log: Option[PrintStream], latency: Int, beats: Int, databits: Int, depth: Int = 1 << 20) 
-    extends SimMem(beats*databits/8, depth, log) {
+    latency: Int, beats: Int, databits: Int, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: PrintStream) extends SimMem(beats*databits/8, depth, verbose)(logger) {
   private val mask = (BigInt(1) << databits) - 1
   private val schedule = Array.fill(latency){ScalaQueue[TestMemResp]()}
   private var cur_cycle = 0
@@ -277,8 +256,8 @@ class TileMem(
 class NastiMem(
     arQ: ScalaQueue[TestNastiReadAddr],  rQ: ScalaQueue[TestNastiReadData],
     awQ: ScalaQueue[TestNastiWriteAddr], wQ: ScalaQueue[TestNastiWriteData],
-    log: Option[PrintStream], latency: Int, word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
+    latency: Int, word_width: Int = 16, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: PrintStream) extends SimMem(word_width, depth, verbose)(logger) {
   private var aw: Option[TestNastiWriteAddr] = None
   private val schedule = Array.fill(latency){ScalaQueue[TestNastiReadData]()}
   private var cur_cycle = 0
@@ -304,12 +283,8 @@ class NastiMem(
   }
 }
 
-class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTests {
-  type DUT = Tile
-  val log = args.logFile match {
-    case None    => System.out
-    case Some(f) => new PrintStream(f)
-  }
+class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c, args.verbose,
+    logFile=args.logFile, waveform=args.waveform) with MiniTests {
   lazy val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, (cmd: MemReqCmd) => 
     new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
   lazy val dataHandler = new DecoupledSink(c.io.mem.req_data, (data: MemData) => 
@@ -318,7 +293,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
     {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   lazy val mem = new TileMem(
     cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 
-    if (args.verbose) Some(log) else None, 5, c.icache.mifDataBeats, c.icache.mifDataBits)
+    5, c.icache.mifDataBeats, c.icache.mifDataBits, verbose=args.verbose)
   
   lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
     new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
@@ -332,7 +307,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
   lazy val nasti = new NastiMem(
     arHandler.outputs, rHandler.inputs,
     awHandler.outputs, wHandler.outputs,
-    if (args.verbose) Some(log) else None, 5, c.icache.nastiXDataBits/8)
+    5, c.icache.nastiXDataBits/8, verbose=args.verbose)
 
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
@@ -348,5 +323,5 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c) with MiniTest
     dataHandler.process()
     respHandler.process()
   }
-  if (!run(c.io.host, args.maxcycles, Some(log))) fail
+  if (!run(c.io.host, args.maxcycles)) fail
 }

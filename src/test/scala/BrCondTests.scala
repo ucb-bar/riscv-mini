@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 
 case class BrCondIn(brType: BigInt, rs1: BigInt, rs2: BigInt)
 case class BrCondOut(taken: Boolean)
@@ -17,8 +17,7 @@ object GoldBrCond {
     else if (in.brType == BR_GEU.litValue()) in.rs1 >= in.rs2 else false)
 }
 
-class BrCondTests[+T <: BrCond](c: T) extends ClassicTester(c) with RandInsts {
-  type DUT = BrCond
+class BrCondTests[+T <: BrCond](c: T) extends PeekPokeTester(c) with RandInsts {
   override val insts = (List.fill(10){List(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),

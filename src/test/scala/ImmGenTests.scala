@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 
 case class ImmGenIn(inst: UInt, sel: BigInt)
 case class ImmGenOut(out: BigInt)
@@ -17,12 +17,12 @@ object GoldImmGen extends RISCVCommon {
 }
 
 
-class ImmGenTests[+T <: ImmGen](c: T) extends ClassicTester(c) with RandInsts {
-  type DUT = ImmGen
+class ImmGenTests[+T <: ImmGen](c: T, logFile: Option[String] = None)
+    extends PeekPokeTester(c, logFile=logFile) with RandInsts {
   for (inst <- insts) {
     val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
-    println(s"*** ${dasm(inst)} ***")
+    logger println s"*** ${dasm(inst)} ***"
     poke(c.io.inst,  inst)
     poke(c.io.sel,   ctrl.imm_sel)
     expect(c.io.out, gold.out) 

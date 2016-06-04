@@ -1,7 +1,7 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 
 case class ALUIn(op: BigInt, A: BigInt, B: BigInt)
 case class ALUOut(out: BigInt, sum: BigInt)
@@ -34,8 +34,7 @@ object GoldALU {
   } 
 }
 
-class ALUTests[+T <: ALU](c: T) extends ClassicTester(c) with RandInsts {
-  type DUT = ALU
+class ALUTests[+T <: ALU](c: T) extends PeekPokeTester(c) with RandInsts {
   for (inst <- insts) {
     val a = rand_data
     val b = rand_data

@@ -1,11 +1,10 @@
 package mini
 
 import Chisel._
-import Chisel.iotesters.ClassicTester
+import Chisel.iotesters.PeekPokeTester
 import scala.collection.mutable.HashMap
 
-class CoreSimpleTests(c: Core) extends ClassicTester(c) with RandInsts {
-  type DUT = Core
+class CoreSimpleTests(c: Core) extends PeekPokeTester(c) with RandInsts {
   val evec = Const.PC_EVEC.litValue()
   def doTest(test: List[UInt]) {
     val mem = HashMap[Int, Byte]() // mock memory
