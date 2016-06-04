@@ -55,13 +55,13 @@ class UnitTestSuite extends org.scalatest.FlatSpec with RiscVTests {
 }
 
 abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests { 
-  def runTester[T <: Module : ClassTag](mod: => T, t: TestType) {
+  def runTester[T <: Module : ClassTag](mod: => T, t: TestType, latency: Int = 5) {
     val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
     val args = baseArgs(new File(s"$outDir/$dutName")) ++ Array("--noUpdate")
     val dut = chiselMain(args, () => mod)
     val (dir, tests, maxcycles) = t match {
       case ISATests   => (new File("riscv-tests/isa"), isaTests, 15000L)
-      case BmarkTests => (new File("riscv-bmarks"), bmarkTests, 500000L)
+      case BmarkTests => (new File("riscv-bmarks"), bmarkTests, 1500000L)
     }
     assert(dir.exists)
     behavior of dutName
@@ -69,7 +69,7 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
       val loadmem = s"$dir/$t.hex"
       val logFile = Some(s"$outDir/$dutName/$t-verilator.log")
       val waveform = Some(s"$outDir/$dutName/$t.vcd")
-      val args = new MiniTestArgs(loadmem, maxcycles, logFile=logFile, waveform=waveform)
+      val args = new MiniTestArgs(loadmem, maxcycles, logFile=logFile, waveform=waveform, memlatency=latency)
       if (!(new File(loadmem).exists)) {
         assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
                    """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)

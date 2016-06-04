@@ -48,6 +48,7 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
   protected val off = log2Up(word_width)
 
   def read(addr: Int) = {
+    if (addr > (1 << 21)) println(addr)
     val data = mem(addr & addrMask)
     if (verbose) logger println "MEM[%x] => %x".format(addr & addrMask, data)
     data
@@ -158,7 +159,8 @@ case class MiniTestArgs(
   logFile: Option[String] = None,
   waveform: Option[String] = None,
   testCmd: Option[String] = None,
-  verbose: Boolean = false)
+  verbose: Boolean = false,
+  memlatency: Int = 5)
 
 class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c, args.verbose, 
     logFile=args.logFile, waveform=args.waveform) with MiniTests {
@@ -293,7 +295,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c, args.verbose,
     {reg_poke(resp.data, in.data) ; reg_poke(resp.tag, in.tag)})
   lazy val mem = new TileMem(
     cmdHandler.outputs, dataHandler.outputs, respHandler.inputs, 
-    5, c.icache.mifDataBeats, c.icache.mifDataBits, verbose=args.verbose)
+    args.memlatency, c.icache.mifDataBeats, c.icache.mifDataBits, verbose=args.verbose)
   
   lazy val arHandler = new DecoupledSink(c.io.nasti.ar, (ar: NastiReadAddressChannel) =>
     new TestNastiReadAddr(peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
@@ -307,7 +309,7 @@ class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c, args.verbose,
   lazy val nasti = new NastiMem(
     arHandler.outputs, rHandler.inputs,
     awHandler.outputs, wHandler.outputs,
-    5, c.icache.nastiXDataBits/8, verbose=args.verbose)
+    args.memlatency, c.icache.nastiXDataBits/8, verbose=args.verbose)
 
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
