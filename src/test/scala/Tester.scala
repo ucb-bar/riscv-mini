@@ -1,7 +1,8 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters._
+import chisel3.{UInt, Bool}
+import chisel3.util.log2Up
+import chisel3.iotesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
 import java.io.PrintStream

@@ -1,7 +1,6 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters.PeekPokeTester
+import chisel3.iotesters.PeekPokeTester
 
 case class ALUIn(op: BigInt, A: BigInt, B: BigInt)
 case class ALUOut(out: BigInt, sum: BigInt)

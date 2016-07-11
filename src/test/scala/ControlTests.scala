@@ -1,9 +1,8 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters.PeekPokeTester
+import chisel3.iotesters.PeekPokeTester
 
-case class ControlIn(inst: UInt)
+case class ControlIn(inst: chisel3.UInt)
 
 class ControlOut(ctrl: List[BigInt]) {
   val (pc_sel    :: 

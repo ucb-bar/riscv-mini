@@ -1,7 +1,7 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters.PeekPokeTester
+import chisel3.UInt
+import chisel3.iotesters.PeekPokeTester
 import scala.collection.mutable.HashMap
 
 case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
@@ -198,8 +198,8 @@ class CSRTests(c: CSR) extends PeekPokeTester(c) with RandInsts {
       ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
     println(s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value))
     poke(in)
-    val good = goldCSR(in)
-    if (t > 0L) expect(good)
+    val out = goldCSR(in)
+    if (t > 0L) expect(out)
     step(1) // update registers
   } 
 }

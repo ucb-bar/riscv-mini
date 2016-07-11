@@ -1,9 +1,8 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters.PeekPokeTester
+import chisel3.iotesters.PeekPokeTester
 
-case class ImmGenIn(inst: UInt, sel: BigInt)
+case class ImmGenIn(inst: chisel3.UInt, sel: BigInt)
 case class ImmGenOut(out: BigInt)
 
 object GoldImmGen extends RISCVCommon {

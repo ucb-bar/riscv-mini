@@ -1,7 +1,7 @@
 package mini
 
-import Chisel._
-import Chisel.iotesters.PeekPokeTester
+import chisel3.UInt
+import chisel3.iotesters.PeekPokeTester
 
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
@@ -160,12 +160,12 @@ class DatapathTests(c: Datapath) extends PeekPokeTester(c) with RandInsts {
   poke(c.io.host.fromhost.valid, 1)
 
   var i = 0
+  println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
   val goldDatapath = new GoldDatapath
   while (i < insts.size) {
     val inst = insts(i)
     val data = rand_data
     val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
-    println(s"*** ${dasm(inst)} (%x) ***".format(inst.litValue()))
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.icache.resp.valid,     1)
     poke(c.io.dcache.resp.bits.data, data)
@@ -173,6 +173,9 @@ class DatapathTests(c: Datapath) extends PeekPokeTester(c) with RandInsts {
     test(out)
     step(1)
     poke(GoldControl(new ControlIn(if (out.nop) nop else inst)))
-    if (!out.nop) i += 1
+    if (!out.nop) {
+      i += 1
+      if (i < insts.size) println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
+    }
   }
 }

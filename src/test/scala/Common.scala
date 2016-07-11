@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3.{Bits, SInt, UInt, Bool}
+import chisel3.util.BitPat
 import scala.collection.mutable.HashMap
 
 trait RISCVCommon {
@@ -116,7 +117,7 @@ trait RISCVCommon {
   }
 }
 
-trait RandInsts extends Chisel.iotesters.PeekPokeTests with RISCVCommon {
+trait RandInsts extends chisel3.iotesters.PeekPokeTests with RISCVCommon {
   import Instructions._
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def bigIntToBoolean(x: BigInt) = x != 0
