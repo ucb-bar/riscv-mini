@@ -60,7 +60,31 @@ class UnitTestSuite extends org.scalatest.FlatSpec with RiscVTests {
   runUnitTests(new Core)(m => new CoreSimpleTests(m))
 }
 
-abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests { 
+abstract class MiniTestSuite(N: Int = 6) extends org.scalatest.FlatSpec with RiscVTests {
+  import akka.pattern.ask
+  import scala.concurrent.duration._
+  implicit val timeout = akka.util.Timeout(10 days)
+  case class TestRun(c: Module, args: mini.MiniTestArgs)
+  case object TestFin
+  private val system = akka.actor.ActorSystem("riscv-mini")
+  private val testers = List.fill(N){
+    akka.actor.ActorDSL.actor(system)(new akka.actor.ActorDSL.ActWithStash {
+      override def receive = {
+        case TestRun(dut, args) => sender ! (
+          try {
+            dut match {
+              case core: Core => (new CoreTester(core, args)).finish
+              case tile: Tile => (new TileTester(tile, args)).finish
+            }
+          } catch {
+            case x: Exception => x.printStackTrace
+          }
+        )
+        case TestFin => context.stop(self)
+      }
+    })
+  }
+
   def runTester[T <: Module : ClassTag](mod: => T, t: TestType, vcs: Boolean = false, latency: Int = 5) {
     val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
     val args = baseArgs(new File(s"$outDir/$dutName"), vcs) ++ Array("--noUpdate")
@@ -72,20 +96,22 @@ abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
     val sim = if (vcs) "vcs" else "verilator"
     assert(dir.exists)
     behavior of s"$dutName in $sim"
-    tests foreach { t => it should s"pass $t" in {
+    tests.zipWithIndex map { case (t, i) =>
       val loadmem = s"$dir/$t.hex"
       val logFile = Some(s"$outDir/$dutName/$t-$sim.log")
       val waveform = Some(s"$outDir/$dutName/$t.%s".format(if (vcs) "vpd" else "vcd"))
-      val args = new MiniTestArgs(loadmem, maxcycles, logFile=logFile, waveform=waveform, memlatency=latency)
+      val testCmd = List(s"$outDir/$dutName/%s${dut.name}".format(if (vcs) "" else "V"))
+      val args = new MiniTestArgs(loadmem, maxcycles, logFile, waveform, testCmd, false, latency)
       if (!(new File(loadmem).exists)) {
         assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
                    """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
       }
-      assert(dut match {
-        case core: Core => (new CoreTester(core, args)).finish
-        case tile: Tile => (new TileTester(tile, args)).finish
-      })
-    }}
+      t -> (testers(i % N) ? new TestRun(dut, args))
+    } foreach { case (name, f) =>
+      scala.concurrent.Await.result(f, timeout.duration) match { case pass: Boolean =>
+        it should s"pass $name" in { assert(pass) }
+      }
+    }
   }
 }
 

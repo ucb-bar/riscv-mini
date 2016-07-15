@@ -5,6 +5,7 @@ object MiniBuild extends Build {
   override lazy val settings = super.settings ++ Seq(
     scalaVersion := "2.11.7",
     scalacOptions ++= Seq("-deprecation","-unchecked"),
+    libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-actor" % "2.3.15"),
     parallelExecution in Test := false
   )
   lazy val chisel    = project

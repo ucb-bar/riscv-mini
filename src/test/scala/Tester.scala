@@ -159,12 +159,12 @@ case class MiniTestArgs(
   maxcycles: Long = 500000, 
   logFile: Option[String] = None,
   waveform: Option[String] = None,
-  testCmd: Option[String] = None,
+  testCmd: List[String] = Nil,
   verbose: Boolean = false,
   memlatency: Int = 5)
 
 class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c, args.verbose, 
-    logFile=args.logFile, waveform=args.waveform) with MiniTests {
+    logFile=args.logFile, waveform=args.waveform, testCmd=args.testCmd) with MiniTests {
   val ireqHandler = new ValidSink(c.io.icache.req, 
     (req: CacheReq) => new TestCacheReq(peek(req.addr), peek(req.data), peek(req.mask)))
   val dreqHandler = new ValidSink(c.io.dcache.req, 
@@ -287,7 +287,7 @@ class NastiMem(
 }
 
 class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c, args.verbose,
-    logFile=args.logFile, waveform=args.waveform) with MiniTests {
+    logFile=args.logFile, waveform=args.waveform, testCmd=args.testCmd) with MiniTests {
   lazy val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, (cmd: MemReqCmd) => 
     new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
   lazy val dataHandler = new DecoupledSink(c.io.mem.req_data, (data: MemData) => 
