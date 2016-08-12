@@ -22,13 +22,13 @@ abstract class UnitTest[+M <: Module : ClassTag](c: => M)(tester: M => PeekPokeT
   val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
   val dir = new File(s"$outDir/$modName")
   behavior of modName
-  it should "pass verilator" in {
-    val args = baseArgs(dir) ++ Array("--logFile", s"$dir/$modName-verilator.log")
-    chiselMainTest(args, () => c)(tester)
-  }
-  it should "pass vcs" in {
-    val args = baseArgs(dir) ++ Array("--vcs", "--logFile", s"$dir/$modName-vcs.log")
-    chiselMainTest(args, () => c)(tester)
+  Seq("verilator", "vcs") foreach {backend =>
+    it should s"pass $backend" in {
+      val args = baseArgs(dir) ++ Array(
+        "--backend", backend,
+        "--logFile", s"$dir/$modName-$backend.log")
+      chiselMainTest(args, () => c)(tester)
+    }
   }
 }
 
@@ -61,18 +61,18 @@ trait RiscVTests {
   )
 
   val outDir = new File("test-outs") ; outDir.mkdirs
-  def baseArgs(dir: File, vcs: Boolean = false) = Array(
+  def baseArgs(dir: File, backend: String) = Array(
     "--targetDir", dir.getCanonicalPath.toString,
-    "--v", "--genHarness", "--compile", "--test", "--noUpdate") ++
-    (if (vcs) Array("--vcs") else Nil)
+    "--backend", backend, "--v", "--genHarness",
+    "--compile", "--test", "--noUpdate")
 }
 
 abstract class MiniTestSuite[+T <: Module : ClassTag](
-    dutGen: => T, vcs: Boolean, N: Int = 10) extends org.scalatest.FlatSpec with RiscVTests {
-  val backend = if (vcs) "vcs" else "verilator"
+    dutGen: => T, backend: String, N: Int = 10) extends org.scalatest.FlatSpec with RiscVTests {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-  val args = baseArgs(new File(s"$outDir/$dutName"), vcs)
+  val args = baseArgs(new File(s"$outDir/$dutName"), backend)
   val dut = chiselMain(args, () => dutGen)
+  val vcs = backend == "vcs"
   behavior of s"$dutName in $backend"
 
   def runTests(testType: TestType) = {
@@ -109,8 +109,8 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
   runTests(BmarkTests)
 }
 
-class CoreVeriTests extends MiniTestSuite(new Core()(p), false)
-class CoreVCSTests extends MiniTestSuite(new Core()(p), true)
+class CoreCppTests extends MiniTestSuite(new Core()(p), "verilator")
+class CoreVCSTests extends MiniTestSuite(new Core()(p), "vcs")
 
-class TileVeriTests extends MiniTestSuite(new Tile(p), false)
-class TileVCSTests extends MiniTestSuite(new Tile(p), true)
+class TileCppTests extends MiniTestSuite(new Tile(p), "verilator")
+class TileVCSTests extends MiniTestSuite(new Tile(p), "vcs")
