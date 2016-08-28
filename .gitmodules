@@ -1,6 +1,3 @@
-[submodule "chisel"]
-	path = chisel
-	url = https://github.com/ucb-bar/chisel.git
 [submodule "riscv-tests"]
 	path = riscv-tests
 	url = https://github.com/riscv/riscv-tests.git
@@ -13,3 +10,15 @@
 [submodule "cde"]
 	path = cde
 	url = git@github.com:ucb-bar/context-dependent-environments.git
+[submodule "chisel3"]
+	path = chisel
+	url = https://github.com/ucb-bar/chisel3.git
+[submodule "chisel-testers"]
+	path = testers
+	url = https://github.com/ucb-bar/chisel-testers.git
+[submodule "firrtl"]
+	path = firrtl
+	url = https://github.com/ucb-bar/firrtl.git
+[submodule "firrtl-interpreter"]
+	path = interp
+	url = https://github.com/ucb-bar/firrtl-interpreter.git

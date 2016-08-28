@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3.UInt
+import chisel3.iotesters.PeekPokeTester
 
 case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
 case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
@@ -68,11 +69,11 @@ class GoldDatapath extends RISCVCommon {
         if (ctrl.b_sel == B_RS2.litValue()) rs2_val else imm.out))
     val brcond = GoldBrCond(new BrCondIn(ctrl.br_type, rs1_val, rs2_val))
     val daddr  = alu.out & -4
-    val ddata  = rs2_val << (8 * (alu.out & 0x3)).toInt
-    val dmask  = if (ctrl.st_type == ST_SW.litValue()) BigInt(0xf)
+    val ddata  = (rs2_val << (8 * (alu.out & 0x3)).toInt) & ((BigInt(1) << 32) - 1)
+    val dmask  = (if (ctrl.st_type == ST_SW.litValue()) BigInt(0xf)
              else if (ctrl.st_type == ST_SH.litValue()) BigInt(0x3) << (alu.out & 0x3).toInt
              else if (ctrl.st_type == ST_SB.litValue()) BigInt(0x1) << (alu.out & 0x3).toInt
-             else BigInt(0)
+             else BigInt(0)) & ((BigInt(1) << 4) - 1)
     val dreq   = if (ctrl.ld_type == 0 && ctrl.st_type == 0) None 
              else Some(new TestCacheReq(daddr.toInt, ddata, dmask))
     
@@ -110,8 +111,7 @@ class GoldDatapath extends RISCVCommon {
   }
 }
 
-class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None) 
-    extends LogTester(c, log) with RandInsts {
+class DatapathTests(c: Datapath) extends PeekPokeTester(c) with RandInsts {
   def poke(ctrl: ControlOut) {
     poke(c.io.ctrl.pc_sel,    ctrl.pc_sel)
     poke(c.io.ctrl.inst_kill, ctrl.inst_kill) 
@@ -155,16 +155,17 @@ class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None)
   }
 
   (0 until 32) foreach (pokeAt(c.regFile.regs, 0, _))
+  c.csr.csrFile foreach (x => poke(x._2, 0))
   poke(c.io.host.fromhost.bits,  rand_data)
   poke(c.io.host.fromhost.valid, 1)
 
   var i = 0
+  println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
   val goldDatapath = new GoldDatapath
   while (i < insts.size) {
     val inst = insts(i)
     val data = rand_data
     val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
-    addEvent(new DumpEvent(s"*** ${dasm(inst)} (%x) ***".format(inst.litValue())))
     poke(c.io.icache.resp.bits.data, inst)
     poke(c.io.icache.resp.valid,     1)
     poke(c.io.dcache.resp.bits.data, data)
@@ -172,6 +173,9 @@ class DatapathTests(c: Datapath, log: Option[java.io.PrintStream] = None)
     test(out)
     step(1)
     poke(GoldControl(new ControlIn(if (out.nop) nop else inst)))
-    if (!out.nop) i += 1
+    if (!out.nop) {
+      i += 1
+      if (i < insts.size) println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
+    }
   }
 }

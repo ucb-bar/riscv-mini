@@ -1,6 +1,6 @@
 package mini
 
-import Chisel._
+import chisel3.iotesters.PeekPokeTester
 
 case class ALUIn(op: BigInt, A: BigInt, B: BigInt)
 case class ALUOut(out: BigInt, sum: BigInt)
@@ -33,14 +33,13 @@ object GoldALU {
   } 
 }
 
-class ALUTests[+T <: ALU](c: T, log: Option[java.io.PrintStream] = None) 
-    extends LogTester(c, log) with RandInsts {
+class ALUTests[+T <: ALU](c: T) extends PeekPokeTester(c) with RandInsts {
   for (inst <- insts) {
     val a = rand_data
     val b = rand_data
     val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldALU(new ALUIn(ctrl.alu_op, a, b))
-    addEvent(new DumpEvent(s"*** ${dasm(inst)} -> A: %x, B: %x".format(a, b))) 
+    println(s"*** ${dasm(inst)} -> A: %x, B: %x".format(a, b))
     poke(c.io.A, a)
     poke(c.io.B, b)
     poke(c.io.alu_op, ctrl.alu_op)

@@ -72,24 +72,21 @@ class MemArbiter(implicit p: Parameters) extends Module {
   }
 }
 
-class HTIFIO(implicit p: Parameters) extends ParameterizedBundle {
-  val host = new HostIO
-}
-
 class TileIO(implicit p: Parameters) extends ParameterizedBundle {
-  val htif  = new HTIFIO
-  val mem   = new MemIO
-  val nasti = new NastiIO
+  val host  = new HostIO
+  val nasti = if (p(UseNasti)) new NastiIO else null
+  val mem   = if (!p(UseNasti)) new MemIO else null
 }
 
-class Tile(implicit val p: Parameters) extends Module with CacheParams {
+class Tile(tileParams: Parameters) extends Module {
+  implicit val p = tileParams
   val io     = new TileIO
   val core   = Module(new Core)
   val icache = Module(new Cache)
   val dcache = Module(new Cache)
   val arb    = Module(new MemArbiter)
   
-  io.htif.host <> core.io.host
+  io.host <> core.io.host
   core.io.icache <> icache.io.cpu
   core.io.dcache <> dcache.io.cpu
   arb.io.icache <> icache.io.nasti
@@ -98,7 +95,7 @@ class Tile(implicit val p: Parameters) extends Module with CacheParams {
   if (core.useNasti) {
     io.nasti <> arb.io.nasti
   } else {
-    val conv = Module(new MemIONastiIOConverter(blen))
+    val conv = Module(new MemIONastiIOConverter(icache.blen))
     conv.io.nasti <> arb.io.nasti
     io.mem <> conv.io.mem
   }

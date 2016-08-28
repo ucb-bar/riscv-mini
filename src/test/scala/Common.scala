@@ -1,18 +1,25 @@
 package mini
 
-import Chisel._
-import Chisel.AdvTester._
+import chisel3.{Bits, SInt, UInt, Bool}
+import chisel3.util.BitPat
 import scala.collection.mutable.HashMap
 
 trait RISCVCommon {
   import Instructions._
-  implicit def boolToBoolean(x: Bool) = x.isTrue
+  implicit def boolToBoolean(x: Bool) = x.litValue() == 1
+  implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
+  implicit def uintToBitPat(u: UInt) = BitPat(u)
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
   def csr(inst: UInt) =  (inst.litValue() >> 20)
-  def reg(x: Int) = UInt(x, 5)
-  def imm(x: Int) = SInt(x, 21)
+  def reg(x: Int) = UInt(x & ((1 << 4) - 1), 5)
+  def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
+  def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
+    assert(x.isLit() && y.isLit())
+    Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
+  }
+  def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
   val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
@@ -98,24 +105,22 @@ trait RISCVCommon {
 
   def dasm(x: UInt) = {
     def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => "???(%s)".format(x.litValue().toString(16))
-      case (p, f) :: tail => if (x === p) f(x) else iter(tail)
+      case Nil => "???(%x)".format(x.litValue())
+      case (p, f) :: tail => if (p.value == (p.mask & x.litValue())) f(x) else iter(tail)
     }
-    if (x === FENCEI) "FENCEI"
-    else if (x === ECALL) "ECALL"
-    else if (x === EBREAK) "EBREAK"
-    else if (x === ERET) "ERET"
-    else if (x === NOP) "NOP"
+    if (x.litValue() == FENCEI.litValue()) "FENCEI"
+    else if (x.litValue() == ECALL.litValue()) "ECALL"
+    else if (x.litValue() == EBREAK.litValue()) "EBREAK"
+    else if (x.litValue() == ERET.litValue()) "ERET"
+    else if (x.litValue() == NOP.litValue()) "NOP"
     else iter(instPats zip instFmts)
   }
 }
 
-trait RandInsts extends Tests with RISCVCommon {
+trait RandInsts extends chisel3.iotesters.PeekPokeTests with RISCVCommon {
   import Instructions._
-  implicit def bigIntToBoolean(x: BigInt) = x != 0
-  implicit def booleanToBigInt(x: Boolean) = if (x) BigInt(1) else BigInt(0)
   implicit def bigIntToInt(x: BigInt) = x.toInt
-  implicit def uintToBigInt(x: UInt) = x.litValue()
+  implicit def bigIntToBoolean(x: BigInt) = x != 0
 
   /* Define tests */
   def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
@@ -128,7 +133,7 @@ trait RandInsts extends Tests with RISCVCommon {
   def rand_addr = UInt(rnd.nextInt())
   def rand_data = int(rnd.nextInt())
 
-  def insts = List(
+  def insts: List[UInt] = List(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),
@@ -225,12 +230,4 @@ trait RandInsts extends Tests with RISCVCommon {
     bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
     exceptionTest -> Array((1, 2), (2, 3), (3, 4))
   )
-}
-
-class LogTester[+T <: Module](c: T, log: Option[java.io.PrintStream]) 
-    extends Tester(c, log == None) {
-  log match {
-    case None =>
-    case Some(f) => addObserver(new Observer(file=f))
-  }
 }

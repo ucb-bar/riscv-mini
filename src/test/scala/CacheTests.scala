@@ -1,7 +1,7 @@
 package mini
 
-import Chisel._
-import Chisel.AdvTester._
+import chisel3.util.log2Up
+import chisel3.iotesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
 
@@ -85,8 +85,8 @@ class Mem(
     cache_aw_Q: ScalaQueue[TestNastiWriteAddr], gold_aw_Q: ScalaQueue[TestNastiWriteAddr],
     cache_r_Q: ScalaQueue[TestNastiReadData],   gold_r_Q: ScalaQueue[TestNastiReadData],
     cache_w_Q: ScalaQueue[TestNastiWriteData],  gold_w_Q: ScalaQueue[TestNastiWriteData],
-    log: Option[java.io.PrintStream] = None, word_width: Int = 16, depth: Int = 1 << 20) 
-    extends SimMem(word_width, depth, log) {
+    word_width: Int = 16, depth: Int = 1 << 20, verbose: Boolean = true)(
+    implicit logger: java.io.PrintStream) extends SimMem(word_width, depth, verbose)(logger) {
   var aw: Option[TestNastiWriteAddr] = None
   def process = aw match {
     case Some(p) if cache_w_Q.size >= p.len && gold_w_Q.size >= p.len =>
@@ -99,7 +99,7 @@ class Mem(
           s"\n*Cache* => ${cache_w}\n*Gold*  => ${gold_w}")
         assert(i != p.len || cache_w.last, cache_w.toString)
         data | (cache_w.data << size)
-     })
+      })
       aw = None
     case None if !cache_aw_Q.isEmpty && !gold_aw_Q.isEmpty =>
       val cache_aw = cache_aw_Q.dequeue
@@ -112,14 +112,13 @@ class Mem(
       val gold_ar  = gold_ar_Q.dequeue
       assert(cache_ar == gold_ar, 
         s"\n*Cache* => ${cache_ar}\n*Gold*  => ${gold_ar}")
-      log foreach (_ println "haak => ${cache_ar}")
       val size = 8 * (1 << cache_ar.size)
       val addr = cache_ar.addr >> off
       val mask = (BigInt(1) << size) - 1
       val data = read(addr)
-      (0 until cache_ar.len) foreach { i =>
+      (0 to cache_ar.len) foreach { i =>
         val r_data = new TestNastiReadData(
-          cache_ar.id, (data >> (i * size)) & mask, i == (cache_ar.len-1))
+          cache_ar.id, (data >> (i * size)) & mask, i == cache_ar.len)
         cache_r_Q enqueue r_data
         gold_r_Q  enqueue r_data
       }
@@ -127,7 +126,7 @@ class Mem(
   }
 }
 
-class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvTester(c, log == None) {
+class CacheTests(c: Cache) extends AdvTester(c) {
   implicit def bigIntToInt(b: BigInt) = b.toInt
   implicit def bigIntToBoolean(b: BigInt) = b != BigInt(0)
   implicit def booleanToBigInt(b: Boolean) = if (b) BigInt(1) else BigInt(0)
@@ -153,16 +152,10 @@ class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvT
     ar_h.outputs, gold.nasti_ar,
     aw_h.outputs, gold.nasti_aw,
     r_h.inputs,   gold.nasti_r,
-    w_h.outputs,  gold.nasti_w,
-    log, c.bBytes)
+    w_h.outputs,  gold.nasti_w, c.bBytes)
   preprocessors += gold
   preprocessors += mem
   
-  log match {
-    case None =>
-    case Some(f) => addObserver(new Observer(file=f))
-  }
-
   def rand_tag = rnd.nextInt(1 << c.tlen)
   def rand_idx = rnd.nextInt(1 << c.slen)
   def rand_off = rnd.nextInt(1 << c.blen) & -4
@@ -180,11 +173,11 @@ class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvT
 
   private var testCnt = 0
   def test(tag: Int, idx: Int, off: Int, mask: Int = 0) = {
-    addEvent(new DumpEvent(s"***** TEST ${testCnt} *****"))
+    println(s"***** TEST ${testCnt} *****")
     val req = new TestCacheReq(addr(tag, idx, off), int(rnd.nextInt), mask)
     gold.cpu_reqs enqueue req
     req_h.inputs  enqueue req
-    addEvent(new DumpEvent(req.toString))
+    println(req.toString)
 
     // cache access
     req_h.process
@@ -196,7 +189,6 @@ class CacheTests(c: Cache, log: Option[java.io.PrintStream] = None) extends AdvT
       if (mask == 0) {
         assert(cacheResp.data == goldResp.data, 
           s"\n*Cache* => ${cacheResp}\n*Gold*  => ${goldResp}")
-        addEvent(new DumpEvent(cacheResp.toString))
       }
     }
     resp_h.outputs.clear

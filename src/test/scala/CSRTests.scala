@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3.UInt
+import chisel3.iotesters.PeekPokeTester
 import scala.collection.mutable.HashMap
 
 case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
@@ -9,10 +10,10 @@ case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
 
 class GoldCSR extends RISCVCommon {
   implicit def uintToBigInt(x: UInt) = x.litValue()
-  private val regs = HashMap[BigInt, BigInt](CSR.regs map (reg => reg.litValue() -> 
-    (if (reg === CSR.mcpuid) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
-    else if (reg === CSR.mstatus) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
-    else if (reg === CSR.mtvec) Const.PC_EVEC.litValue()
+  private val regs = HashMap[BigInt, BigInt](CSR.regs map (_.litValue()) map (reg => reg ->
+    (if (reg == CSR.mcpuid.litValue()) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
+    else if (reg == CSR.mstatus.litValue()) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
+    else if (reg == CSR.mtvec.litValue()) Const.PC_EVEC.litValue()
     else BigInt(0))):_*)
   private def mtvec = regs(CSR.mtvec)
   private def mepc  = regs(CSR.mepc)
@@ -109,7 +110,7 @@ class GoldCSR extends RISCVCommon {
       else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
       else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
       else BigInt(0)
-    val isInstRet = (in.inst =/= nop).isTrue && (!exception || isEcall || isEbreak)
+    val isInstRet = in.inst.litValue() != nop.litValue() && (!exception || isEcall || isEbreak)
     count(isInstRet)
     if (exception) {
       mepc = in.pc & -4
@@ -130,9 +131,8 @@ class GoldCSR extends RISCVCommon {
   }
 }
 
-class CSRTests(c: CSR, log: Option[java.io.PrintStream]) 
-    extends LogTester(c, log) with RandInsts {
-  override val insts = 
+class CSRTests(c: CSR) extends PeekPokeTester(c) with RandInsts {
+  override val insts: List[UInt] = 
     (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, int(rand_rs1)))) ++
@@ -140,7 +140,7 @@ class CSRTests(c: CSR, log: Option[java.io.PrintStream])
     (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, int(rand_rs1)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, int(rand_rs1)))) ++
     (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++ List(
+    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++ List[UInt](
     // system insts
     Instructions.ECALL,  SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     Instructions.EBREAK, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
@@ -196,10 +196,10 @@ class CSRTests(c: CSR, log: Option[java.io.PrintStream])
     val ctrl = GoldControl(new ControlIn(inst))
     val in   = new CSRIn(ctrl.csr_cmd, value, inst, rand_addr, int(rnd.nextInt|0x3), 
       ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
-    addEvent(new DumpEvent(
-      s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value)))
+    println(s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value))
     poke(in)
-    expect(goldCSR(in))
+    val out = goldCSR(in)
+    if (t > 0L) expect(out)
     step(1) // update registers
   } 
 }

@@ -1,8 +1,47 @@
 package mini
 
-import Chisel._
+import chisel3.Module
+import chisel3.iotesters.{chiselMain, chiselMainTest, PeekPokeTester, Driver}
 import java.io.{File, PrintStream}
 import sys.process.stringSeqToProcess
+import scala.reflect.ClassTag
+import scala.concurrent.{Future, Await, ExecutionContext}
+
+object TestParams {
+  implicit def p = cde.Parameters.root((new MiniConfig).toInstance)
+}
+import TestParams.p
+
+abstract class UnitTest[+M <: Module : ClassTag](c: => M)(tester: M => PeekPokeTester[M])
+    extends org.scalatest.FlatSpec {
+  val outDir = new File("test-outs") ; outDir.mkdirs
+  def baseArgs(dir: File) = Array(
+    "--targetDir", dir.getCanonicalPath.toString,
+    "--v", "--genHarness", "--compile", "--test")
+
+  val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
+  val dir = new File(s"$outDir/$modName")
+  behavior of modName
+  Seq("verilator", "vcs") foreach {backend =>
+    it should s"pass $backend" in {
+      val args = baseArgs(dir) ++ Array(
+        "--backend", backend,
+        "--logFile", s"$dir/$modName-$backend.log")
+      chiselMainTest(args, () => c)(tester)
+    }
+  }
+}
+
+class ALUSimpleUnitTest extends UnitTest(new ALUSimple()(p))(m => new ALUTests(m))
+class ALUAreaUnitTest extends UnitTest(new ALUArea()(p))(m => new ALUTests(m))
+class BrCondSimpleUnitTest extends UnitTest(new BrCondSimple()(p))(m => new BrCondTests(m))
+class ImmGenWireUnitTest extends UnitTest(new ImmGenWire()(p))(m => new ImmGenTests(m)) 
+class ImmGenMuxUnitTest extends UnitTest(new ImmGenMux()(p))(m => new ImmGenTests(m))
+class ControlUnitTest extends UnitTest(new Control()(p))(m => new ControlTests(m))
+class CSRUnitTest extends UnitTest(new CSR()(p))(m => new CSRTests(m))
+class DatapathUnitTest extends UnitTest(new Datapath()(p))(m => new DatapathTests(m))
+class CacheUnitTest extends UnitTest(new Cache()(p))(m => new CacheTests(m))
+class CoreUnitTest extends UnitTest(new Core()(p))(m => new CoreSimpleTests(m))
 
 trait RiscVTests {
   trait TestType
@@ -20,140 +59,58 @@ trait RiscVTests {
   val bmarkTests = List(
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
+
+  val outDir = new File("test-outs") ; outDir.mkdirs
+  def baseArgs(dir: File, backend: String) = Array(
+    "--targetDir", dir.getCanonicalPath.toString,
+    "--backend", backend, "--v", "--genHarness",
+    "--compile", "--test", "--noUpdate")
 }
 
-abstract class MiniTestSuite extends org.scalatest.FlatSpec with RiscVTests {
-  private val outDir = new File("test-outs")
-  private val logDir = new File("test-logs")
-  private val dumpDir = new File("test-dumps")
-  private val baseArgs = Array(
-    "--targetDir", outDir.getPath.toString,
-    "--minimumCompatibility", "3.0", "--genHarness", 
-    "--compile", "--compileInitializationUnoptimized")
-  private def testArgs(b: String) = baseArgs ++ Array("--backend", b)
-  private def debugArgs(b: String) = testArgs(b) ++ Array("--debug", "--vcd", "--vcdMem")
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+abstract class MiniTestSuite[+T <: Module : ClassTag](
+    dutGen: => T, backend: String, N: Int = 10) extends org.scalatest.FlatSpec with RiscVTests {
+  val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
+  val args = baseArgs(new File(s"$outDir/$dutName"), backend)
+  val dut = chiselMain(args, () => dutGen)
+  val vcs = backend == "vcs"
+  behavior of s"$dutName in $backend"
 
-  def elaborate[T <: Module](c: => T, b: String, debug: Boolean=false): T = {
-    val args = if (debug) debugArgs(b) else testArgs(b)
-    chiselMain(args, () => Module(c))
-  }
-
-  def elaborateCpp[T <: Module](c: => T, debug: Boolean=false) = elaborate(c, "c", debug)
-
-  def elaborateVerilog[T <: Module](c: => T, debug: Boolean=false) = elaborate(c, "v", debug)
-
-  private def checkUnitTests[T <: Module](c: => T, log: Option[PrintStream] = None) {
-    assert(c match {
-      case m: ALU      => (new ALUTests(m, log)).finish
-      case m: BrCond   => (new BrCondTests(m, log)).finish
-      case m: ImmGen   => (new ImmGenTests(m, log)).finish
-      case m: Control  => (new ControlTests(m, log)).finish
-      case m: CSR      => (new CSRTests(m, log)).finish
-      case m: Datapath => (new DatapathTests(m, log)).finish
-      case m: Cache    => (new CacheTests(m, log)).finish
-      case m: Core     => (new CoreSimpleTests(m, log)).finish
-      case _ => false
-    })
-  }
-
-  def runUnitTests[M <: Module](c: => M) {
-    val modName = c.getClass.getSimpleName
-    behavior of (s"${c.getClass.getName}")
-    it should "pass Chisel Emulator" in {
-      val log = new PrintStream(s"${logDir.getPath}/${modName}-cpp.log")
-      checkUnitTests(elaborateCpp(c, true), Some(log))
+  def runTests(testType: TestType) = {
+    val (dir, tests, maxcycles) = testType match {
+      case ISATests   => (new File("riscv-tests/isa"), isaTests, 15000L)
+      case BmarkTests => (new File("riscv-bmarks"), bmarkTests, 1500000L)
     }
-    it should "pass Verilog Simulator" in {
-      val log = new PrintStream(s"${logDir.getPath}/${modName}-v.log")
-      checkUnitTests(elaborateVerilog(c, true), Some(log))
-    }
-  }
-
-  def runTester[T <: Module](c: T, t: TestType) {
-    val (dir, tests, maxcycles) = t match {
-      case ISATests   => (new java.io.File("riscv-tests/isa"), isaTests, 15000L)
-      case BmarkTests => (new java.io.File("riscv-bmarks"), bmarkTests, 500000L)
-    }
-    val simulator = Driver.backend match {
-      case _: VerilogBackend => "Verilog Simulation"
-      case _: CppBackend     => "Chisel Emulator"
-      case _                 => "???"
-    }
-    val modName = c.getClass.getSimpleName
-    behavior of s"${modName} on ${simulator}"
     assert(dir.exists)
-    val dirPath = dir.getPath.toString
-    tests map { test =>
-      val loadmem = s"${dir.getPath}/${test}.hex"
-      val (log, dump) = Driver.backend match {
-        case _: CppBackend     => (
-          Some(s"${logDir.getPath}/${modName}-${test}-cpp.log"),
-          Some(s"${dumpDir.getPath}/${modName}-${test}-cpp.vcd"))
-        case _: VerilogBackend => (
-          Some(s"${logDir.getPath}/${modName}-${test}-v.log"),
-          Some(s"${dumpDir.getPath}/${modName}-${test}-v.vcd"))
-      }
-      val args = new MiniTestArgs(loadmem, maxcycles, dump, log)
-      if (!(new File(loadmem).exists)) {
-        assert(Seq("make", "-C", dir.getPath.toString, s"${test}.hex", 
-                   """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
-      }
-      println(s"runs ${test} on ${simulator} of ${modName}")
-      test -> (c match {
-        case core: Core => (new CoreTester(core, args)).finish
-        case tile: Tile => (new TileTester(tile, args)).finish
-      })
-    } foreach {case (test, pass) =>
-      it should s"pass ${test}" in { assert(pass) }
+    import scala.concurrent.duration._
+    import ExecutionContext.Implicits.global
+    val results = tests.zipWithIndex sliding (N, N) map { subtests => Future {
+      val subresults = subtests map {case (t, i) =>
+        val loadmem = s"$dir/$t.hex"
+        val logFile = Some(s"$outDir/$dutName/$t-$backend.log")
+        val waveform = Some(s"$outDir/$dutName/$t.%s".format(if (vcs) "vpd" else "vcd"))
+        val testCmd = List(s"$outDir/$dutName/%s$dutName".format(if (vcs) "" else "V"))
+        val args = new MiniTestArgs(loadmem, maxcycles, logFile, waveform, testCmd, false)// latency)
+        if (!(new File(loadmem).exists)) {
+          assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
+                     """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
+        }
+        Future { t -> (dut match {
+          case _: Core => Driver.run(() => dutGen.asInstanceOf[Core])(m => new CoreTester(m, args))
+          case _: Tile => Driver.run(() => dutGen.asInstanceOf[Tile])(m => new TileTester(m, args))
+        })}
+      } 
+      Await.result(Future.sequence(subresults), Duration.Inf)
+    } }
+    Await.result(Future.sequence(results), Duration.Inf).flatten foreach { case (name, pass) =>
+      it should s"pass $name" in { assert(pass) }
     }
   }
-
-  if (!logDir.exists) logDir.mkdir
-  if (!dumpDir.exists) dumpDir.mkdir
+  // runTests(ISATests)
+  runTests(BmarkTests)
 }
 
-class UnitTestSuite extends MiniTestSuite {
-  runUnitTests(new ALUSimple)
-  runUnitTests(new ALUArea)
-  runUnitTests(new BrCondSimple)
-  runUnitTests(new BrCondArea)
-  runUnitTests(new ImmGenWire)
-  runUnitTests(new ImmGenMux)
-  runUnitTests(new Control)
-  runUnitTests(new CSR)
-  runUnitTests(new Cache)
-  runUnitTests(new Core)
-}
+class CoreCppTests extends MiniTestSuite(new Core()(p), "verilator")
+class CoreVCSTests extends MiniTestSuite(new Core()(p), "vcs")
 
-class ISATestSuite extends MiniTestSuite {
-  val t = ISATests
-  runTester(elaborateCpp(new Core), t)
-  runTester(elaborateCpp(new Tile), t)
-  runTester(elaborateVerilog(new Core), t)
-  runTester(elaborateVerilog(new Tile), t)
-}
-
-class ISADebugTestSuite extends MiniTestSuite {
-  val t = ISATests
-  // runTester(elaborateCpp(new Core, true), t)
-  runTester(elaborateCpp(new Tile, true), t)
-  // runTester(elaborateVerilog(new Core, true), t)
-  runTester(elaborateVerilog(new Tile, true), t)
-}
-
-class BmarkTestSuite extends MiniTestSuite {
-  val t = BmarkTests
-  runTester(elaborateCpp(new Core), t)
-  runTester(elaborateCpp(new Tile), t)
-  runTester(elaborateVerilog(new Core), t)
-  runTester(elaborateVerilog(new Tile), t)
-}
-
-class BmarkDebugTestSuite extends MiniTestSuite {
-  val t = BmarkTests
-  // runTester(elaborateCpp(new Core, true), t)
-  runTester(elaborateCpp(new Tile, true), t)
-  // runTester(elaborateVerilog(new Core, true), t)
-  runTester(elaborateVerilog(new Tile, true), t)
-}
+class TileCppTests extends MiniTestSuite(new Tile(p), "verilator")
+class TileVCSTests extends MiniTestSuite(new Tile(p), "vcs")

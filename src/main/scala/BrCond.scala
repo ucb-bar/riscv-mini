@@ -18,7 +18,7 @@ abstract class BrCond(implicit p: Parameters) extends Module {
 class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {
   val eq   = io.rs1 === io.rs2
   val neq  = !eq
-  val lt   = io.rs1.toSInt < io.rs2.toSInt
+  val lt   = io.rs1.asSInt < io.rs2.asSInt
   val ge   = !lt
   val ltu  = io.rs1 < io.rs2
   val geu  = !ltu

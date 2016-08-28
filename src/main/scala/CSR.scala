@@ -60,7 +60,7 @@ object CSR {
     cyclew, timew, instretw, cyclehw, timehw, instrethw,
     mcpuid, mimpid, mhartid, mtvec, mtdeleg, mie,
     mtimecmp, mtime, mtimeh, mscratch, mepc, mcause, mbadaddr, mip,
-    mtohost, mfromhost, mstatus)
+    mtohost, mfromhost, mstatus) map (BitPat(_))
 }
 
 object Cause {
@@ -171,8 +171,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
     mtimecmp, time, timeh, mscratch, mepc, mcause, mbadaddr, mip,
     mtohost, mfromhost, mstatus)
 
-  val csr = Lookup(csr_addr, UInt(0), csrFile)
-  io.out := csr.zext
+  io.out := Lookup(csr_addr, UInt(0), csrFile).asUInt
 
   val privValid = csr_addr(9, 8) <= PRV
   val privInst  = io.cmd === CSR.P
@@ -209,7 +208,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
 
   when(!io.stall) {
     when(io.expt) {
-      mepc   := io.pc & SInt(-4)
+      mepc   := io.pc >> 2 << 2
       mcause := Mux(iaddrInvalid, Cause.InstAddrMisaligned,
                 Mux(laddrInvalid, Cause.LoadAddrMisaligned,
                 Mux(saddrInvalid, Cause.StoreAddrMisaligned,
@@ -244,7 +243,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
       .elsewhen(csr_addr === CSR.mtimeh) { timeh := wdata }
       .elsewhen(csr_addr === CSR.mtimecmp) { mtimecmp := wdata }
       .elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
-      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata & SInt(-4) }
+      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2 << 2 }
       .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (xlen-1) | 0xf) }
       .elsewhen(csr_addr === CSR.mbadaddr) { mbadaddr := wdata }
       .elsewhen(csr_addr === CSR.mtohost) { mtohost := wdata }

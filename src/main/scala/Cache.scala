@@ -65,9 +65,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val cpu_mask = Reg(io.cpu.req.bits.mask)
 
   // Counters
-  require(nastiXDataBits == mifDataBits)
-  require(mifDataBeats > 0)
-  require(bBits / nastiXDataBits == mifDataBeats)
+  require(nastiXDataBits == mifDataBits, "$nastiXDataBits != $mifDataBits")
+  require(mifDataBeats > 0, s"$mifDataBeats <= 0")
+  require(bBits / nastiXDataBits == mifDataBeats, s"$bBits / $nastiXDataBits != $mifDataBeats")
   val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire(), mifDataBeats)
   val (write_count, write_wrap_out) = Counter(io.nasti.w.fire(), mifDataBeats)
 
@@ -88,7 +88,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata_buf = Reg(Vec.fill(mifDataBeats)(UInt(width=nastiXDataBits))) 
+  val rdata_buf = Reg(Vec(mifDataBeats, UInt(width=nastiXDataBits))) 
   val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, ren).toBits).reverse), 
                               rdata_buf.toBits) // bypass refilled data
   
@@ -118,7 +118,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     dataMem.zipWithIndex foreach { case (mem, i) =>
       val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
       mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
-      mem setName s"dataMem_${i}"
+      mem suggestName s"dataMem_${i}"
     }
   }
 

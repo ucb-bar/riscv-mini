@@ -15,25 +15,6 @@ compile: $(gen_dir)/Tile.v
 $(gen_dir)/Tile.v: $(wildcard $(src_dir)/*.scala)
 	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "run $(gen_dir)"
 
-all:
-	cd $(base_dir) && \
-	$(SBT) $(SBT_FLAGS) "test-only $(addprefix mini., $(addsuffix Suite, UnitTest ISATest BmarkTest))"
-
-unit:
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.UnitTestSuite"
-
-isa:
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.ISATestSuite"
-
-bmark:
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.BmarkTestSuite"
-
-isa-debug:
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.ISADebugTestSuite"
-
-bmark-debug:
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "test-only mini.BmarkDebugTestSuite"
-
 clean:
 	rm -rf $(gen_dir) test-* *.key
 

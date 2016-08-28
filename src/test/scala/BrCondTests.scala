@@ -1,6 +1,6 @@
 package mini
 
-import Chisel._
+import chisel3.iotesters.PeekPokeTester
 
 case class BrCondIn(brType: BigInt, rs1: BigInt, rs2: BigInt)
 case class BrCondOut(taken: Boolean)
@@ -16,8 +16,7 @@ object GoldBrCond {
     else if (in.brType == BR_GEU.litValue()) in.rs1 >= in.rs2 else false)
 }
 
-class BrCondTests[+T <: BrCond](c: T, log: Option[java.io.PrintStream]) 
-    extends LogTester(c, log) with RandInsts {
+class BrCondTests[+T <: BrCond](c: T) extends PeekPokeTester(c) with RandInsts {
   override val insts = (List.fill(10){List(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),
@@ -30,7 +29,7 @@ class BrCondTests[+T <: BrCond](c: T, log: Option[java.io.PrintStream])
     val b = rand_data
     val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldBrCond(new BrCondIn(ctrl.br_type, a, b))
-    addEvent(new DumpEvent(s"*** ${dasm(inst)} -> A: %x, B: %x ***".format(a, b)))
+    println(s"*** ${dasm(inst)} -> A: %x, B: %x ***".format(a, b))
     poke(c.io.br_type, ctrl.br_type)
     poke(c.io.rs1, a)
     poke(c.io.rs2, b)
