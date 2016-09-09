@@ -64,7 +64,7 @@ trait RiscVTests {
   def baseArgs(dir: File, backend: String) = Array(
     "--targetDir", dir.getCanonicalPath.toString,
     "--backend", backend, "--v", "--genHarness",
-    "--compile", "--test", "--noUpdate")
+    "--compile", "--test")
 }
 
 abstract class MiniTestSuite[+T <: Module : ClassTag](
