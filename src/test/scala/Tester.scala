@@ -5,7 +5,7 @@ import chisel3.util.log2Up
 import chisel3.iotesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
-import java.io.PrintStream
+import java.io.{File, PrintStream}
 
 case class TestCacheReq(addr: Int, data: BigInt, mask: BigInt) {
   override def toString = "[Cache Req] addr: %x, data: %x, mask: %x".format(addr, data, mask)
@@ -66,8 +66,8 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
     }
   }
 
-  def loadMem(filename: String) {
-    val lines = io.Source.fromFile(filename).getLines
+  def loadMem(file: File) {
+    val lines = io.Source.fromFile(file).getLines
     for ((line, i) <- lines.zipWithIndex) {
       val base = (i * line.length) / 2
       assert(base % word_width == 0)
@@ -155,16 +155,14 @@ class CoreMem(
 }
 
 case class MiniTestArgs(
-  loadmem: String, 
-  maxcycles: Long = 500000, 
-  logFile: Option[String] = None,
-  waveform: Option[String] = None,
-  testCmd: List[String] = Nil,
+  loadmem: File, 
+  logFile: Option[File] = None,
   verbose: Boolean = false,
+  maxcycles: Long = 500000, 
   memlatency: Int = 5)
 
-class CoreTester(c: Core, args: MiniTestArgs) extends AdvTester(c, args.verbose, 
-    logFile=args.logFile, waveform=args.waveform, testCmd=args.testCmd) with MiniTests {
+class CoreTester(c: Core, args: MiniTestArgs)
+    extends AdvTester(c, args.verbose, 16, args.logFile) with MiniTests {
   val ireqHandler = new ValidSink(c.io.icache.req, 
     (req: CacheReq) => new TestCacheReq(peek(req.addr), peek(req.data), peek(req.mask)))
   val dreqHandler = new ValidSink(c.io.dcache.req, 
@@ -286,8 +284,8 @@ class NastiMem(
   }
 }
 
-class TileTester(c: Tile, args: MiniTestArgs) extends AdvTester(c, args.verbose,
-    logFile=args.logFile, waveform=args.waveform, testCmd=args.testCmd) with MiniTests {
+class TileTester(c: Tile, args: MiniTestArgs)
+    extends AdvTester(c, args.verbose, 16, args.logFile) with MiniTests {
   lazy val cmdHandler = new DecoupledSink(c.io.mem.req_cmd, (cmd: MemReqCmd) => 
     new TestMemReq(peek(cmd.addr).toInt, peek(cmd.tag), peek(cmd.rw) != 0))
   lazy val dataHandler = new DecoupledSink(c.io.mem.req_data, (data: MemData) => 

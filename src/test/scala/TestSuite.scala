@@ -26,7 +26,7 @@ abstract class UnitTest[+M <: Module : ClassTag](c: => M)(tester: M => PeekPokeT
     it should s"pass $backend" in {
       val args = baseArgs(dir) ++ Array(
         "--backend", backend,
-        "--logFile", s"$dir/$modName-$backend.log")
+        "--logFile", (new File(dir, s"$modName-$backend.log")).toString)
       chiselMainTest(args, () => c)(tester)
     }
   }
@@ -70,7 +70,8 @@ trait RiscVTests {
 abstract class MiniTestSuite[+T <: Module : ClassTag](
     dutGen: => T, backend: String, N: Int = 10) extends org.scalatest.FlatSpec with RiscVTests {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-  val args = baseArgs(new File(s"$outDir/$dutName"), backend)
+  val testDir = new File(outDir, dutName)
+  val args = baseArgs(testDir, backend)
   val dut = chiselMain(args, () => dutGen)
   val vcs = backend == "vcs"
   behavior of s"$dutName in $backend"
@@ -85,18 +86,20 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
     import ExecutionContext.Implicits.global
     val results = tests.zipWithIndex sliding (N, N) map { subtests => Future {
       val subresults = subtests map {case (t, i) =>
-        val loadmem = s"$dir/$t.hex"
-        val logFile = Some(s"$outDir/$dutName/$t-$backend.log")
-        val waveform = Some(s"$outDir/$dutName/$t.%s".format(if (vcs) "vpd" else "vcd"))
-        val testCmd = List(s"$outDir/$dutName/%s$dutName".format(if (vcs) "" else "V"))
-        val args = new MiniTestArgs(loadmem, maxcycles, logFile, waveform, testCmd, false)// latency)
-        if (!(new File(loadmem).exists)) {
+        val loadmem = new File(dir, s"$t.hex")
+        val logFile = Some(new File(testDir, s"$t-$backend.log"))
+        val waveform = Some(new File(testDir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
+        val testCmd = new File(testDir, s"%s$dutName".format(if (vcs) "" else "V"))
+        val args = new MiniTestArgs(loadmem, logFile, false, maxcycles) // latency)
+        if (!loadmem.exists) {
           assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
                      """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
         }
         Future { t -> (dut match {
-          case _: Core => Driver.run(() => dutGen.asInstanceOf[Core])(m => new CoreTester(m, args))
-          case _: Tile => Driver.run(() => dutGen.asInstanceOf[Tile])(m => new TileTester(m, args))
+          case _: Core => Driver.run(
+            () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
+          case _: Tile => Driver.run(
+            () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
         })}
       } 
       Await.result(Future.sequence(subresults), Duration.Inf)

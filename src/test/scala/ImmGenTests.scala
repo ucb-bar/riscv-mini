@@ -16,12 +16,11 @@ object GoldImmGen extends RISCVCommon {
 }
 
 
-class ImmGenTests[+T <: ImmGen](c: T, logFile: Option[String] = None)
-    extends PeekPokeTester(c, logFile=logFile) with RandInsts {
+class ImmGenTests[+T <: ImmGen](c: T) extends PeekPokeTester(c) with RandInsts {
   for (inst <- insts) {
     val ctrl = GoldControl(new ControlIn(inst))
     val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
-    logger println s"*** ${dasm(inst)} ***"
+    println(s"*** ${dasm(inst)} ***")
     poke(c.io.inst,  inst)
     poke(c.io.sel,   ctrl.imm_sel)
     expect(c.io.out, gold.out) 
