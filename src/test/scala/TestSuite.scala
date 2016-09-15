@@ -43,70 +43,73 @@ class DatapathUnitTest extends UnitTest(new Datapath()(p))(m => new DatapathTest
 class CacheUnitTest extends UnitTest(new Cache()(p))(m => new CacheTests(m))
 class CoreUnitTest extends UnitTest(new Core()(p))(m => new CoreSimpleTests(m))
 
-trait RiscVTests {
-  trait TestType
-  case object ISATests extends TestType
-  case object BmarkTests extends TestType
-
-  val isaTests = (List("simple", "add", "addi", "auipc", "and", "andi", // TODO: "fence_i",
+trait TestType {
+  def tests: List[String]
+  def maxcycles: Long
+}
+case object SimpleTests extends TestType {
+  val tests = List("rv32ui-p-simple")
+  val maxcycles = 15000L
+}
+case object ISATests extends TestType {
+  val tests = (List("simple", "add", "addi", "auipc", "and", "andi", // TODO: "fence_i",
     "sb", "sh", "sw", "lb", "lbu", "lh", "lhu", "lui", "lw",
     "beq", "bge", "bgeu", "blt", "bltu", "bne", "j", "jal", "jalr",
     "or", "ori", "sll", "slli", "slt", "slti", "sra", "srai", "sub", "xor", "xori"
   ) map (t => s"rv32ui-p-${t}")) ++ (List(
     "sbreak", "scall", "illegal", "ma_fetch", "ma_addr", "csr" //, TODO: "timer"
   ) map (t => s"rv32mi-p-${t}"))
-
-  val bmarkTests = List(
+  val maxcycles = 15000L
+}
+case object BmarkTests extends TestType {
+  val tests = List(
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
-
-  val outDir = new File("test-outs") ; outDir.mkdirs
-  def baseArgs(dir: File, backend: String) = Array(
-    "--targetDir", dir.getCanonicalPath.toString,
-    "--backend", backend, "--v", "--genHarness",
-    "--compile", "--test")
+  val maxcycles = 1500000L
 }
 
 abstract class MiniTestSuite[+T <: Module : ClassTag](
-    dutGen: => T, backend: String, N: Int = 10) extends org.scalatest.FlatSpec with RiscVTests {
+    dutGen: => T,
+    backend: String,
+    testType: TestType,
+    N: Int = 5) extends org.scalatest.FlatSpec {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-  val testDir = new File(outDir, dutName)
-  val args = baseArgs(testDir, backend)
+  val baseDir = new File(s"test-outs/$dutName") ; baseDir.mkdirs
+  val dir = new File(baseDir, testType.toString) ; dir.mkdirs
+  val args = Array(
+    "--targetDir", dir.toString, "--backend", backend,
+    "--v", "--genHarness", "--compile", "--test")
   val dut = chiselMain(args, () => dutGen)
   val vcs = backend == "vcs"
-  behavior of s"$dutName in $backend"
 
-  def runTests(testType: TestType) = {
-    val (tests, maxcycles) = testType match {
-      case ISATests   => (isaTests, 15000L)
-      case BmarkTests => (bmarkTests, 1500000L)
+  behavior of s"$dutName in $backend"
+  import scala.concurrent.duration._
+  import ExecutionContext.Implicits.global
+  val results = testType.tests.zipWithIndex sliding (N, N) map { subtests =>
+    val subresults = subtests map {case (t, i) =>
+      val loadmem = getClass.getResourceAsStream(s"/$t.hex")
+      val logFile = Some(new File(dir, s"$t-$backend.log"))
+      val waveform = Some(new File(dir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
+      val testCmd = new File(dir, s"%s$dutName".format(if (vcs) "" else "V"))
+      val args = new MiniTestArgs(loadmem, logFile, false, testType.maxcycles, 16) // latency)
+      Future(t -> (dut match {
+        case _: Core => Driver.run(
+          () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
+        case _: Tile => Driver.run(
+          () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
+      }))
     }
-    import scala.concurrent.duration._
-    import ExecutionContext.Implicits.global
-    val results = tests.zipWithIndex sliding (N, N) map { subtests =>
-      val subresults = subtests map {case (t, i) =>
-        val loadmem = getClass.getResourceAsStream(s"/$t.hex")
-        val logFile = Some(new File(testDir, s"$t-$backend.log"))
-        val waveform = Some(new File(testDir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
-        val testCmd = new File(testDir, s"%s$dutName".format(if (vcs) "" else "V"))
-        val args = new MiniTestArgs(loadmem, logFile, false, maxcycles, 16) // latency)
-        Future(t -> (dut match {
-          case _: Core => Driver.run(
-            () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
-          case _: Tile => Driver.run(
-            () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
-        }))
-      } 
-      Await.result(Future.sequence(subresults), Duration.Inf)
-    }
-    results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
+    Await.result(Future.sequence(subresults), Duration.Inf)
   }
-  runTests(ISATests)
-  // runTests(BmarkTests)
+  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
 }
 
-class CoreCppTests extends MiniTestSuite(new Core()(p), "verilator")
-class CoreVCSTests extends MiniTestSuite(new Core()(p), "vcs")
+class CoreCppISATests extends MiniTestSuite(new Core()(p), "verilator", ISATests)
+class CoreCppBmarkTests extends MiniTestSuite(new Core()(p), "verilator", BmarkTests)
+class CoreVCSISATests extends MiniTestSuite(new Core()(p), "vcs", ISATests)
+class CoreVCSBmarkTests extends MiniTestSuite(new Core()(p), "vcs", BmarkTests)
 
-class TileCppTests extends MiniTestSuite(new Tile(p), "verilator")
-class TileVCSTests extends MiniTestSuite(new Tile(p), "vcs")
+class TileCppISATests extends MiniTestSuite(new Tile(p), "verilator", ISATests)
+class TileCppBmarkTests extends MiniTestSuite(new Tile(p), "verilator", BmarkTests)
+class TileVCSISATests extends MiniTestSuite(new Tile(p), "vcs", ISATests)
+class TileVCSBmarkTests extends MiniTestSuite(new Tile(p), "vcs", BmarkTests)
