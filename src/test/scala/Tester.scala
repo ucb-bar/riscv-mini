@@ -5,7 +5,7 @@ import chisel3.util.log2Up
 import chisel3.iotesters._
 import junctions._
 import scala.collection.mutable.{Queue => ScalaQueue}
-import java.io.{File, PrintStream}
+import java.io.{File, PrintStream, InputStream}
 
 case class TestCacheReq(addr: Int, data: BigInt, mask: BigInt) {
   override def toString = "[Cache Req] addr: %x, data: %x, mask: %x".format(addr, data, mask)
@@ -66,8 +66,8 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
     }
   }
 
-  def loadMem(file: File) {
-    val lines = io.Source.fromFile(file).getLines
+  def loadMem(stream: InputStream) {
+    val lines = io.Source.fromInputStream(stream).getLines
     for ((line, i) <- lines.zipWithIndex) {
       val base = (i * line.length) / 2
       assert(base % word_width == 0)
@@ -155,7 +155,7 @@ class CoreMem(
 }
 
 case class MiniTestArgs(
-  loadmem: File, 
+  loadmem: InputStream, 
   logFile: Option[File] = None,
   verbose: Boolean = false,
   maxcycles: Long = 500000, 

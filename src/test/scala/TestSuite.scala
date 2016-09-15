@@ -77,39 +77,32 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
   behavior of s"$dutName in $backend"
 
   def runTests(testType: TestType) = {
-    val (dir, tests, maxcycles) = testType match {
-      case ISATests   => (new File("riscv-tests/isa"), isaTests, 15000L)
-      case BmarkTests => (new File("riscv-bmarks"), bmarkTests, 1500000L)
+    val (tests, maxcycles) = testType match {
+      case ISATests   => (isaTests, 15000L)
+      case BmarkTests => (bmarkTests, 1500000L)
     }
-    assert(dir.exists)
     import scala.concurrent.duration._
     import ExecutionContext.Implicits.global
-    val results = tests.zipWithIndex sliding (N, N) map { subtests => Future {
+    val results = tests.zipWithIndex sliding (N, N) map { subtests =>
       val subresults = subtests map {case (t, i) =>
-        val loadmem = new File(dir, s"$t.hex")
+        val loadmem = getClass.getResourceAsStream(s"/$t.hex")
         val logFile = Some(new File(testDir, s"$t-$backend.log"))
         val waveform = Some(new File(testDir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
         val testCmd = new File(testDir, s"%s$dutName".format(if (vcs) "" else "V"))
-        val args = new MiniTestArgs(loadmem, logFile, false, maxcycles) // latency)
-        if (!loadmem.exists) {
-          assert(Seq("make", "-C", dir.getPath.toString, s"$t.hex", 
-                     """'RISCV_GCC=$(RISCV_PREFIX)gcc -m32'""").! == 0)
-        }
-        Future { t -> (dut match {
+        val args = new MiniTestArgs(loadmem, logFile, false, maxcycles, 16) // latency)
+        Future(t -> (dut match {
           case _: Core => Driver.run(
             () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
           case _: Tile => Driver.run(
             () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
-        })}
+        }))
       } 
       Await.result(Future.sequence(subresults), Duration.Inf)
-    } }
-    Await.result(Future.sequence(results), Duration.Inf).flatten foreach { case (name, pass) =>
-      it should s"pass $name" in { assert(pass) }
     }
+    results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
   }
-  // runTests(ISATests)
-  runTests(BmarkTests)
+  runTests(ISATests)
+  // runTests(BmarkTests)
 }
 
 class CoreCppTests extends MiniTestSuite(new Core()(p), "verilator")
