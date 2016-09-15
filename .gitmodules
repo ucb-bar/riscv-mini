@@ -1,6 +1,3 @@
-[submodule "junctions"]
-	path = junctions
-	url = https://github.com/ucb-bar/junctions.git
 [submodule "cde"]
 	path = cde
 	url = git@github.com:ucb-bar/context-dependent-environments.git
