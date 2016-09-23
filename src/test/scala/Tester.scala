@@ -65,9 +65,7 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
                  res | (test(i*chunk+k) << 32*(chunk-1-k))))
     }
   }
-
-  def loadMem(stream: InputStream) {
-    val lines = io.Source.fromInputStream(stream).getLines
+  def loadMem(lines: Iterator[String]) {
     for ((line, i) <- lines.zipWithIndex) {
       val base = (i * line.length) / 2
       assert(base % word_width == 0)
@@ -82,6 +80,12 @@ abstract class SimMem(word_width: Int = 4, depth: Int = 1 << 20, verbose: Boolea
         }
       }
     }
+  }
+  def loadMem(stream: InputStream) {
+    loadMem(io.Source.fromInputStream(stream).getLines)
+  }
+  def loadMem(file: File) {
+    loadMem(io.Source.fromFile(file).getLines)
   }
 }
 
@@ -313,16 +317,9 @@ class TileTester(c: Tile, args: MiniTestArgs)
   if (c.core.useNasti) {
     nasti loadMem args.loadmem
     preprocessors += nasti
-    arHandler.process()
-    awHandler.process()
-    rHandler.process()
-    wHandler.process()
   } else {
     mem loadMem args.loadmem
     preprocessors += mem
-    cmdHandler.process()
-    dataHandler.process()
-    respHandler.process()
   }
   if (!run(c.io.host, args.maxcycles)) fail
 }

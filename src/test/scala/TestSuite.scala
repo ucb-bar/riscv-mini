@@ -3,7 +3,6 @@ package mini
 import chisel3.Module
 import chisel3.iotesters.{chiselMain, chiselMainTest, PeekPokeTester, Driver}
 import java.io.{File, PrintStream}
-import sys.process.stringSeqToProcess
 import scala.reflect.ClassTag
 import scala.concurrent.{Future, Await, ExecutionContext}
 
@@ -72,7 +71,8 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
     dutGen: => T,
     backend: String,
     testType: TestType,
-    N: Int = 5) extends org.scalatest.FlatSpec {
+    N: Int = 5,
+    latency: Int = 8) extends org.scalatest.FlatSpec {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
   val baseDir = new File(s"test-outs/$dutName") ; baseDir.mkdirs
   val dir = new File(baseDir, testType.toString) ; dir.mkdirs
@@ -91,7 +91,7 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
       val logFile = Some(new File(dir, s"$t-$backend.log"))
       val waveform = Some(new File(dir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
       val testCmd = new File(dir, s"%s$dutName".format(if (vcs) "" else "V"))
-      val args = new MiniTestArgs(loadmem, logFile, false, testType.maxcycles, 16) // latency)
+      val args = new MiniTestArgs(loadmem, logFile, false, testType.maxcycles, latency)
       Future(t -> (dut match {
         case _: Core => Driver.run(
           () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
