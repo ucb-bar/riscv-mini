@@ -171,6 +171,7 @@ object NastiWriteDataChannel {
   def apply(data: UInt, last: Bool = Bool(true), id: UInt = UInt(0))
            (implicit p: Parameters): NastiWriteDataChannel = {
     val w = Wire(new NastiWriteDataChannel)
+    w.id := id
     w.strb := Fill(w.nastiWStrobeBits, UInt(1, 1))
     w.data := data
     w.last := last
