@@ -10,13 +10,13 @@ object Const {
 
 class DatapathIO(implicit p: Parameters) extends CoreBundle()(p) {
   val host = new HostIO
-  val icache = (new CacheIO).flip
-  val dcache = (new CacheIO).flip
-  val ctrl = (new ControlSignals).flip
+  val icache = Flipped(new CacheIO)
+  val dcache = Flipped(new CacheIO)
+  val ctrl = Flipped(new ControlSignals)
 }
 
 class Datapath(implicit val p: Parameters) extends Module with CoreParams {
-  val io      = new DatapathIO
+  val io      = IO(new DatapathIO)
   val csr     = Module(new CSR)
   val regFile = Module(new RegFile) 
   val alu     = p(BuildALU)(p)

@@ -139,7 +139,7 @@ class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
 }
 
 class Control(implicit p: Parameters) extends Module {
-  val io = new ControlSignals
+  val io = IO(new ControlSignals)
   val ctrlSignals = ListLookup(io.inst, Control.default, Control.map)
 
   // Control signals for Fetch

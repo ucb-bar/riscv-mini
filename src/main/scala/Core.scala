@@ -17,18 +17,18 @@ abstract trait CoreParams {
 abstract class CoreBundle(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p) with CoreParams
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val fromhost = Valid(UInt(width=xlen)).flip
+  val fromhost = Flipped(Valid(UInt(width=xlen)))
   val tohost   = UInt(OUTPUT, xlen)
 }
 
 class CoreIO(implicit p: Parameters) extends Bundle {
   val host = new HostIO
-  val icache = (new CacheIO).flip
-  val dcache = (new CacheIO).flip
+  val icache = Flipped((new CacheIO))
+  val dcache = Flipped((new CacheIO))
 }
 
 class Core(implicit val p: Parameters) extends Module with CoreParams {
-  val io = new CoreIO
+  val io = IO(new CoreIO)
   val dpath = Module(new Datapath) 
   val ctrl  = Module(new Control)
 
