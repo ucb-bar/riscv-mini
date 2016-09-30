@@ -11,7 +11,7 @@ class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
 }
 
 abstract class ImmGen(implicit p: Parameters) extends Module {
-  val io = new ImmGenIO
+  val io = IO(new ImmGenIO)
 }
 
 class ImmGenWire(implicit p: Parameters) extends ImmGen()(p) {

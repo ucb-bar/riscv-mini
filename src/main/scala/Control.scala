@@ -139,15 +139,8 @@ class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
 }
 
 class Control(implicit p: Parameters) extends Module {
-  val io = new ControlSignals
+  val io = IO(new ControlSignals)
   val ctrlSignals = ListLookup(io.inst, Control.default, Control.map)
-  val st_type  = Reg(io.st_type)
-  val ld_type  = Reg(ctrlSignals(8))
-  val wb_sel   = Reg(ctrlSignals(9))
-  val wb_en    = Reg(Bool())
-  val csr_cmd  = Reg(ctrlSignals(11))
-  val illegal  = Reg(Bool())
-  val pc_check = Reg(Bool())
 
   // Control signals for Fetch
   io.pc_sel    := ctrlSignals(0)

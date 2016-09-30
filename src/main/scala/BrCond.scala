@@ -12,7 +12,7 @@ class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
 }
 
 abstract class BrCond(implicit p: Parameters) extends Module {
-  val io = new BrCondIO
+  val io = IO(new BrCondIO)
 }
 
 class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {

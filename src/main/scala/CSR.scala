@@ -93,7 +93,7 @@ class CSRIO(implicit p: Parameters)  extends CoreBundle()(p) {
 }
 
 class CSR(implicit val p: Parameters) extends Module with CoreParams {
-  val io = new CSRIO
+  val io = IO(new CSRIO)
 
   val csr_addr = io.inst(31, 20)
   val rs1_addr = io.inst(19, 15)

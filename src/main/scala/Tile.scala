@@ -5,11 +5,11 @@ import cde.Parameters
 import junctions._
 
 class MemArbiter(implicit p: Parameters) extends Module {
-  val io = new ParameterizedBundle {
-    val icache = (new NastiIO).flip
-    val dcache = (new NastiIO).flip
+  val io = IO(new ParameterizedBundle {
+    val icache = Flipped(new NastiIO)
+    val dcache = Flipped(new NastiIO)
     val nasti  =  new NastiIO
-  }
+  })
 
   val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: Nil = Enum(UInt(), 4)
   val state = RegInit(s_IDLE)
@@ -80,7 +80,7 @@ class TileIO(implicit p: Parameters) extends ParameterizedBundle {
 
 class Tile(tileParams: Parameters) extends Module {
   implicit val p = tileParams
-  val io     = new TileIO
+  val io     = IO(new TileIO)
   val core   = Module(new Core)
   val icache = Module(new Cache)
   val dcache = Module(new Cache)

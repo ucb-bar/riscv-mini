@@ -30,7 +30,7 @@ class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
 import ALU._
 
 abstract class ALU(implicit val p: Parameters) extends Module with CoreParams {
-  val io = new ALUIo
+  val io = IO(new ALUIo)
 }
 
 class ALUSimple(implicit p: Parameters) extends ALU()(p) {

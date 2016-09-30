@@ -21,7 +21,7 @@ class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
 
 class CacheIO (implicit p: Parameters) extends ParameterizedBundle()(p) {
   val abort = Bool(INPUT)
-  val req   = Valid(new CacheReq).flip
+  val req   = Flipped(Valid(new CacheReq))
   val resp  = Valid(new CacheResp)
 }
 
@@ -50,7 +50,7 @@ class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
-  val io = new CacheModuleIO
+  val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: 
        s_REFILL_READY :: s_REFILL :: Nil) = Enum(UInt(), 6)
