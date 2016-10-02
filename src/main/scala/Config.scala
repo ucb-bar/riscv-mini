@@ -1,6 +1,6 @@
 package mini
 
-import Chisel._
+import chisel3.Module
 import cde.{Parameters, Config}
 import junctions._
 

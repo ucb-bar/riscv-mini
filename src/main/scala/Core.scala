@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3._
+import chisel3.util.Valid
 import cde.{Parameters, Field}
 
 case object XLEN extends Field[Int]

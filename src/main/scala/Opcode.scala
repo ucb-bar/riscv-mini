@@ -1,6 +1,6 @@
 package mini
 
-import Chisel._
+import chisel3.UInt
 
 object Opcode {
   // Special immediate instructions

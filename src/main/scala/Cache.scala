@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import junctions._
 import cde.{Parameters, Field}
 
@@ -60,9 +61,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val metaMem  = SeqMem(nSets, new MetaData)
   val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(width=8))))
 
-  val addr_reg = Reg(io.cpu.req.bits.addr)
-  val cpu_data = Reg(io.cpu.req.bits.data)
-  val cpu_mask = Reg(io.cpu.req.bits.mask)
+  val addr_reg = Reg(io.cpu.req.bits.addr.cloneType)
+  val cpu_data = Reg(io.cpu.req.bits.data.cloneType)
+  val cpu_mask = Reg(io.cpu.req.bits.mask.cloneType)
 
   // Counters
   require(nastiXDataBits == mifDataBits, "$nastiXDataBits != $mifDataBits")

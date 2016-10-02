@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3._
+import chisel3.util._
 import cde.Parameters
 
 object Const {
@@ -36,11 +37,11 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val csr_in  = Reg(UInt())
 
   /****** Control signals *****/
-  val st_type  = Reg(io.ctrl.st_type)
-  val ld_type  = Reg(io.ctrl.ld_type)
-  val wb_sel   = Reg(io.ctrl.wb_sel)
+  val st_type  = Reg(io.ctrl.st_type.cloneType)
+  val ld_type  = Reg(io.ctrl.ld_type.cloneType)
+  val wb_sel   = Reg(io.ctrl.wb_sel.cloneType)
   val wb_en    = Reg(Bool())
-  val csr_cmd  = Reg(io.ctrl.csr_cmd)
+  val csr_cmd  = Reg(io.ctrl.csr_cmd.cloneType)
   val illegal  = Reg(Bool())
   val pc_check = Reg(Bool())
  

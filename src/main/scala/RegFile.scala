@@ -1,6 +1,6 @@
 package mini
 
-import Chisel._
+import chisel3._
 import cde.Parameters
 
 class RegFileIO(implicit p: Parameters)  extends CoreBundle()(p) {
