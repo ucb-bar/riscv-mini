@@ -135,7 +135,8 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   io.nasti.aw.valid := Bool(false)
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
-    Vec.tabulate(mifDataBeats)(i => rdata((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count), write_wrap_out)
+    Vec.tabulate(mifDataBeats)(i => rdata((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
+    None, write_wrap_out)
   io.nasti.w.valid := Bool(false)
   // write resp
   io.nasti.b.ready := Bool(true)
