@@ -3,13 +3,21 @@ package mini
 import chisel3.Module
 import chisel3.iotesters.{chiselMain, chiselMainTest, PeekPokeTester, Driver}
 import java.io.{File, PrintStream}
-import scala.reflect.ClassTag
+import scala.sys.process.{BasicIO, stringSeqToProcess}
 import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.reflect.ClassTag
 
 object TestParams {
   implicit def p = cde.Parameters.root((new MiniConfig).toInstance)
 }
 import TestParams.p
+
+object checkBackend {
+  def apply(b: String) = {
+    val cmd = Seq("bash", "-c", "which %s".format(b))
+    b == "firrtl" || (cmd run BasicIO(false, new StringBuffer, None)).exitValue == 0
+  }
+}
 
 abstract class UnitTest[+M <: Module : ClassTag](c: => M)(tester: M => PeekPokeTester[M])
     extends org.scalatest.FlatSpec {
@@ -21,12 +29,16 @@ abstract class UnitTest[+M <: Module : ClassTag](c: => M)(tester: M => PeekPokeT
   val modName = implicitly[ClassTag[M]].runtimeClass.getSimpleName
   val dir = new File(s"$outDir/$modName")
   behavior of modName
-  Seq("verilator", "vcs") foreach {backend =>
-    it should s"pass $backend" in {
-      val args = baseArgs(dir) ++ Array(
-        "--backend", backend,
-        "--logFile", (new File(dir, s"$modName-$backend.log")).toString)
-      chiselMainTest(args, () => c)(tester)
+  Seq("verilator", "vcs") foreach { backend =>
+    if (checkBackend(backend)) {
+      it should s"pass $backend" in {
+        val args = baseArgs(dir) ++ Array(
+          "--backend", backend,
+          "--logFile", (new File(dir, s"$modName-$backend.log")).toString)
+        chiselMainTest(args, () => c)(tester)
+      }
+    } else {
+      ignore should s"pass $backend" in { assert(false) }
     }
   }
 }
@@ -79,29 +91,33 @@ abstract class MiniTestSuite[+T <: Module : ClassTag](
   val args = Array(
     "--targetDir", dir.toString, "--backend", backend,
     "--v", "--genHarness", "--compile", "--test")
-  val dut = chiselMain(args, () => dutGen)
-  val vcs = backend == "vcs"
 
   behavior of s"$dutName in $backend"
-  import scala.concurrent.duration._
-  import ExecutionContext.Implicits.global
-  val results = testType.tests.zipWithIndex sliding (N, N) map { subtests =>
-    val subresults = subtests map {case (t, i) =>
-      val loadmem = getClass.getResourceAsStream(s"/$t.hex")
-      val logFile = Some(new File(dir, s"$t-$backend.log"))
-      val waveform = Some(new File(dir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
-      val testCmd = new File(dir, s"%s$dutName".format(if (vcs) "" else "V"))
-      val args = new MiniTestArgs(loadmem, logFile, false, testType.maxcycles, latency)
-      Future(t -> (dut match {
-        case _: Core => Driver.run(
-          () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
-        case _: Tile => Driver.run(
-          () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
-      }))
+  if (checkBackend(backend)) {
+    import scala.concurrent.duration._
+    import ExecutionContext.Implicits.global
+    val dut = chiselMain(args, () => dutGen)
+    val vcs = backend == "vcs"
+    val results = testType.tests.zipWithIndex sliding (N, N) map { subtests =>
+      val subresults = subtests map {case (t, i) =>
+        val loadmem = getClass.getResourceAsStream(s"/$t.hex")
+        val logFile = Some(new File(dir, s"$t-$backend.log"))
+        val waveform = Some(new File(dir, s"$t.%s".format(if (vcs) "vpd" else "vcd")))
+        val testCmd = new File(dir, s"%s$dutName".format(if (vcs) "" else "V"))
+        val args = new MiniTestArgs(loadmem, logFile, false, testType.maxcycles, latency)
+        Future(t -> (dut match {
+          case _: Core => Driver.run(
+            () => dutGen.asInstanceOf[Core], testCmd, waveform)(m => new CoreTester(m, args))
+          case _: Tile => Driver.run(
+            () => dutGen.asInstanceOf[Tile], testCmd, waveform)(m => new TileTester(m, args))
+        }))
+      }
+      Await.result(Future.sequence(subresults), Duration.Inf)
     }
-    Await.result(Future.sequence(subresults), Duration.Inf)
+    results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
+  } else {
+    testType.tests foreach { name => ignore should s"pass $name" in { assert(false) } }
   }
-  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
 }
 
 class CoreCppISATests extends MiniTestSuite(new Core()(p), "verilator", ISATests)
