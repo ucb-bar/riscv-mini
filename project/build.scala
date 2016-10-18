@@ -3,14 +3,14 @@ import Keys._
 
 object MiniBuild extends Build {
   override lazy val settings = super.settings ++ Seq(
-    scalaVersion := "2.11.7",
-    scalacOptions ++= Seq("-deprecation","-unchecked")
+    resolvers ++= Seq(
+      Resolver.sonatypeRepo("snapshots"),
+      Resolver.sonatypeRepo("releases")),
+    libraryDependencies += "edu.berkeley.cs" %% "chisel3" % sys.props("chisel3Version")
   )
-  lazy val chisel    = project
-  lazy val firrtl    = project
-  lazy val cde       = project dependsOn chisel
-  lazy val junctions = project dependsOn cde
-  lazy val interp    = project dependsOn firrtl
-  lazy val testers   = project dependsOn (chisel, interp)
-  lazy val root      = (project in file(".")).settings(settings:_*).dependsOn(junctions, testers)
+  lazy val cde       = project
+  lazy val junctions = project settings (settings:_*) dependsOn cde
+  lazy val interp    = project
+  lazy val testers   = project dependsOn interp
+  lazy val root      = project in file(".") dependsOn (junctions, testers)
 }

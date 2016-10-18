@@ -3,17 +3,20 @@ default: compile
 base_dir   = $(abspath .)
 src_dir    = $(base_dir)/src/main/scala/
 gen_dir    = $(base_dir)/generated-src
-log_dir    = $(base_dir)/logs
-isa_dir    = $(base_dir)/riscv-tests/isa
-bmarks_dir = $(base_dir)/riscv-bmarks
 
 SBT       = sbt
-SBT_FLAGS = -DchiselVersion=latest.release
+SBT_FLAGS = -DfirrtlVersion=0.2-BETA-SNAPSHOT -Dchisel3Version=3.0-BETA-SNAPSHOT
+
+sbt:
+	$(SBT) $(SBT_FLAGS)
 
 compile: $(gen_dir)/Tile.v
 
 $(gen_dir)/Tile.v: $(wildcard $(src_dir)/*.scala)
 	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "run $(gen_dir)"
+
+test:
+	$(SBT) $(SBT_FLAGS) test
 
 clean:
 	rm -rf $(gen_dir) test-* *.key
