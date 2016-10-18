@@ -1,16 +1,13 @@
 package mini
 
-import scala.collection.mutable.ArrayBuffer
+import java.io.{File, FileWriter}
 
-object Main {
-  def main(args: Array[String]) {
-    // Compile for synthesis
-    val params = cde.Parameters.root((new MiniConfig).toInstance)
-    val circuit = chisel3.Driver.elaborate(() => new Tile(params))
-    val firrtl = new java.io.File(s"${args(0)}/${circuit.name}.fir")
-    val dir = new java.io.File(args(0))
-    if (!dir.exists) dir.mkdirs
-    chisel3.Driver.dumpFirrtl(circuit, Some(firrtl))
-    chisel3.Driver.firrtlToVerilog(circuit.name, dir).!
-  }
+object Main extends App {
+  // Compile for synthesis
+  val dir = new File(args(0)) ; dir.mkdirs
+  val params = cde.Parameters.root((new MiniConfig).toInstance)
+  val chirrtl = firrtl.Parser.parse(chisel3.Driver.emit(() => new Tile(params)))
+  val annotations = new firrtl.Annotations.AnnotationMap(Nil)
+  val verilog = new FileWriter(new File(dir, s"${chirrtl.main}.v"))
+  new firrtl.VerilogCompiler compile (chirrtl, annotations, verilog)
 }

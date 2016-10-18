@@ -13,7 +13,7 @@ sbt:
 compile: $(gen_dir)/Tile.v
 
 $(gen_dir)/Tile.v: $(wildcard $(src_dir)/*.scala)
-	cd $(base_dir) && $(SBT) $(SBT_FLAGS) "run $(gen_dir)"
+	$(SBT) $(SBT_FLAGS) "run $(gen_dir)"
 
 test:
 	$(SBT) $(SBT_FLAGS) test
