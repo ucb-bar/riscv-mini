@@ -4,9 +4,3 @@
 [submodule "cde"]
 	path = cde
 	url = git@github.com:ucb-bar/context-dependent-environments.git
-[submodule "chisel-testers"]
-	path = testers
-	url = https://github.com/ucb-bar/chisel-testers.git
-[submodule "firrtl-interpreter"]
-	path = interp
-	url = https://github.com/ucb-bar/firrtl-interpreter.git

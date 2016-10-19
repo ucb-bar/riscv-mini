@@ -5,7 +5,8 @@ src_dir    = $(base_dir)/src/main/scala/
 gen_dir    = $(base_dir)/generated-src
 
 SBT       = sbt
-SBT_FLAGS = -DfirrtlVersion=0.2-BETA-SNAPSHOT -Dchisel3Version=3.0-BETA-SNAPSHOT
+SBT_FLAGS = -Dchisel3Version=3.0-BETA-SNAPSHOT -DfirrtlVersion=0.2-BETA-SNAPSHOT \
+	-Dchisel-iotesterVersion=0.2-BETA-SNAPSHOT
 
 sbt:
 	$(SBT) $(SBT_FLAGS)
