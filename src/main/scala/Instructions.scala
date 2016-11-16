@@ -1,6 +1,7 @@
 package mini
 
-import Chisel._
+import chisel3.UInt
+import chisel3.util.BitPat
 
 object Instructions {
   // Loads

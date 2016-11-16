@@ -1,5 +1,13 @@
 package mini
 
+import chisel3.Bundle
+import cde.Parameters
+
+abstract class ParameterizedBundle(implicit p: cde.Parameters) extends chisel3.Bundle {
+  override def cloneType =
+    this.getClass.getConstructors.head.newInstance(p).asInstanceOf[this.type]
+}
+
 trait TestType {
   def tests: List[String]
   def maxcycles: Long

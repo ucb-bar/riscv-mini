@@ -15,7 +15,7 @@ abstract trait CoreParams {
   val useNasti = p(UseNasti)
 }
 
-abstract class CoreBundle(implicit val p: Parameters) extends junctions.ParameterizedBundle()(p) with CoreParams
+abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundle()(p) with CoreParams
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
   val fromhost = Flipped(Valid(UInt(width=xlen)))
