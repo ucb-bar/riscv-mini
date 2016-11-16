@@ -11,8 +11,7 @@ case object BuildBrCond extends Field[Parameters => BrCond]
 
 abstract trait CoreParams {
   implicit val p: Parameters
-  val xlen     = p(XLEN)
-  val useNasti = p(UseNasti)
+  val xlen = p(XLEN)
 }
 
 abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundle()(p) with CoreParams

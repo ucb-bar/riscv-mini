@@ -8,7 +8,6 @@ import cde.{Parameters, Field}
 case object NWays extends Field[Int]
 case object NSets extends Field[Int]
 case object CacheBlockBytes extends Field[Int]
-case object UseNasti extends Field[Boolean]
 
 class CacheReq(implicit p: Parameters) extends CoreBundle()(p) {
   val addr = UInt(width=xlen)
@@ -31,8 +30,7 @@ class CacheModuleIO(implicit p: Parameters) extends ParameterizedBundle()(p) {
   val nasti = new NastiIO
 }
 
-trait CacheParams extends CoreParams 
-    with HasNastiParameters with HasMIFParameters {
+trait CacheParams extends CoreParams with HasNastiParameters {
   val nWays  = p(NWays) // Not used...
   val nSets  = p(NSets)
   val bBytes = p(CacheBlockBytes)
@@ -42,7 +40,8 @@ trait CacheParams extends CoreParams
   val tlen   = xlen - (slen + blen)
   val nWords = bBits / xlen
   val wBytes = xlen / 8
-  val byteOffsetBits = log2Up(wBytes) 
+  val byteOffsetBits = log2Up(wBytes)
+  val dataBeats = bBits / nastiXDataBits
 } 
 
 class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with CacheParams {
@@ -66,11 +65,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val cpu_mask = Reg(io.cpu.req.bits.mask.cloneType)
 
   // Counters
-  require(nastiXDataBits == mifDataBits, "$nastiXDataBits != $mifDataBits")
-  require(mifDataBeats > 0, s"$mifDataBeats <= 0")
-  require(bBits / nastiXDataBits == mifDataBeats, s"$bBits / $nastiXDataBits != $mifDataBeats")
-  val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire(), mifDataBeats)
-  val (write_count, write_wrap_out) = Counter(io.nasti.w.fire(), mifDataBeats)
+  require(dataBeats > 0)
+  val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire(), dataBeats)
+  val (write_count, write_wrap_out) = Counter(io.nasti.w.fire(), dataBeats)
 
   val is_idle   = state === s_IDLE
   val is_read   = state === s_READ_CACHE
@@ -89,7 +86,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata_buf = Reg(Vec(mifDataBeats, UInt(width=nastiXDataBits))) 
+  val rdata_buf = Reg(Vec(dataBeats, UInt(width=nastiXDataBits))) 
   val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, ren).toBits).reverse), 
                               rdata_buf.toBits) // bypass refilled data
   
@@ -124,18 +121,18 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   }
 
   io.nasti.ar.bits := NastiReadAddressChannel(
-    UInt(0), Cat(tag_reg, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(mifDataBeats-1))
+    UInt(0), Cat(tag_reg, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
   io.nasti.ar.valid := Bool(false)
   // read data
   io.nasti.r.ready := state === s_REFILL
   when(io.nasti.r.fire()) { rdata_buf(read_count) := io.nasti.r.bits.data }
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
-    UInt(0), Cat(rmeta.tag, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(mifDataBeats-1))
+    UInt(0), Cat(rmeta.tag, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
   io.nasti.aw.valid := Bool(false)
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
-    Vec.tabulate(mifDataBeats)(i => rdata((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
+    Vec.tabulate(dataBeats)(i => rdata((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
     None, write_wrap_out)
   io.nasti.w.valid := Bool(false)
   // write resp

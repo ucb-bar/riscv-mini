@@ -75,8 +75,7 @@ class MemArbiter(implicit p: Parameters) extends Module {
 
 class TileIO(implicit p: Parameters) extends ParameterizedBundle {
   val host  = new HostIO
-  val nasti = if (p(UseNasti)) new NastiIO else null
-  val mem   = if (!p(UseNasti)) new MemIO else null
+  val nasti = new NastiIO
 }
 
 class Tile(tileParams: Parameters) extends Module {
@@ -92,12 +91,5 @@ class Tile(tileParams: Parameters) extends Module {
   core.io.dcache <> dcache.io.cpu
   arb.io.icache <> icache.io.nasti
   arb.io.dcache <> dcache.io.nasti
-  
-  if (core.useNasti) {
-    io.nasti <> arb.io.nasti
-  } else {
-    val conv = Module(new MemIONastiIOConverter(icache.blen))
-    conv.io.nasti <> arb.io.nasti
-    io.mem <> conv.io.mem
-  }
+  io.nasti <> arb.io.nasti
 }

@@ -15,16 +15,10 @@ class MiniConfig extends Config(
     case NWays => 1 // TODO: set-associative
     case NSets => 256 
     case CacheBlockBytes => 4 * (here(XLEN) >> 3) // 4 x 32 bits = 16B
-    // MemIO(memserdes.scala in junctions)
-    case MIFAddrBits  => here(XLEN)
-    case MIFDataBits  => 64
-    case MIFTagBits   => 5
-    case MIFDataBeats => 8 * here(CacheBlockBytes) / here(MIFDataBits)
     // NastiIO
-    case UseNasti => true
     case NastiKey => new NastiParameters(
-      idBits   = here(MIFTagBits),
-      dataBits = here(MIFDataBits),
+      idBits   = 5,
+      dataBits = 64,
       addrBits = here(XLEN))
   }
 )
