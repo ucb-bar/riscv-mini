@@ -7,11 +7,11 @@ object Main extends App {
   val params = cde.Parameters.root((new MiniConfig).toInstance)
   val chirrtl = firrtl.Parser.parse(chisel3.Driver.emit(() => new Tile(params)))
   val writer = new FileWriter(new File(dir, s"${chirrtl.main}.fir"))
-  firrtl.FIRRTLEmitter run (chirrtl, writer)
+  writer write chirrtl.serialize
   writer.close
 
-  val annotations = new firrtl.Annotations.AnnotationMap(Nil)
   val verilog = new FileWriter(new File(dir, s"${chirrtl.main}.v"))
-  new firrtl.VerilogCompiler compile (chirrtl, annotations, verilog)
+  new firrtl.VerilogCompiler compile (
+    firrtl.CircuitState(chirrtl, firrtl.ChirrtlForm), verilog)
   verilog.close
 }
