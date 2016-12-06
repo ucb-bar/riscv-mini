@@ -52,8 +52,8 @@ class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val io = IO(new CacheModuleIO)
   // cache states
-  val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: 
-       s_REFILL_READY :: s_REFILL :: Nil) = Enum(UInt(), 6)
+  val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
+       s_REFILL_READY :: s_REFILL :: Nil) = Enum(UInt(), 7)
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(UInt(0, nSets))
@@ -136,7 +136,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     None, write_wrap_out)
   io.nasti.w.valid := Bool(false)
   // write resp
-  io.nasti.b.ready := Bool(true)
+  io.nasti.b.ready := Bool(false)
 
   // Cache FSM
   val is_dirty = v(idx_reg) && rmeta.dirty
@@ -179,6 +179,12 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     is(s_WRITE_BACK) {
       io.nasti.w.valid := Bool(true)
       when(write_wrap_out) {
+        state := s_WRITE_ACK
+      }
+    }
+    is(s_WRITE_ACK) {
+      io.nasti.b.ready := Bool(true)
+      when(io.nasti.b.fire()) {
         state := s_REFILL_READY
       }
     }
