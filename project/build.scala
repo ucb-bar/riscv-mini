@@ -3,9 +3,9 @@ import Keys._
 
 object MiniBuild extends Build {
   val defaultVersions = Map(
-    "chisel3" -> "3.0-BETA-SNAPSHOT",
-    "firrtl" -> "0.2-BETA-SNAPSHOT",
-    "chisel-iotesters" -> "1.1-BETA-SNAPSHOT"
+    "chisel3" -> "3.1-SNAPSHOT",
+    "firrtl" -> "1.1-SNAPSHOT",
+    "chisel-iotesters" -> "1.2-SNAPSHOT"
   )
   lazy val commonSettings = Seq(
     libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value,

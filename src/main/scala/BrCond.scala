@@ -5,10 +5,10 @@ import cde.Parameters
 import Control._
 
 class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val rs1 = UInt(INPUT, xlen)
-  val rs2 = UInt(INPUT, xlen)
-  val br_type = UInt(INPUT, 3)
-  val taken = Bool(OUTPUT)
+  val rs1 = Input(UInt(xlen))
+  val rs2 = Input(UInt(xlen))
+  val br_type = Input(UInt(3))
+  val taken = Output(Bool())
 }
 
 abstract class BrCond(implicit p: Parameters) extends Module {

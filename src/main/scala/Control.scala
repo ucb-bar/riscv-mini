@@ -123,20 +123,20 @@ object Control {
 }
 
 class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst      = UInt(INPUT, xlen)
-  val pc_sel    = UInt(OUTPUT, 2) 
-  val inst_kill = Bool(OUTPUT)
-  val A_sel     = UInt(OUTPUT, 1)
-  val B_sel     = UInt(OUTPUT, 1)
-  val imm_sel   = UInt(OUTPUT, 3)
-  val alu_op    = UInt(OUTPUT, 4)
-  val br_type   = UInt(OUTPUT, 3)
-  val st_type   = UInt(OUTPUT, 2)
-  val ld_type   = UInt(OUTPUT, 3)
-  val wb_sel    = UInt(OUTPUT, 2) 
-  val wb_en     = Bool(OUTPUT)
-  val csr_cmd   = UInt(OUTPUT, 3)
-  val illegal   = Bool(OUTPUT)
+  val inst      = Input(UInt(xlen))
+  val pc_sel    = Output(UInt(2))
+  val inst_kill = Output(Bool())
+  val A_sel     = Output(UInt(1))
+  val B_sel     = Output(UInt(1))
+  val imm_sel   = Output(UInt(3))
+  val alu_op    = Output(UInt(4))
+  val br_type   = Output(UInt(3))
+  val st_type   = Output(UInt(2))
+  val ld_type   = Output(UInt(3))
+  val wb_sel    = Output(UInt(2))
+  val wb_en     = Output(Bool())
+  val csr_cmd   = Output(UInt(3))
+  val illegal   = Output(Bool())
 }
 
 class Control(implicit p: Parameters) extends Module {

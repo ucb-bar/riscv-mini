@@ -21,11 +21,11 @@ object ALU {
 }
 
 class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
-  val A = UInt(INPUT, xlen)
-  val B = UInt(INPUT, xlen)
-  val alu_op = UInt(INPUT, 4)
-  val out = UInt(OUTPUT, xlen)
-  val sum = UInt(OUTPUT, xlen)
+  val A = Input(UInt(xlen))
+  val B = Input(UInt(xlen))
+  val alu_op = Input(UInt(4))
+  val out = Output(UInt(xlen))
+  val sum = Output(UInt(xlen))
 }
 
 import ALU._

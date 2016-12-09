@@ -74,21 +74,21 @@ object Cause {
 }
 
 class CSRIO(implicit p: Parameters)  extends CoreBundle()(p) {
-  val stall = Bool(INPUT)
-  val cmd   = UInt(INPUT, 3)
-  val in    = UInt(INPUT, xlen)
-  val out   = UInt(OUTPUT, xlen)
+  val stall = Input(Bool())
+  val cmd   = Input(UInt(3))
+  val in    = Input(UInt(xlen))
+  val out   = Output(UInt(xlen))
   // Excpetion
-  val pc       = UInt(INPUT, xlen)
-  val addr     = UInt(INPUT, xlen)
-  val inst     = UInt(INPUT, xlen)
-  val illegal  = Bool(INPUT)
-  val st_type  = UInt(INPUT, 2)
-  val ld_type  = UInt(INPUT, 3)
-  val pc_check = Bool(INPUT)
-  val expt     = Bool(OUTPUT)
-  val evec     = UInt(OUTPUT, xlen)
-  val epc      = UInt(OUTPUT, xlen)
+  val pc       = Input(UInt(xlen))
+  val addr     = Input(UInt(xlen))
+  val inst     = Input(UInt(xlen))
+  val illegal  = Input(Bool())
+  val st_type  = Input(UInt(2))
+  val ld_type  = Input(UInt(3))
+  val pc_check = Input(Bool())
+  val expt     = Output(Bool())
+  val evec     = Output(UInt(xlen))
+  val epc      = Output(UInt(xlen))
   // HTIF
   val host = new HostIO
 }

@@ -4,13 +4,13 @@ import chisel3._
 import cde.Parameters
 
 class RegFileIO(implicit p: Parameters)  extends CoreBundle()(p) {
-  val raddr1 = UInt(INPUT, 5)
-  val raddr2 = UInt(INPUT, 5)
-  val rdata1 = UInt(OUTPUT, xlen)
-  val rdata2 = UInt(OUTPUT, xlen)
-  val wen    = Bool(INPUT)
-  val waddr  = UInt(INPUT, 5)
-  val wdata  = UInt(INPUT, xlen)
+  val raddr1 = Input(UInt(5))
+  val raddr2 = Input(UInt(5))
+  val rdata1 = Output(UInt(xlen))
+  val rdata2 = Output(UInt(xlen))
+  val wen    = Input(Bool())
+  val waddr  = Input(UInt(5))
+  val wdata  = Input(UInt(xlen))
 }
 
 class RegFile(implicit val p: Parameters) extends Module with CoreParams {

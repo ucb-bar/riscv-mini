@@ -6,9 +6,9 @@ import cde.Parameters
 import Control._
 
 class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst = UInt(INPUT, xlen)
-  val sel  = UInt(INPUT, 3)
-  val out  = UInt(OUTPUT, xlen)
+  val inst = Input(UInt(xlen))
+  val sel  = Input(UInt(3))
+  val out  = Output(UInt(xlen))
 }
 
 abstract class ImmGen(implicit p: Parameters) extends Module {

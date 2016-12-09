@@ -20,7 +20,7 @@ class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
 }
 
 class CacheIO (implicit p: Parameters) extends ParameterizedBundle()(p) {
-  val abort = Bool(INPUT)
+  val abort = Input(Bool())
   val req   = Flipped(Valid(new CacheReq))
   val resp  = Valid(new CacheResp)
 }
