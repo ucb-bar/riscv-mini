@@ -5,9 +5,9 @@ import cde.Parameters
 import Control._
 
 class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val rs1 = Input(UInt(xlen))
-  val rs2 = Input(UInt(xlen))
-  val br_type = Input(UInt(3))
+  val rs1 = Input(UInt(xlen.W))
+  val rs2 = Input(UInt(xlen.W))
+  val br_type = Input(UInt(3.W))
   val taken = Output(Bool())
 }
 

@@ -6,55 +6,55 @@ import cde.Parameters
 import scala.collection.immutable.ListMap
 
 object CSR {
-  val N = UInt(0, 3)
-  val W = UInt(1, 3)
-  val S = UInt(2, 3)
-  val C = UInt(3, 3)
-  val P = UInt(4, 3)
+  val N = 0.U(3.W)
+  val W = 1.U(3.W)
+  val S = 2.U(3.W)
+  val C = 3.U(3.W)
+  val P = 4.U(3.W)
 
   // Supports machine & user modes
-  val PRV_U = UInt(0x0, 2)
-  val PRV_M = UInt(0x3, 2)
+  val PRV_U = 0x0.U( 2.W)
+  val PRV_M = 0x3.U(2.W)
 
   // User-level CSR addrs
-  val cycle    = UInt(0xc00, 12)
-  val time     = UInt(0xc01, 12)
-  val instret  = UInt(0xc02, 12)
-  val cycleh   = UInt(0xc80, 12)
-  val timeh    = UInt(0xc81, 12)
-  val instreth = UInt(0xc82, 12)
+  val cycle    = 0xc00.U(12.W)
+  val time     = 0xc01.U(12.W)
+  val instret  = 0xc02.U(12.W)
+  val cycleh   = 0xc80.U(12.W)
+  val timeh    = 0xc81.U(12.W)
+  val instreth = 0xc82.U(12.W)
 
   // Supervisor-level CSR addrs
-  val cyclew    = UInt(0x900, 12)
-  val timew     = UInt(0x901, 12)
-  val instretw  = UInt(0x902, 12)
-  val cyclehw   = UInt(0x980, 12)
-  val timehw    = UInt(0x981, 12)
-  val instrethw = UInt(0x982, 12)
+  val cyclew    = 0x900.U(12.W)
+  val timew     = 0x901.U(12.W)
+  val instretw  = 0x902.U(12.W)
+  val cyclehw   = 0x980.U(12.W)
+  val timehw    = 0x981.U(12.W)
+  val instrethw = 0x982.U(12.W)
 
   // Machine-level CSR addrs
   // Machine Information Registers
-  val mcpuid   = UInt(0xf00, 12)
-  val mimpid   = UInt(0xf01, 12)
-  val mhartid  = UInt(0xf10, 12)
+  val mcpuid   = 0xf00.U(12.W)
+  val mimpid   = 0xf01.U(12.W)
+  val mhartid  = 0xf10.U(12.W)
   // Machine Trap Setup
-  val mstatus  = UInt(0x300, 12)
-  val mtvec    = UInt(0x301, 12)
-  val mtdeleg  = UInt(0x302, 12) 
-  val mie      = UInt(0x304, 12)
-  val mtimecmp = UInt(0x321, 12)
+  val mstatus  = 0x300.U(12.W)
+  val mtvec    = 0x301.U(12.W)
+  val mtdeleg  = 0x302.U(12.W)
+  val mie      = 0x304.U(12.W)
+  val mtimecmp = 0x321.U(12.W)
   // Machine Timers and Counters
-  val mtime    = UInt(0x701, 12)
-  val mtimeh   = UInt(0x741, 12)
+  val mtime    = 0x701.U(12.W)
+  val mtimeh   = 0x741.U(12.W)
   // Machine Trap Handling
-  val mscratch = UInt(0x340, 12)
-  val mepc     = UInt(0x341, 12)
-  val mcause   = UInt(0x342, 12)
-  val mbadaddr = UInt(0x343, 12)
-  val mip      = UInt(0x344, 12)
+  val mscratch = 0x340.U(12.W)
+  val mepc     = 0x341.U(12.W)
+  val mcause   = 0x342.U(12.W)
+  val mbadaddr = 0x343.U(12.W)
+  val mip      = 0x344.U(12.W)
   // Hachine HITF
-  val mtohost   = UInt(0x780, 12)
-  val mfromhost = UInt(0x781, 12)
+  val mtohost   = 0x780.U(12.W)
+  val mfromhost = 0x781.U(12.W)
 
   val regs = List(
     cycle, time, instret, cycleh, timeh, instreth,
@@ -65,30 +65,30 @@ object CSR {
 }
 
 object Cause {
-  val InstAddrMisaligned  = UInt(0x0)
-  val IllegalInst         = UInt(0x2)
-  val Breakpoint          = UInt(0x3)
-  val LoadAddrMisaligned  = UInt(0x4)
-  val StoreAddrMisaligned = UInt(0x6)
-  val Ecall               = UInt(0x8)
+  val InstAddrMisaligned  = UInt(0x0.W)
+  val IllegalInst         = UInt(0x2.W)
+  val Breakpoint          = UInt(0x3.W)
+  val LoadAddrMisaligned  = UInt(0x4.W)
+  val StoreAddrMisaligned = UInt(0x6.W)
+  val Ecall               = UInt(0x8.W)
 }
 
 class CSRIO(implicit p: Parameters)  extends CoreBundle()(p) {
   val stall = Input(Bool())
-  val cmd   = Input(UInt(3))
-  val in    = Input(UInt(xlen))
-  val out   = Output(UInt(xlen))
+  val cmd   = Input(UInt(3.W))
+  val in    = Input(UInt(xlen.W))
+  val out   = Output(UInt(xlen.W))
   // Excpetion
-  val pc       = Input(UInt(xlen))
-  val addr     = Input(UInt(xlen))
-  val inst     = Input(UInt(xlen))
+  val pc       = Input(UInt(xlen.W))
+  val addr     = Input(UInt(xlen.W))
+  val inst     = Input(UInt(xlen.W))
   val illegal  = Input(Bool())
-  val st_type  = Input(UInt(2))
-  val ld_type  = Input(UInt(3))
+  val st_type  = Input(UInt(2.W))
+  val ld_type  = Input(UInt(3.W))
   val pc_check = Input(Bool())
   val expt     = Output(Bool())
-  val evec     = Output(UInt(xlen))
-  val epc      = Output(UInt(xlen))
+  val evec     = Output(UInt(xlen.W))
+  val epc      = Output(UInt(xlen.W))
   // HTIF
   val host = new HostIO
 }
@@ -100,39 +100,39 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val rs1_addr = io.inst(19, 15)
 
   // user counters
-  val time     = RegInit(UInt(0, xlen))
-  val timeh    = RegInit(UInt(0, xlen))
-  val cycle    = RegInit(UInt(0, xlen))
-  val cycleh   = RegInit(UInt(0, xlen))
-  val instret  = RegInit(UInt(0, xlen))
-  val instreth = RegInit(UInt(0, xlen))
+  val time     = RegInit(0.U(xlen.W))
+  val timeh    = RegInit(0.U(xlen.W))
+  val cycle    = RegInit(0.U(xlen.W))
+  val cycleh   = RegInit(0.U(xlen.W))
+  val instret  = RegInit(0.U(xlen.W))
+  val instreth = RegInit(0.U(xlen.W))
 
-  val mcpuid  = Cat(UInt(0, 2) /* RV32I */, UInt(0, xlen-28), 
+  val mcpuid  = Cat(0.U(2.W) /* RV32I */, UInt(0, xlen-28),
                     UInt(1 << ('I' - 'A') /* Base ISA */| 
                          1 << ('U' - 'A') /* User Mode */, 26))
-  val mimpid  = UInt(0, xlen) // not implemented
-  val mhartid = UInt(0, xlen) // only one hart
+  val mimpid  = 0.U(xlen.W) // not implemented
+  val mhartid = 0.U(xlen.W) // only one hart
 
   // interrupt enable stack
   val PRV  = RegInit(CSR.PRV_M)
   val PRV1 = RegInit(CSR.PRV_M)
-  val PRV2 = UInt(0, 2)
-  val PRV3 = UInt(0, 2)
+  val PRV2 = 0.U(2.W)
+  val PRV3 = 0.U(2.W)
   val IE  = RegInit(Bool(false))
   val IE1 = RegInit(Bool(false))
   val IE2 = Bool(false)
   val IE3 = Bool(false)
   // virtualization management field
-  val VM = UInt(0, 5)
+  val VM = 0.U(5.W)
   // memory privilege
   val MPRV = Bool(false)
   // extention context status
-  val XS = UInt(0, 2)
-  val FS = UInt(0, 2)
-  val SD = UInt(0, 1)
+  val XS = 0.U(2.W)
+  val FS = 0.U(2.W)
+  val SD = 0.U(1.W)
   val mstatus = Cat(SD, UInt(0, xlen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
   val mtvec   = Const.PC_EVEC
-  val mtdeleg = UInt(0x0, xlen)
+  val mtdeleg = 0x0.U(xlen.W)
   
   // interrupt registers
   val MTIP = RegInit(Bool(false))
@@ -158,7 +158,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val mcause = Reg(UInt(width=xlen))
   val mbadaddr = Reg(UInt(width=xlen))
 
-  val mtohost = RegInit(UInt(0, xlen))
+  val mtohost = RegInit(0.U(xlen.W))
   val mfromhost = Reg(UInt(width=xlen))
   io.host.tohost := mtohost
   when(io.host.fromhost.valid) {
@@ -172,7 +172,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
     mtimecmp, time, timeh, mscratch, mepc, mcause, mbadaddr, mip,
     mtohost, mfromhost, mstatus)
 
-  io.out := Lookup(csr_addr, UInt(0), csrFile).asUInt
+  io.out := Lookup(csr_addr, UInt(1.W), csrFile).asUInt
 
   val privValid = csr_addr(9, 8) <= PRV
   val privInst  = io.cmd === CSR.P
@@ -182,7 +182,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val csrValid  = csrFile map (_._1 === csr_addr) reduce (_ || _)
   val csrRO     = csr_addr(11, 10).andR || csr_addr === CSR.mtvec || csr_addr === CSR.mtdeleg
   val wen       = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR 
-  val wdata     = MuxLookup(io.cmd, UInt(0), Seq(
+  val wdata     = MuxLookup(io.cmd, UInt(0.W), Seq(
     CSR.W -> io.in,
     CSR.S -> (io.out | io.in),
     CSR.C -> (io.out & ~io.in)
@@ -195,17 +195,17 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
              io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
              (privInst && !privValid) || isEcall || isEbreak
-  io.evec := mtvec + (PRV << UInt(6))
+  io.evec := mtvec + (PRV << UInt(6.W))
   io.epc  := mepc
 
   // Counters
-  time := time + UInt(1)
-  when(time.andR) { timeh := timeh + UInt(1) }
-  cycle := cycle + UInt(1)
-  when(cycle.andR) { cycleh := cycleh + UInt(1) }
+  time := time + UInt(1.W)
+  when(time.andR) { timeh := timeh + UInt(1.W) }
+  cycle := cycle + UInt(1.W)
+  when(cycle.andR) { cycleh := cycleh + UInt(1.W) }
   val isInstRet = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
-  when(isInstRet) { instret := instret + UInt(1) }
-  when(isInstRet && instret.andR) { instreth := instreth + UInt(1) }
+  when(isInstRet) { instret := instret + UInt(1.W) }
+  when(isInstRet && instret.andR) { instreth := instreth + UInt(1.W) }
 
   when(!io.stall) {
     when(io.expt) {

@@ -18,7 +18,7 @@ abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundl
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
   val fromhost = Flipped(Valid(UInt(width=xlen)))
-  val tohost   = Output(UInt(xlen))
+  val tohost   = Output(UInt(xlen.W))
 }
 
 class CoreIO(implicit p: Parameters) extends Bundle {

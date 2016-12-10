@@ -6,9 +6,9 @@ import cde.Parameters
 import Control._
 
 class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst = Input(UInt(xlen))
-  val sel  = Input(UInt(3))
-  val out  = Output(UInt(xlen))
+  val inst = Input(UInt(xlen.W))
+  val sel  = Input(UInt(3.W))
+  val out  = Output(UInt(xlen.W))
 }
 
 abstract class ImmGen(implicit p: Parameters) extends Module {
@@ -18,9 +18,9 @@ abstract class ImmGen(implicit p: Parameters) extends Module {
 class ImmGenWire(implicit p: Parameters) extends ImmGen()(p) {
   val Iimm = io.inst(31, 20).asSInt
   val Simm = Cat(io.inst(31, 25), io.inst(11,7)).asSInt
-  val Bimm = Cat(io.inst(31), io.inst(7), io.inst(30, 25), io.inst(11, 8), UInt(0,1)).asSInt
-  val Uimm = Cat(io.inst(31, 12), UInt(0, 12)).asSInt
-  val Jimm = Cat(io.inst(31), io.inst(19, 12), io.inst(20), io.inst(30, 25), io.inst(24, 21), UInt(0, 1)).asSInt
+  val Bimm = Cat(io.inst(31), io.inst(7), io.inst(30, 25), io.inst(11, 8), 0.U(1.W)).asSInt
+  val Uimm = Cat(io.inst(31, 12), 0.U(12.W)).asSInt
+  val Jimm = Cat(io.inst(31), io.inst(19, 12), io.inst(20), io.inst(30, 25), io.inst(24, 21), 0.U(1.W)).asSInt
   val Zimm = io.inst(19, 15).zext
 
   io.out := MuxLookup(io.sel, Iimm & SInt(-2), 
@@ -34,13 +34,13 @@ class ImmGenMux(implicit p: Parameters) extends ImmGen()(p) {
   val b11 = Mux(io.sel === IMM_U || io.sel === IMM_Z, SInt(0),
             Mux(io.sel === IMM_J, io.inst(20).asSInt,
             Mux(io.sel === IMM_B, io.inst(7).asSInt, sign)))
-  val b10_5 = Mux(io.sel === IMM_U || io.sel === IMM_Z, UInt(0), io.inst(30,25))
-  val b4_1 = Mux(io.sel === IMM_U, UInt(0),
+  val b10_5 = Mux(io.sel === IMM_U || io.sel === IMM_Z, UInt(0.W), io.inst(30,25))
+  val b4_1 = Mux(io.sel === IMM_U, UInt(0.W),
              Mux(io.sel === IMM_S || io.sel === IMM_B, io.inst(11,8),
              Mux(io.sel === IMM_Z, io.inst(19,16), io.inst(24,21))))
   val b0 = Mux(io.sel === IMM_S, io.inst(7),
            Mux(io.sel === IMM_I, io.inst(20),
-           Mux(io.sel === IMM_Z, io.inst(15), UInt(0))))
+           Mux(io.sel === IMM_Z, io.inst(15), UInt(0.W))))
 
   io.out := Cat(sign, b30_20, b19_12, b11, b10_5, b4_1, b0).asSInt.asUInt
 }

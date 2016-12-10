@@ -56,7 +56,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
        s_REFILL_READY :: s_REFILL :: Nil) = Enum(UInt(), 7)
   val state = RegInit(s_IDLE)
   // memory
-  val v        = RegInit(UInt(0, nSets))
+  val v        = RegInit(0.U(nSets.W))
   val metaMem  = SeqMem(nSets, new MetaData)
   val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(width=8))))
 
@@ -106,7 +106,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   wmeta.tag   := tag_reg
   wmeta.dirty := !is_alloc 
 
-  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, UInt(0, byteOffsetBits))).zext, SInt(-1))
+  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, SInt(-1))
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), 
     if (rdata_buf.size == 1) io.nasti.r.bits.data
     else Cat(io.nasti.r.bits.data, Cat(rdata_buf.init.reverse)))
@@ -121,14 +121,14 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   }
 
   io.nasti.ar.bits := NastiReadAddressChannel(
-    UInt(0), Cat(tag_reg, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
+    UInt(0.W), Cat(tag_reg, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
   io.nasti.ar.valid := Bool(false)
   // read data
   io.nasti.r.ready := state === s_REFILL
   when(io.nasti.r.fire()) { rdata_buf(read_count) := io.nasti.r.bits.data }
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
-    UInt(0), Cat(rmeta.tag, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
+    UInt(0.W), Cat(rmeta.tag, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
   io.nasti.aw.valid := Bool(false)
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
