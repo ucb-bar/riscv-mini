@@ -2,31 +2,24 @@ import sbt._
 import Keys._
 
 object MiniBuild extends Build {
-  val defaultVersions = Map(
-    "chisel3" -> "3.1-SNAPSHOT",
-    "firrtl" -> "1.1-SNAPSHOT",
-    "chisel-iotesters" -> "1.2-SNAPSHOT"
-  )
-  lazy val commonSettings = Seq(
-    libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-    libraryDependencies ++= (Seq("chisel3", "firrtl", "chisel-iotesters") map { dep: String =>
-      "edu.berkeley.cs" %% dep % sys.props.getOrElse(s"${dep}Version", defaultVersions(dep))
-    }),
-    resolvers ++= Seq(
-      Resolver.sonatypeRepo("snapshots"),
-      Resolver.sonatypeRepo("releases"),
-      Resolver.mavenLocal
-    )
-  )
-  lazy val miniSettings = commonSettings ++ Seq(
+  override lazy val settings = super.settings ++ Seq(
     name := "riscv-mini",
     version := "2.0-SNAPSHOT",
     organization := "edu.berkeley.cs",
     scalaVersion := "2.11.7",
-    libraryDependencies += "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test"
+    libraryDependencies ++= Seq(
+      "org.scalatest" % "scalatest_2.11" % "2.2.4" % "test",
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value
+    ),
+    resolvers ++= Seq(
+      Resolver.sonatypeRepo("snapshots"),
+      Resolver.sonatypeRepo("releases")
+    )
   )
 
-  lazy val cde       = project settings commonSettings
-  lazy val junctions = project settings commonSettings dependsOn cde
-  lazy val mini      = project in file(".") settings miniSettings dependsOn (cde, junctions)
+  lazy val firrtl    = project
+  lazy val chisel    = project dependsOn firrtl
+  lazy val cde       = project
+  lazy val junctions = project dependsOn (chisel, cde)
+  lazy val mini      = project in file(".") dependsOn junctions
 }
