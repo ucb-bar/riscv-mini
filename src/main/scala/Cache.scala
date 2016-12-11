@@ -10,13 +10,13 @@ case object NSets extends Field[Int]
 case object CacheBlockBytes extends Field[Int]
 
 class CacheReq(implicit p: Parameters) extends CoreBundle()(p) {
-  val addr = UInt(width=xlen)
-  val data = UInt(width=xlen)
-  val mask = UInt(width=xlen/8)
+  val addr = UInt(xlen.W)
+  val data = UInt(xlen.W)
+  val mask = UInt((xlen/8).W)
 }
 
 class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
-  val data = UInt(width=xlen)
+  val data = UInt(xlen.W)
 }
 
 class CacheIO (implicit p: Parameters) extends ParameterizedBundle()(p) {
@@ -46,7 +46,7 @@ trait CacheParams extends CoreParams with HasNastiParameters {
 
 class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with CacheParams {
   val dirty = Bool()
-  val tag   = UInt(width=tlen)
+  val tag   = UInt(tlen.W)
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
@@ -58,7 +58,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   // memory
   val v        = RegInit(0.U(nSets.W))
   val metaMem  = SeqMem(nSets, new MetaData)
-  val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(width=8))))
+  val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(8.W))))
 
   val addr_reg = Reg(io.cpu.req.bits.addr.cloneType)
   val cpu_data = Reg(io.cpu.req.bits.data.cloneType)
@@ -86,7 +86,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata_buf = Reg(Vec(dataBeats, UInt(width=nastiXDataBits))) 
+  val rdata_buf = Reg(Vec(dataBeats, UInt(nastiXDataBits.W)))
   val rdata = Mux(!is_allocd, Cat(dataMem.map(_.read(idx, ren).toBits).reverse), 
                               rdata_buf.toBits) // bypass refilled data
   
@@ -121,14 +121,14 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   }
 
   io.nasti.ar.bits := NastiReadAddressChannel(
-    UInt(0.W), Cat(tag_reg, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
+    0.U, Cat(tag_reg, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
   io.nasti.ar.valid := Bool(false)
   // read data
   io.nasti.r.ready := state === s_REFILL
   when(io.nasti.r.fire()) { rdata_buf(read_count) := io.nasti.r.bits.data }
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
-    UInt(0.W), Cat(rmeta.tag, idx_reg) << UInt(blen), UInt(log2Up(nastiXDataBits/8)), UInt(dataBeats-1))
+    0.U, Cat(rmeta.tag, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
   io.nasti.aw.valid := Bool(false)
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(

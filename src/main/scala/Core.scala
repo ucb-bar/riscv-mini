@@ -17,7 +17,7 @@ abstract trait CoreParams {
 abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundle()(p) with CoreParams
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val fromhost = Flipped(Valid(UInt(width=xlen)))
+  val fromhost = Flipped(Valid(UInt(xlen.W)))
   val tohost   = Output(UInt(xlen.W))
 }
 

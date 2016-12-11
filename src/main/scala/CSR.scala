@@ -13,7 +13,7 @@ object CSR {
   val P = 4.U(3.W)
 
   // Supports machine & user modes
-  val PRV_U = 0x0.U( 2.W)
+  val PRV_U = 0x0.U(2.W)
   val PRV_M = 0x3.U(2.W)
 
   // User-level CSR addrs
@@ -61,16 +61,16 @@ object CSR {
     cyclew, timew, instretw, cyclehw, timehw, instrethw,
     mcpuid, mimpid, mhartid, mtvec, mtdeleg, mie,
     mtimecmp, mtime, mtimeh, mscratch, mepc, mcause, mbadaddr, mip,
-    mtohost, mfromhost, mstatus) map (BitPat(_))
+    mtohost, mfromhost, mstatus)
 }
 
 object Cause {
-  val InstAddrMisaligned  = UInt(0x0.W)
-  val IllegalInst         = UInt(0x2.W)
-  val Breakpoint          = UInt(0x3.W)
-  val LoadAddrMisaligned  = UInt(0x4.W)
-  val StoreAddrMisaligned = UInt(0x6.W)
-  val Ecall               = UInt(0x8.W)
+  val InstAddrMisaligned  = 0x0.U
+  val IllegalInst         = 0x2.U
+  val Breakpoint          = 0x3.U
+  val LoadAddrMisaligned  = 0x4.U
+  val StoreAddrMisaligned = 0x6.U
+  val Ecall               = 0x8.U
 }
 
 class CSRIO(implicit p: Parameters)  extends CoreBundle()(p) {
@@ -107,9 +107,9 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val instret  = RegInit(0.U(xlen.W))
   val instreth = RegInit(0.U(xlen.W))
 
-  val mcpuid  = Cat(0.U(2.W) /* RV32I */, UInt(0, xlen-28),
-                    UInt(1 << ('I' - 'A') /* Base ISA */| 
-                         1 << ('U' - 'A') /* User Mode */, 26))
+  val mcpuid  = Cat(0.U(2.W) /* RV32I */, 0.U((xlen-28).W),
+                    (1 << ('I' - 'A') /* Base ISA */| 
+                     1 << ('U' - 'A') /* User Mode */).U(26.W))
   val mimpid  = 0.U(xlen.W) // not implemented
   val mhartid = 0.U(xlen.W) // only one hart
 
@@ -130,8 +130,8 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val XS = 0.U(2.W)
   val FS = 0.U(2.W)
   val SD = 0.U(1.W)
-  val mstatus = Cat(SD, UInt(0, xlen-23), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
-  val mtvec   = Const.PC_EVEC
+  val mstatus = Cat(SD, 0.U((xlen-23).W), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
+  val mtvec   = Const.PC_EVEC.U(xlen.W)
   val mtdeleg = 0x0.U(xlen.W)
   
   // interrupt registers
@@ -147,32 +147,57 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val MSIE = RegInit(Bool(false))
   val HSIE = Bool(false)
   val SSIE = Bool(false)
-  val mip = Cat(UInt(0, xlen-8), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
-  val mie = Cat(UInt(0, xlen-8), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
+  val mip = Cat(0.U((xlen-8).W), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
+  val mie = Cat(0.U((xlen-8).W), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
 
-  val mtimecmp = Reg(UInt(width=xlen)) 
+  val mtimecmp = Reg(UInt(xlen.W)) 
 
-  val mscratch = Reg(UInt(width=xlen))
+  val mscratch = Reg(UInt(xlen.W))
 
-  val mepc = Reg(UInt(width=xlen))
-  val mcause = Reg(UInt(width=xlen))
-  val mbadaddr = Reg(UInt(width=xlen))
+  val mepc = Reg(UInt(xlen.W))
+  val mcause = Reg(UInt(xlen.W))
+  val mbadaddr = Reg(UInt(xlen.W))
 
   val mtohost = RegInit(0.U(xlen.W))
-  val mfromhost = Reg(UInt(width=xlen))
+  val mfromhost = Reg(UInt(xlen.W))
   io.host.tohost := mtohost
   when(io.host.fromhost.valid) {
     mfromhost := io.host.fromhost.bits
   }
 
-  val csrFile = CSR.regs zip List(
-    cycle, time, instret, cycleh, timeh, instreth,
-    cycle, time, instret, cycleh, timeh, instreth,
-    mcpuid, mimpid, mhartid, mtvec, mtdeleg, mie,
-    mtimecmp, time, timeh, mscratch, mepc, mcause, mbadaddr, mip,
-    mtohost, mfromhost, mstatus)
+  val csrFile = Seq(
+    BitPat(CSR.cycle)     -> cycle,
+    BitPat(CSR.time)      -> time,
+    BitPat(CSR.instret)   -> instret,
+    BitPat(CSR.cycleh)    -> cycleh,
+    BitPat(CSR.timeh)     -> timeh,
+    BitPat(CSR.instreth)  -> instreth,
+    BitPat(CSR.cyclew)    -> cycle,
+    BitPat(CSR.timew)     -> time,
+    BitPat(CSR.instretw)  -> instret,
+    BitPat(CSR.cyclehw)   -> cycleh,
+    BitPat(CSR.timehw)    -> timeh,
+    BitPat(CSR.instrethw) -> instreth,
+    BitPat(CSR.mcpuid)    -> mcpuid,
+    BitPat(CSR.mimpid)    -> mimpid,
+    BitPat(CSR.mhartid)   -> mhartid,
+    BitPat(CSR.mtvec)     -> mtvec,
+    BitPat(CSR.mtdeleg)   -> mtdeleg,
+    BitPat(CSR.mie)       -> mie,
+    BitPat(CSR.mtimecmp)  -> mtimecmp,
+    BitPat(CSR.mtime)     -> time,
+    BitPat(CSR.mtimeh)    -> timeh,
+    BitPat(CSR.mscratch)  -> mscratch,
+    BitPat(CSR.mepc)      -> mepc,
+    BitPat(CSR.mcause)    -> mcause,
+    BitPat(CSR.mbadaddr)  -> mbadaddr,
+    BitPat(CSR.mip)       -> mip,
+    BitPat(CSR.mtohost)   -> mtohost,
+    BitPat(CSR.mfromhost) -> mfromhost,
+    BitPat(CSR.mstatus)   -> mstatus
+  )
 
-  io.out := Lookup(csr_addr, UInt(1.W), csrFile).asUInt
+  io.out := Lookup(csr_addr, 0.U, csrFile).asUInt
 
   val privValid = csr_addr(9, 8) <= PRV
   val privInst  = io.cmd === CSR.P
@@ -182,7 +207,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val csrValid  = csrFile map (_._1 === csr_addr) reduce (_ || _)
   val csrRO     = csr_addr(11, 10).andR || csr_addr === CSR.mtvec || csr_addr === CSR.mtdeleg
   val wen       = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR 
-  val wdata     = MuxLookup(io.cmd, UInt(0.W), Seq(
+  val wdata     = MuxLookup(io.cmd, 0.U, Seq(
     CSR.W -> io.in,
     CSR.S -> (io.out | io.in),
     CSR.C -> (io.out & ~io.in)
@@ -195,17 +220,17 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
              io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
              (privInst && !privValid) || isEcall || isEbreak
-  io.evec := mtvec + (PRV << UInt(6.W))
+  io.evec := mtvec + (PRV << 6)
   io.epc  := mepc
 
   // Counters
-  time := time + UInt(1.W)
-  when(time.andR) { timeh := timeh + UInt(1.W) }
-  cycle := cycle + UInt(1.W)
-  when(cycle.andR) { cycleh := cycleh + UInt(1.W) }
+  time := time + 1.U
+  when(time.andR) { timeh := timeh + 1.U }
+  cycle := cycle + 1.U
+  when(cycle.andR) { cycleh := cycleh + 1.U }
   val isInstRet = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
-  when(isInstRet) { instret := instret + UInt(1.W) }
-  when(isInstRet && instret.andR) { instreth := instreth + UInt(1.W) }
+  when(isInstRet) { instret := instret + 1.U }
+  when(isInstRet && instret.andR) { instreth := instreth + 1.U }
 
   when(!io.stall) {
     when(io.expt) {
@@ -244,8 +269,8 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
       .elsewhen(csr_addr === CSR.mtimeh) { timeh := wdata }
       .elsewhen(csr_addr === CSR.mtimecmp) { mtimecmp := wdata }
       .elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
-      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2 << 2 }
-      .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & UInt(BigInt(1) << (xlen-1) | 0xf) }
+      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
+      .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen-1) | 0xf).U }
       .elsewhen(csr_addr === CSR.mbadaddr) { mbadaddr := wdata }
       .elsewhen(csr_addr === CSR.mtohost) { mtohost := wdata }
       .elsewhen(csr_addr === CSR.mfromhost) { mfromhost := wdata }
