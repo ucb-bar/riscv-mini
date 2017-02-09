@@ -10,13 +10,13 @@ class BrCondTester(br: => BrCond)(implicit p: cde.Parameters) extends BasicTeste
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
 
-  override val insts = Vec(Seq.fill(10)(Seq(
+  override val insts = Seq.fill(10)(Seq(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),
     B(Funct3.BLT, 0, 0, 0),
     B(Funct3.BGE, 0, 0, 0),
     B(Funct3.BLTU, 0, 0, 0),
-    B(Funct3.BGEU, 0, 0, 0))).flatten)
+    B(Funct3.BGEU, 0, 0, 0))).flatten
 
   val (cntr, done) = Counter(true.B, insts.size)
   val rs1 = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
@@ -34,7 +34,7 @@ class BrCondTester(br: => BrCond)(implicit p: cde.Parameters) extends BasicTeste
             Mux(dut.io.br_type === BR_LTU, ltu(cntr),
             Mux(dut.io.br_type === BR_GEU, geu(cntr), false.B))))))
 
-  ctrl.io.inst := insts(cntr)
+  ctrl.io.inst := Vec(insts)(cntr)
   dut.io.br_type := ctrl.io.br_type
   dut.io.rs1 := Vec(rs1 map (_.U))(cntr)
   dut.io.rs2 := Vec(rs2 map (_.U))(cntr)

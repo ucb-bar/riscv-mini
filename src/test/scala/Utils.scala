@@ -1,7 +1,7 @@
 package mini
 
-import chisel3._
-import chisel3.util._
+import chisel3.{Bits, SInt, UInt, Bool, Vec}
+import chisel3.util.BitPat
 import Instructions._
 
 trait RISCVCommon {
@@ -15,6 +15,11 @@ trait RISCVCommon {
   def csr(inst: UInt) =  (inst.litValue() >> 20)
   def reg(x: Int) = UInt(x & ((1 << 4) - 1), 5)
   def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
+  def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
+    assert(x.isLit() && y.isLit())
+    Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
+  }
+  def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
   val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
@@ -37,16 +42,16 @@ trait RISCVCommon {
   private def inst_7(inst: UInt)     = UInt((inst.litValue() >> 7)  & 0x1,  1)
 
   def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
-                             inst_30_25(inst), inst_24_21(inst), inst_20(inst)).litValue()
+                             inst_30_25(inst), inst_24_21(inst), inst_20(inst))
   def simm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
-                             inst_30_25(inst), inst_11_8(inst), inst_7(inst)).litValue()
+                             inst_30_25(inst), inst_11_8(inst), inst_7(inst))
   def bimm(inst: UInt) = Cat(Cat(Seq.fill(20){inst_31(inst)}),
-                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1)).litValue()
+                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1))
   def uimm(inst: UInt) = Cat(inst_31(inst), inst_30_25(inst), inst_24_21(inst),
-                             inst_20(inst), inst_19_12(inst), UInt(0, 12)).litValue()
+                             inst_20(inst), inst_19_12(inst), UInt(0, 12))
   def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst),
-                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
-  def zimm(inst: UInt) = (inst.litValue() >> 15) & 0x1f
+                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1))
+  def zimm(inst: UInt) = UInt((inst.litValue() >> 15) & 0x1f)
 }
 
 trait RandInsts extends RISCVCommon {
@@ -65,7 +70,7 @@ trait RandInsts extends RISCVCommon {
   def rand_inst = UInt(toBigInt(rnd.nextInt()))
   def rand_addr = UInt(toBigInt(rnd.nextInt()))
 
-  val insts: Vec[UInt]  = Vec(
+  val insts: Seq[UInt]  = Seq(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),

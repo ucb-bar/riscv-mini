@@ -11,18 +11,18 @@ class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester wit
   val xlen = p(XLEN)
 
   val (cntr, done) = Counter(true.B, insts.size)
-  val A    = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
-  val B    = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
-  val sum  = Vec((A zip B) map { case (a, b) => toBigInt(a.toInt + b.toInt).U(xlen.W) })
-  val diff = Vec((A zip B) map { case (a, b) => toBigInt(a.toInt - b.toInt).U(xlen.W) })
-  val and  = Vec((A zip B) map { case (a, b) => (a & b).U(xlen.W) })
-  val or   = Vec((A zip B) map { case (a, b) => (a | b).U(xlen.W) })
-  val xor  = Vec((A zip B) map { case (a, b) => (a ^ b).U(xlen.W) })
-  val slt  = Vec((A zip B) map { case (a, b) => (if (a.toInt < b.toInt) 1 else 0).U(xlen.W) })
-  val sltu = Vec((A zip B) map { case (a, b) => (if (a < b) 1 else 0).U(xlen.W) })
-  val sll  = Vec((A zip B) map { case (a, b) => toBigInt(a.toInt << (b.toInt & 0x1f)).U(xlen.W) })
-  val srl  = Vec((A zip B) map { case (a, b) => toBigInt(a.toInt >>> (b.toInt & 0x1f)).U(xlen.W) })
-  val sra  = Vec((A zip B) map { case (a, b) => toBigInt(a.toInt >> (b.toInt & 0x1f)).U(xlen.W) })
+  val rs1  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val rs2  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val sum  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt + b.toInt).U(xlen.W) })
+  val diff = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt - b.toInt).U(xlen.W) })
+  val and  = Vec((rs1 zip rs2) map { case (a, b) => (a & b).U(xlen.W) })
+  val or   = Vec((rs1 zip rs2) map { case (a, b) => (a | b).U(xlen.W) })
+  val xor  = Vec((rs1 zip rs2) map { case (a, b) => (a ^ b).U(xlen.W) })
+  val slt  = Vec((rs1 zip rs2) map { case (a, b) => (if (a.toInt < b.toInt) 1 else 0).U(xlen.W) })
+  val sltu = Vec((rs1 zip rs2) map { case (a, b) => (if (a < b) 1 else 0).U(xlen.W) })
+  val sll  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt << (b.toInt & 0x1f)).U(xlen.W) })
+  val srl  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >>> (b.toInt & 0x1f)).U(xlen.W) })
+  val sra  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >> (b.toInt & 0x1f)).U(xlen.W) })
   val out = (Mux(dut.io.alu_op === ALU_ADD,  sum(cntr),
              Mux(dut.io.alu_op === ALU_SUB,  diff(cntr),
              Mux(dut.io.alu_op === ALU_AND,  and(cntr),
@@ -36,10 +36,10 @@ class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester wit
              Mux(dut.io.alu_op === ALU_COPY_A, dut.io.A, dut.io.B))))))))))),
              Mux(dut.io.alu_op(0), diff(cntr), sum(cntr)))
 
-  ctrl.io.inst := insts(cntr)
+  ctrl.io.inst := Vec(insts)(cntr)
   dut.io.alu_op := ctrl.io.alu_op
-  dut.io.A := Vec(A map (_.U))(cntr)
-  dut.io.B := Vec(B map (_.U))(cntr)
+  dut.io.A := Vec(rs1 map (_.U))(cntr)
+  dut.io.B := Vec(rs2 map (_.U))(cntr)
 
   when(done) { stop(); stop() } // from VendingMachine example...
   assert(dut.io.out === out._1)
