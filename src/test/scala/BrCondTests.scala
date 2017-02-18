@@ -5,7 +5,7 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class BrCondTester(br: => BrCond)(implicit p: cde.Parameters) extends BasicTester with RandInsts{
+class BrCondTester(br: => BrCond)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
   val dut = Module(br)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)

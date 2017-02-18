@@ -5,7 +5,7 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class ImmGenTester(imm: => ImmGen)(implicit p: cde.Parameters) extends BasicTester with RandInsts{
+class ImmGenTester(imm: => ImmGen)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
   val dut = Module(imm)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)

@@ -4,10 +4,13 @@ import chisel3.{Bits, SInt, UInt, Bool, Vec}
 import chisel3.util.BitPat
 import Instructions._
 
-trait RISCVCommon {
+trait TestUtils {
   implicit def boolToBoolean(x: Bool) = x.litValue() == 1
   implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
   implicit def uintToBitPat(u: UInt) = BitPat(u)
+  implicit def bigIntToInt(x: BigInt) = x.toInt
+  implicit def bigIntToBoolean(x: BigInt) = x != 0
+  def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
 
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
@@ -52,12 +55,6 @@ trait RISCVCommon {
   def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst),
                              inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1))
   def zimm(inst: UInt) = UInt((inst.litValue() >> 15) & 0x1f)
-}
-
-trait RandInsts extends RISCVCommon {
-  implicit def bigIntToInt(x: BigInt) = x.toInt
-  implicit def bigIntToBoolean(x: BigInt) = x != 0
-  def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
 
   /* Define tests */
   val rnd = new scala.util.Random

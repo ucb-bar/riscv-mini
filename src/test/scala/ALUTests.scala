@@ -5,7 +5,7 @@ import chisel3.util._
 import chisel3.testers._
 import ALU._
 
-class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester with RandInsts {
+class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
   val dut = Module(alu)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
