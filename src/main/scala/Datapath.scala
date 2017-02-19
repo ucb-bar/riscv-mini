@@ -112,7 +112,14 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
     ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) ))
   
   // Pipelining
-  when(!stall && !csr.io.expt) {
+  when(reset || !stall && csr.io.expt) {
+    st_type   := 0.U
+    ld_type   := 0.U
+    wb_en     := Bool(false)
+    csr_cmd   := 0.U
+    illegal   := Bool(false)
+    pc_check  := Bool(false)
+  }.elsewhen(!stall && !csr.io.expt) {
     ew_pc     := fe_pc
     ew_inst   := fe_inst
     ew_alu    := alu.io.out
@@ -124,13 +131,6 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
     csr_cmd   := io.ctrl.csr_cmd
     illegal   := io.ctrl.illegal
     pc_check  := io.ctrl.pc_sel === PC_ALU
-  }.elsewhen(reset || !stall && csr.io.expt) {
-    st_type   := 0.U
-    ld_type   := 0.U
-    wb_en     := Bool(false)
-    csr_cmd   := 0.U
-    illegal   := Bool(false) 
-    pc_check  := Bool(false) 
   }
 
   // Load
