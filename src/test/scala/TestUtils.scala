@@ -1,7 +1,7 @@
 package mini
 
-import chisel3.{Bits, SInt, UInt, Bool, Vec}
-import chisel3.util.BitPat
+import chisel3._
+import chisel3.util._
 import Instructions._
 
 trait TestUtils {
@@ -20,12 +20,12 @@ trait TestUtils {
   def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
   def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
     assert(x.isLit() && y.isLit())
-    Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
+    (x.litValue() << y.getWidth | y.litValue()).U((x.getWidth + y.getWidth).W)
   }
   def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
   val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
-  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
-  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
+  val fence = Cat(0.U(4.W), 0xf.U(4.W), 0xf.U(4.W), 0.U(13.W), Opcode.MEMORY)
+  val nop   = Cat(0.U(12.W), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
   val csrRegs = CSR.regs map (_.litValue())
   private val csrMap  = (csrRegs zip List(
     "cycle", "time", "instret", "cycleh", "timeh", "instreth",
@@ -66,6 +66,7 @@ trait TestUtils {
   def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
   def rand_inst = UInt(toBigInt(rnd.nextInt()))
   def rand_addr = UInt(toBigInt(rnd.nextInt()))
+  def rand_data = UInt(toBigInt(rnd.nextInt()))
 
   val insts: Seq[UInt]  = Seq(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
