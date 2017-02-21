@@ -4,6 +4,15 @@ import chisel3._
 import chisel3.util._
 import Instructions._
 
+trait DatapathTest
+object BypassTest extends DatapathTest {
+  override def toString: String = "bypass test"
+}
+object ExceptionTest extends DatapathTest {
+  override def toString: String = "exception test"
+}
+// Define your own test
+
 trait TestUtils {
   implicit def boolToBoolean(x: Bool) = x.litValue() == 1
   implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
@@ -16,14 +25,13 @@ trait TestUtils {
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
   def csr(inst: UInt) =  (inst.litValue() >> 20)
-  def reg(x: Int) = UInt(x & ((1 << 4) - 1), 5)
-  def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
+  def reg(x: Int) = (x & ((1 << 5) - 1)).U(5.W)
+  def imm(x: Int) = (x & ((1 << 20) - 1)).S(21.W)
   def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
     assert(x.isLit() && y.isLit())
     (x.litValue() << y.getWidth | y.litValue()).U((x.getWidth + y.getWidth).W)
   }
   def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
-  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
   val fence = Cat(0.U(4.W), 0xf.U(4.W), 0xf.U(4.W), 0.U(13.W), Opcode.MEMORY)
   val nop   = Cat(0.U(12.W), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
   val csrRegs = CSR.regs map (_.litValue())
@@ -137,6 +145,7 @@ trait TestUtils {
   def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
     Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 
+  val fin = Cat(CSR.mtohost, reg(31), Funct3.CSRRW, reg(0), Opcode.SYSTEM)
   val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -146,23 +155,33 @@ trait TestUtils {
     RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4
     RU(Funct3.SLT, 6, 4, 5), // SLT  x6, x4, x5  # x6 <- 1
     B(Funct3.BEQ, 1, 6, 8),  // BEQ  x1, x6, 8   # go to the BGE branch
-    J(0, 12),                // JAL  x0, 8       # skip nop, scrrw
+    J(0, 12),                // JAL  x0, 12      # skip nop
     B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
-    nop, nop, fin            // Finish
+    nop, nop,
+    RU(Funct3.ADD, 26,  0, 1), // ADD x26,  x0, x1  # x26 <- 1
+    RU(Funct3.ADD, 27, 26, 2), // ADD x27, x26, x2  # x27 <- 2
+    RU(Funct3.ADD, 28, 27, 3), // ADD x28, x27, x3  # x28 <- 4
+    RU(Funct3.ADD, 29, 28, 4), // ADD x29, x28, x4  # x29 <- 5
+    RU(Funct3.ADD, 30, 29, 5), // ADD x30, x29, x5  # x30 <- 9
+    RU(Funct3.ADD, 31, 30, 6), // ADD x31, x31, x6  # x31 <- 10
+    fin
   )
   val exceptionTest = List(
     fence,
-    I(Funct3.ADD, 1, 0, 2),  // ADDI x1, x0, 1   # x1 <- 2
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 3
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 4
-    rand_inst,               // excpetion
-    I(Funct3.ADD, 1, 1, 1),  // ADDI x1, x1, 1   # x1 <- 3
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x1, x1, 1   # x1 <- 4
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x1, x1, 1   # x1 <- 5
-    fin                      // fin
+    I(Funct3.ADD, 31, 0,  2),  // ADDI x31, x0,  1 # x31 <- 2
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 3
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x32, 1 # x31 <- 4
+    0.U,                       // excpetion
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 5
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 6
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
+    fin
   )
+  val tests = Map(
+    BypassTest    -> bypassTest,
+    ExceptionTest -> exceptionTest)
   val testResults = Map(
-    bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
-    exceptionTest -> Array((1, 2), (2, 3), (3, 4))
+    BypassTest    -> 10,
+    ExceptionTest -> 4
   )
 }
