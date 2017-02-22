@@ -18,6 +18,7 @@ It is developed as an intermediate example before diving into [rocket-chip](http
 
     $ git clone https://github.com/ucb-bar/riscv-mini.git
     $ cd riscv-mini
+    $ git submodule update --init
     $ make publish    # you need to local-publish firrtl due to sbt's limitation
     $ make            # this will give you the firrtl & verilog output files in generated-src
     
