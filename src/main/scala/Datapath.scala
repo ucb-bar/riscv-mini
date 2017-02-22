@@ -166,7 +166,9 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   // Abort store when there's an excpetion
   io.dcache.abort := csr.io.expt
 
-  printf("PC: %x, INST: %x, REG[%d] <- %x\n", ew_pc, ew_inst, 
-    Mux(regFile.io.wen, wb_rd_addr, 0.U),
-    Mux(regFile.io.wen, regFile.io.wdata, 0.U))
+  if (p(Trace)) {
+    printf("PC: %x, INST: %x, REG[%d] <- %x\n", ew_pc, ew_inst,
+      Mux(regFile.io.wen, wb_rd_addr, 0.U),
+      Mux(regFile.io.wen, regFile.io.wdata, 0.U))
+  }
 }

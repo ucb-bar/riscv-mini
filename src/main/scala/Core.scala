@@ -5,6 +5,7 @@ import chisel3.util.Valid
 import cde.{Parameters, Field}
 
 case object XLEN extends Field[Int]
+case object Trace extends Field[Boolean]
 case object BuildALU extends Field[Parameters => ALU]
 case object BuildImmGen extends Field[Parameters => ImmGen]
 case object BuildBrCond extends Field[Parameters => BrCond]
