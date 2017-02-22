@@ -1,5 +1,5 @@
 generated-src
-test-*
+test_run_dir
 target
 project/target
 logs
