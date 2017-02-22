@@ -1,28 +1,46 @@
 package mini
 
-import chisel3.iotesters.PeekPokeTester
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
+import Control._
 
-case class ImmGenIn(inst: chisel3.UInt, sel: BigInt)
-case class ImmGenOut(out: BigInt)
+class ImmGenTester(imm: => ImmGen)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
+  val dut = Module(imm)
+  val ctrl = Module(new Control)
+  val xlen = p(XLEN)
 
-object GoldImmGen extends RISCVCommon {
-  import Control._
-  def apply(in: ImmGenIn) = new ImmGenOut(if (in.sel == IMM_I.litValue()) iimm(in.inst)
-    else if (in.sel == IMM_S.litValue()) simm(in.inst)
-    else if (in.sel == IMM_B.litValue()) bimm(in.inst)
-    else if (in.sel == IMM_U.litValue()) uimm(in.inst)
-    else if (in.sel == IMM_J.litValue()) jimm(in.inst)
-    else if (in.sel == IMM_Z.litValue()) zimm(in.inst) else iimm(in.inst) & -2)
+  val (cntr, done) = Counter(true.B, insts.size)
+  val i = Vec(insts map iimm)
+  val s = Vec(insts map simm)
+  val b = Vec(insts map bimm)
+  val u = Vec(insts map uimm)
+  val j = Vec(insts map jimm)
+  val z = Vec(insts map zimm)
+  val x = Vec(insts map iimm map (x => (x.litValue() & -2).U))
+  val out = Mux(dut.io.sel === IMM_I, i(cntr),
+            Mux(dut.io.sel === IMM_S, s(cntr),
+            Mux(dut.io.sel === IMM_B, b(cntr),
+            Mux(dut.io.sel === IMM_U, u(cntr),
+            Mux(dut.io.sel === IMM_J, j(cntr),
+            Mux(dut.io.sel === IMM_Z, z(cntr), x(cntr)))))))
+
+  ctrl.io.inst := Vec(insts)(cntr)
+  dut.io.inst  := ctrl.io.inst
+  dut.io.sel   := ctrl.io.imm_sel
+
+  when(done) { stop(); stop() } // from VendingMachine example...
+  assert(dut.io.out === out)
+  printf("Counter: %d, Type: 0x%x, Out: %x ?= %x\n",
+         cntr, dut.io.sel, dut.io.out, out)
 }
 
-
-class ImmGenTests[+T <: ImmGen](c: T) extends PeekPokeTester(c) with RandInsts {
-  for (inst <- insts) {
-    val ctrl = GoldControl(new ControlIn(inst))
-    val gold = GoldImmGen(new ImmGenIn(inst, ctrl.imm_sel))
-    println(s"*** ${dasm(inst)} ***")
-    poke(c.io.inst,  inst)
-    poke(c.io.sel,   ctrl.imm_sel)
-    expect(c.io.out, gold.out) 
+class ImmGenTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  "ImmGenWire" should "pass" in {
+    assert(TesterDriver execute (() => new ImmGenTester(new ImmGenWire)))
+  }
+  "ImmGenMux" should "pass" in {
+    assert(TesterDriver execute (() => new ImmGenTester(new ImmGenMux)))
   }
 }

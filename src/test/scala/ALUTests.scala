@@ -1,49 +1,59 @@
 package mini
 
-import chisel3.iotesters.PeekPokeTester
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
+import ALU._
 
-case class ALUIn(op: BigInt, A: BigInt, B: BigInt)
-case class ALUOut(out: BigInt, sum: BigInt)
+class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
+  val dut = Module(alu)
+  val ctrl = Module(new Control)
+  val xlen = p(XLEN)
 
-object GoldALU {
-  import ALU._
-  def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
-  def apply(in: ALUIn) = {
-    val sum  = toBigInt(in.A.toInt + in.B.toInt)
-    val diff = toBigInt(in.A.toInt - in.B.toInt)
-    val slt  = if (in.A.toInt < in.B.toInt) toBigInt(1) else toBigInt(0)
-    val sltu = if (in.A < in.B) toBigInt(1) else toBigInt(0)
-    val sll  = toBigInt(in.A.toInt << (in.B.toInt & 0x1f))
-    val srl  = toBigInt(in.A.toInt >>> (in.B.toInt & 0x1f))
-    val sra  = toBigInt(in.A.toInt >> (in.B.toInt & 0x1f))
-    new ALUOut(
-      if (in.op == ALU_ADD.litValue()) sum
-      else if (in.op == ALU_SUB.litValue()) diff
-      else if (in.op == ALU_AND.litValue()) in.A & in.B
-      else if (in.op == ALU_OR.litValue()) in.A | in.B
-      else if (in.op == ALU_XOR.litValue()) in.A ^ in.B
-      else if (in.op == ALU_SLT.litValue()) slt
-      else if (in.op == ALU_SLTU.litValue()) sltu
-      else if (in.op == ALU_SLL.litValue()) sll
-      else if (in.op == ALU_SRL.litValue()) srl
-      else if (in.op == ALU_SRA.litValue()) sra
-      else if (in.op == ALU_COPY_A.litValue()) in.A
-      else in.B, 
-      if ((in.op & 0x1) == 1) diff else sum)
-  } 
+  val (cntr, done) = Counter(true.B, insts.size)
+  val rs1  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val rs2  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val sum  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt + b.toInt).U(xlen.W) })
+  val diff = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt - b.toInt).U(xlen.W) })
+  val and  = Vec((rs1 zip rs2) map { case (a, b) => (a & b).U(xlen.W) })
+  val or   = Vec((rs1 zip rs2) map { case (a, b) => (a | b).U(xlen.W) })
+  val xor  = Vec((rs1 zip rs2) map { case (a, b) => (a ^ b).U(xlen.W) })
+  val slt  = Vec((rs1 zip rs2) map { case (a, b) => (if (a.toInt < b.toInt) 1 else 0).U(xlen.W) })
+  val sltu = Vec((rs1 zip rs2) map { case (a, b) => (if (a < b) 1 else 0).U(xlen.W) })
+  val sll  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt << (b.toInt & 0x1f)).U(xlen.W) })
+  val srl  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >>> (b.toInt & 0x1f)).U(xlen.W) })
+  val sra  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >> (b.toInt & 0x1f)).U(xlen.W) })
+  val out = (Mux(dut.io.alu_op === ALU_ADD,  sum(cntr),
+             Mux(dut.io.alu_op === ALU_SUB,  diff(cntr),
+             Mux(dut.io.alu_op === ALU_AND,  and(cntr),
+             Mux(dut.io.alu_op === ALU_OR,   or(cntr),
+             Mux(dut.io.alu_op === ALU_XOR,  xor(cntr),
+             Mux(dut.io.alu_op === ALU_SLT,  slt(cntr),
+             Mux(dut.io.alu_op === ALU_SLTU, sltu(cntr),
+             Mux(dut.io.alu_op === ALU_SLL,  sll(cntr),
+             Mux(dut.io.alu_op === ALU_SRL,  srl(cntr),
+             Mux(dut.io.alu_op === ALU_SRA,  sra(cntr),
+             Mux(dut.io.alu_op === ALU_COPY_A, dut.io.A, dut.io.B))))))))))),
+             Mux(dut.io.alu_op(0), diff(cntr), sum(cntr)))
+
+  ctrl.io.inst := Vec(insts)(cntr)
+  dut.io.alu_op := ctrl.io.alu_op
+  dut.io.A := Vec(rs1 map (_.U))(cntr)
+  dut.io.B := Vec(rs2 map (_.U))(cntr)
+
+  when(done) { stop(); stop() } // from VendingMachine example...
+  assert(dut.io.out === out._1)
+  assert(dut.io.sum === out._2)
+  printf("Counter: %d, OP: 0x%x, A: 0x%x, B: 0x%x, OUT: 0x%x ?= 0x%x, SUM: 0x%x ?= 0x%x\n",
+         cntr, dut.io.alu_op, dut.io.A, dut.io.B, dut.io.out, out._1, dut.io.sum, out._2) 
 }
 
-class ALUTests[+T <: ALU](c: T) extends PeekPokeTester(c) with RandInsts {
-  for (inst <- insts) {
-    val a = rand_data
-    val b = rand_data
-    val ctrl = GoldControl(new ControlIn(inst))
-    val gold = GoldALU(new ALUIn(ctrl.alu_op, a, b))
-    println(s"*** ${dasm(inst)} -> A: %x, B: %x".format(a, b))
-    poke(c.io.A, a)
-    poke(c.io.B, b)
-    poke(c.io.alu_op, ctrl.alu_op)
-    expect(c.io.out, gold.out) 
-    expect(c.io.sum, gold.sum) 
+class ALUTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  "ALUSimple" should "pass" in {
+    assert(TesterDriver execute (() => new ALUTester(new ALUSimple)))
+  }
+  "ALUArea" should "pass" in {
+    assert(TesterDriver execute (() => new ALUTester(new ALUArea)))
   }
 }

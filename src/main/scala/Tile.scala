@@ -12,7 +12,7 @@ class MemArbiter(implicit p: Parameters) extends Module {
     val nasti  =  new NastiIO
   })
 
-  val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: Nil = Enum(UInt(), 4)
+  val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(UInt(), 5)
   val state = RegInit(s_IDLE)
 
   // Write Address
@@ -24,7 +24,11 @@ class MemArbiter(implicit p: Parameters) extends Module {
   io.nasti.w.bits  := io.dcache.w.bits
   io.nasti.w.valid := io.dcache.w.valid && state === s_DCACHE_WRITE
   io.dcache.w.ready := io.nasti.w.ready && state === s_DCACHE_WRITE
-  io.nasti.b.ready := Bool(true)
+
+  // Write Ack
+  io.dcache.b.bits := io.nasti.b.bits
+  io.dcache.b.valid := io.nasti.b.valid && state === s_DCACHE_ACK
+  io.nasti.b.ready := io.dcache.b.ready && state === s_DCACHE_ACK
 
   // Read Address
   io.nasti.ar.bits := NastiReadAddressChannel(
@@ -67,6 +71,11 @@ class MemArbiter(implicit p: Parameters) extends Module {
     }
     is(s_DCACHE_WRITE) {
       when(io.dcache.w.fire() && io.dcache.w.bits.last) {
+        state := s_DCACHE_ACK
+      }
+    }
+    is(s_DCACHE_ACK) {
+      when(io.nasti.b.fire()) {
         state := s_IDLE
       }
     }

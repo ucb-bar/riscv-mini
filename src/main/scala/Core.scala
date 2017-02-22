@@ -5,6 +5,7 @@ import chisel3.util.Valid
 import cde.{Parameters, Field}
 
 case object XLEN extends Field[Int]
+case object Trace extends Field[Boolean]
 case object BuildALU extends Field[Parameters => ALU]
 case object BuildImmGen extends Field[Parameters => ImmGen]
 case object BuildBrCond extends Field[Parameters => BrCond]
@@ -17,8 +18,8 @@ abstract trait CoreParams {
 abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundle()(p) with CoreParams
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val fromhost = Flipped(Valid(UInt(width=xlen)))
-  val tohost   = UInt(OUTPUT, xlen)
+  val fromhost = Flipped(Valid(UInt(xlen.W)))
+  val tohost   = Output(UInt(xlen.W))
 }
 
 class CoreIO(implicit p: Parameters) extends Bundle {

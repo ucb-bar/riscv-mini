@@ -1,163 +1,42 @@
 package mini
 
-import chisel3.UInt
-import chisel3.iotesters.PeekPokeTester
-import scala.collection.mutable.HashMap
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
+import Control._
 
-case class CSRIn(cmd: BigInt, value: BigInt, inst: UInt, pc: BigInt, addr: BigInt, 
-                 illegal: Boolean, pc_check: Boolean, st_type: BigInt, ld_type: BigInt)
-case class CSROut(value: BigInt, epc: BigInt, evec: BigInt, expt: Boolean)
+class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: cde.Parameters)
+   extends BasicTester with TestUtils {
+  val dut = Module(c)
+  val ctrl = Module(new Control)
+  val xlen = p(XLEN)
 
-class GoldCSR extends RISCVCommon {
-  implicit def uintToBigInt(x: UInt) = x.litValue()
-  private val regs = HashMap[BigInt, BigInt](CSR.regs map (_.litValue()) map (reg => reg ->
-    (if (reg == CSR.mcpuid.litValue()) BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')
-    else if (reg == CSR.mstatus.litValue()) CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1
-    else if (reg == CSR.mtvec.litValue()) Const.PC_EVEC.litValue()
-    else BigInt(0))):_*)
-  private def mtvec = regs(CSR.mtvec)
-  private def mepc  = regs(CSR.mepc)
-  private def mepc_=(data: BigInt) { regs(CSR.mepc) = data }
-  private def mcause = regs(CSR.mcause)
-  private def mcause_=(data: BigInt) { regs(CSR.mcause) = data }
-  private def mbadaddr = regs(CSR.mbadaddr)
-  private def mbadaddr_=(data:BigInt) { regs(CSR.mbadaddr) = data }
-  private def status(prv: BigInt, ie: BigInt, prv1: BigInt, ie1: BigInt) {
-    regs(CSR.mstatus) = (prv1 << 4) | (ie1 << 3) | (prv << 1) | ie
-  }
-  private def ip(mtip: BigInt, msip: BigInt) {
-    regs(CSR.mip) = mtip << 7 | msip << 3
-  }
-  private def ie(mtie: BigInt, msie: BigInt) {
-    regs(CSR.mie) = mtie << 7 | msie << 3
-  }
-  private def prv1 = (regs(CSR.mstatus) >> 4) & 0x3
-  private def ie1  = (regs(CSR.mstatus) >> 3) & 0x1
-  private def prv  = (regs(CSR.mstatus) >> 1) & 0x3
-  private def ie   = regs(CSR.mstatus) & 0x1
-  private def read(addr: BigInt) = regs getOrElse (addr, BigInt(0))
-
-  private def count(instret: Boolean) {
-    // TODO: overflow
-    regs(CSR.time)   += 1
-    regs(CSR.timew)  += 1
-    regs(CSR.mtime)  += 1
-    regs(CSR.cycle)  += 1
-    regs(CSR.cyclew) += 1
-    if (instret) {
-      regs(CSR.instret)  += 1
-      regs(CSR.instretw) += 1
-    }
-  }
-
-  private def write(addr: BigInt, data: BigInt) {
-    if (addr == CSR.mstatus.litValue()) { 
-      status((data >> 1) & 0x3, data & 0x1, (data >> 4) & 0x3, (data >> 1) & 0x1)
-    } else if (addr == CSR.mip.litValue()) {
-      ip((data >> 7) & 0x1, (data >> 3) & 0x1)
-    } else if (addr == CSR.mie.litValue()) {
-      ie((data >> 7) & 0x1, (data >> 3) & 0x1)
-    } else if (addr == CSR.mepc.litValue()) {
-      regs(CSR.mepc) = data & -4
-    } else if (addr == CSR.mcause.litValue()) {
-      regs(CSR.mcause) = data & (BigInt(1) << 31 | 0xf)
-    } else if (addr == CSR.timew.litValue() || addr == CSR.mtime.litValue()) {
-      regs(CSR.time)  = data
-      regs(CSR.timew) = data
-      regs(CSR.mtime) = data
-    } else if (addr == CSR.timehw.litValue() || addr == CSR.mtimeh.litValue()) {
-      regs(CSR.timeh)  = data
-      regs(CSR.timehw) = data
-      regs(CSR.mtimeh) = data
-    } else if (addr == CSR.cyclew.litValue()) {
-      regs(CSR.cycle)  = data
-      regs(CSR.cyclew) = data
-    } else if (addr == CSR.cyclehw.litValue()) {
-      regs(CSR.cycleh)  = data
-      regs(CSR.cyclehw) = data
-    } else if (addr == CSR.instretw.litValue()) {
-      regs(CSR.instret)  = data
-      regs(CSR.instretw) = data
-    } else if (addr == CSR.instrethw.litValue()) {
-      regs(CSR.instreth)  = data
-      regs(CSR.instrethw) = data
-    } else regs(addr) = data
-  }
-
-  def apply(in: CSRIn) = {
-    val csr_addr = csr(in.inst)
-    val rs1_addr = rs1(in.inst)
-    val privValid = ((csr_addr >> 8) & 0x3) <= prv
-    val privInst  = in.cmd == CSR.P.litValue()
-    val isEcall  = privInst && (csr_addr & 0x1) == 0 && ((csr_addr >> 8) & 0x1) == 0
-    val isEbreak = privInst && (csr_addr & 0x1) == 1 && ((csr_addr >> 8) & 0x1) == 0
-    val isEret   = privInst && (csr_addr & 0x1) == 0 && ((csr_addr >> 8) & 0x1) == 1
-    val csrValid = regs contains csr_addr
-    val csrRO    = ((csr_addr >> 10) & 0x3) == 0x3 ||
-        csr_addr == CSR.mtvec.litValue() || csr_addr == CSR.mtdeleg.litValue()
-    val wen = in.cmd == CSR.W.litValue() || ((in.cmd >> 1) & 0x1) == 0x1 && rs1_addr != 0
-    val iaddrInvalid = in.pc_check && ((in.addr >> 0x1) & 0x1) > 0
-    val laddrInvalid = in.ld_type == Control.LD_LW.litValue() && (in.addr & 0x3) > 0 ||
-        (in.ld_type == Control.LD_LH.litValue() || 
-         in.ld_type == Control.LD_LHU.litValue()) && (in.addr & 0x1) > 0
-    val saddrInvalid = in.st_type == Control.ST_SW.litValue() && (in.addr & 0x3) > 0 ||
-         in.st_type == Control.ST_SH.litValue() && (in.addr & 0x1) > 0
-    val exception = in.illegal || iaddrInvalid || laddrInvalid || saddrInvalid || 
-         (in.cmd & 0x3) > 0 && (!csrValid || !privValid) || wen && csrRO ||
-         (privInst && !privValid) || isEcall || isEbreak
-    val out = new CSROut(read(csr_addr), mepc, mtvec + (prv << 6), exception)
-    val wdata = if (in.cmd == CSR.W.litValue()) in.value
-      else if (in.cmd == CSR.S.litValue()) in.value | read(csr_addr)
-      else if (in.cmd == CSR.C.litValue()) ~in.value & read(csr_addr)
-      else BigInt(0)
-    val isInstRet = in.inst.litValue() != nop.litValue() && (!exception || isEcall || isEbreak)
-    count(isInstRet)
-    if (exception) {
-      mepc = in.pc & -4
-      mcause = if (iaddrInvalid) Cause.InstAddrMisaligned
-        else if (laddrInvalid) Cause.LoadAddrMisaligned
-        else if (saddrInvalid) Cause.StoreAddrMisaligned
-        else if (isEcall) Cause.Ecall + prv
-        else if (isEbreak) Cause.Breakpoint 
-        else Cause.IllegalInst
-      status(CSR.PRV_M, 0, prv, ie)
-      if (iaddrInvalid || laddrInvalid || saddrInvalid) mbadaddr = in.addr
-    } else if (isEret) {
-      status(prv1, ie1, CSR.PRV_U, 1)
-    } else if (wen) {
-      write(csr_addr, wdata) 
-    }
-    out
-  }
-}
-
-class CSRTests(c: CSR) extends PeekPokeTester(c) with RandInsts {
-  override val insts: List[UInt] = 
-    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRC, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, int(rand_rs1)))) ++
-    (CSR.regs map (csr => I(rand_fn3, 0, int(rand_rs1), int(csr)))) ++ List[UInt](
+  override val insts = 
+    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue(), csr.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRC, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, rand_rs1.litValue()))) ++
+    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue(), csr.litValue()))) ++ List[UInt](
     // system insts
     Instructions.ECALL,  SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     Instructions.EBREAK, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     Instructions.ERET,   SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     // illegal addr
-    J(int(rand_rd), rnd.nextInt), SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    JR(int(rand_rd), int(rand_rs1), rnd.nextInt), 
+    J(rand_rd.litValue(), rnd.nextInt), SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    JR(rand_rd.litValue(), rand_rs1.litValue(), rnd.nextInt), 
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LW, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    L(Funct3.LW, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LH, int(rand_rd), int(rand_rs1), int(rand_rs2)), 
+    L(Funct3.LH, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()), 
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LHU, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    L(Funct3.LHU, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    S(Funct3.SW, int(rand_rd), int(rand_rs1), int(rand_rs2)), 
+    S(Funct3.SW, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()), 
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    S(Funct3.SH, int(rand_rd), int(rand_rs1), int(rand_rs2)),
+    S(Funct3.SH, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     // illegal inst
     rand_inst, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
@@ -167,39 +46,199 @@ class CSRTests(c: CSR) extends PeekPokeTester(c) with RandInsts {
     SYS(Funct3.CSRRC, 0, CSR.instret, 0),
     SYS(Funct3.CSRRC, 0, CSR.mfromhost, 0))
 
-  def poke(in: CSRIn) {
-    poke(c.io.cmd,      in.cmd)
-    poke(c.io.in,       in.value)
-    poke(c.io.inst,     in.inst)
-    poke(c.io.pc,       in.pc)
-    poke(c.io.addr,     in.addr)
-    poke(c.io.illegal,  in.illegal)
-    poke(c.io.pc_check, in.pc_check)
-    poke(c.io.st_type,  in.st_type)
-    poke(c.io.ld_type,  in.ld_type)
+  val (cntr, done) = Counter(true.B, insts.size)
+  val pc   = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val addr = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val data = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val regs = (CSR.regs map (_.litValue()) map { addr => addr -> RegInit(
+    if (addr == CSR.mcpuid.litValue()) (BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')).U(xlen.W)
+    else if (addr == CSR.mstatus.litValue()) (CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1).U(xlen.W)
+    else if (addr == CSR.mtvec.litValue()) Const.PC_EVEC.U(xlen.W) else 0.U(xlen.W)
+  )}).toMap
+
+  ctrl.io.inst    := Vec(insts)(cntr)
+  dut.io.inst     := ctrl.io.inst
+  dut.io.cmd      := ctrl.io.csr_cmd
+  dut.io.illegal  := ctrl.io.illegal
+  dut.io.st_type  := ctrl.io.st_type
+  dut.io.ld_type  := ctrl.io.ld_type
+  dut.io.pc_check := ctrl.io.pc_sel === PC_ALU
+  dut.io.pc       := Vec(pc map (_.U))(cntr)
+  dut.io.addr     := Vec(addr map (_.U))(cntr)
+  dut.io.in       := Vec(data map (_.U))(cntr)
+
+  dut.io.stall := false.B
+  dut.io.host.fromhost.valid := false.B
+
+  // values known statically
+  val _csr_addr  = insts map csr
+  val _rs1_addr  = insts map rs1
+  val _csr_ro    = _csr_addr map (x => ((((x >> 11) & 0x1) > 0x0) && (((x >> 10) & 0x1) > 0x0)) || 
+    x == CSR.mtvec.litValue() || x == CSR.mtdeleg.litValue())
+  val _csr_valid = _csr_addr map (x => CSR.regs exists (_.litValue() == x))
+  // should be <= prv in runtime
+  val _prv_level = _csr_addr map (x => (x >> 8) & 0x3)
+  // should consider prv in runtime
+  val _is_ecall  = _csr_addr map (x => ((x & 0x1) == 0x0) && (((x >> 8) & 0x1) == 0x0))
+  val _is_ebreak = _csr_addr map (x => ((x & 0x1)  > 0x0) && (((x >> 8) & 0x1) == 0x0))
+  val _is_eret   = _csr_addr map (x => ((x & 0x1) == 0x0) && (((x >> 8) & 0x1)  > 0x0))
+  // should consider pc_check in runtime
+  val _iaddr_invalid = addr map (x => ((x >> 1) & 0x1) > 0)
+  // should consider ld_type & st_type
+  val _waddr_invalid = addr map (x => ((x >> 1) & 0x1) > 0 || (x & 0x1) > 0)
+  val _haddr_invalid = addr map (x => (x & 0x1) > 0)
+  
+  // values known in runtime
+  val csr_addr  = Wire(UInt())
+  val rs1_addr  = Wire(UInt())
+  val csr_ro    = Wire(Bool())
+  val csr_valid = Wire(Bool())
+  csr_addr  := Vec(_csr_addr map (_.U))(cntr)
+  rs1_addr  := Vec(_rs1_addr map (_.U))(cntr)
+  csr_ro    := Vec(_csr_ro map (_.B))(cntr)
+  csr_valid := Vec(_csr_valid map (_.B))(cntr)
+  val wen  = dut.io.cmd === CSR.W || dut.io.cmd(1) && rs1_addr != 0.U
+  val prv1 = (regs(CSR.mstatus.litValue()) >> 4.U) & 0x3.U
+  val ie1  = (regs(CSR.mstatus.litValue()) >> 3.U) & 0x1.U
+  val prv  = (regs(CSR.mstatus.litValue()) >> 1.U) & 0x3.U 
+  val ie   =  regs(CSR.mstatus.litValue()) & 0x1.U
+  val prv_inst  = dut.io.cmd === CSR.P
+  val prv_valid = Vec(_prv_level map (_.U))(cntr) <= prv
+  val iaddr_invalid = Vec(_iaddr_invalid map (_.B))(cntr) && dut.io.pc_check
+  val laddr_invalid =
+    Vec(_haddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LH || dut.io.ld_type === LD_LHU) ||
+    Vec(_waddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LW)
+  val saddr_invalid =
+    Vec(_haddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SH ||
+    Vec(_waddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SW
+  val is_ecall = prv_inst && Vec(_is_ecall map (_.B))(cntr)
+  val is_ebreak = prv_inst && Vec(_is_ebreak map (_.B))(cntr)
+  val is_eret = prv_inst && Vec(_is_eret map (_.B))(cntr)
+  val exception = dut.io.illegal || iaddr_invalid || laddr_invalid || saddr_invalid ||
+    (((dut.io.cmd & 0x3.U) > 0.U) && (!csr_valid || !prv_valid)) ||
+    (csr_ro && wen) || (prv_inst && !prv_valid) || is_ecall || is_ebreak
+  val instret = dut.io.inst =/= nop && (!exception || is_ecall || is_ebreak)
+
+  val rdata = Lookup(csr_addr, UInt(0), regs.toSeq map {
+    case (addr, reg) => BitPat(addr.U(12.W)) -> reg }) 
+  val wdata = Lookup(dut.io.cmd, UInt(0), Seq(
+    BitPat(CSR.W) -> dut.io.in,
+    BitPat(CSR.S) -> (dut.io.in | rdata),
+    BitPat(CSR.C) -> (~dut.io.in & rdata)
+  ))
+
+  // compute state
+  regs(CSR.time.litValue())   := regs(CSR.time.litValue())   + 1.U
+  regs(CSR.timew.litValue())  := regs(CSR.timew.litValue())  + 1.U
+  regs(CSR.mtime.litValue())  := regs(CSR.mtime.litValue())  + 1.U
+  regs(CSR.cycle.litValue())  := regs(CSR.cycle.litValue())  + 1.U
+  regs(CSR.cyclew.litValue()) := regs(CSR.cyclew.litValue()) + 1.U
+  when(regs(CSR.time.litValue()).andR) {
+    regs(CSR.mtime.litValue()) := regs(CSR.mtime.litValue()) + 1.U
+    regs(CSR.timeh.litValue()) := regs(CSR.timeh.litValue()) + 1.U
+    regs(CSR.timehw.litValue()) := regs(CSR.timehw.litValue()) + 1.U
+  }
+  when(regs(CSR.cycle.litValue()).andR) {
+    regs(CSR.cycleh.litValue()) := regs(CSR.cycleh.litValue()) + 1.U
+    regs(CSR.cyclehw.litValue()) := regs(CSR.cyclehw.litValue()) + 1.U
+  }
+  when(instret) {
+    regs(CSR.instret.litValue()) := regs(CSR.instret.litValue()) + 1.U
+    regs(CSR.instretw.litValue()) := regs(CSR.instret.litValue()) + 1.U
+    when(regs(CSR.instret.litValue()).andR) {
+      regs(CSR.instreth.litValue()) := regs(CSR.instreth.litValue()) + 1.U
+      regs(CSR.instrethw.litValue()) := regs(CSR.instrethw.litValue()) + 1.U
+    }
   }
 
-  def expect(out: CSROut) {
-    expect(c.io.out,  out.value)
-    expect(c.io.epc,  out.epc)
-    expect(c.io.evec, out.evec)
-    expect(c.io.expt, out.expt)
+  when(exception) {
+    regs(CSR.mepc.litValue()) := (dut.io.pc >> 2.U) << 2.U
+    regs(CSR.mcause.litValue()) :=
+      Mux(iaddr_invalid, Cause.InstAddrMisaligned,
+      Mux(laddr_invalid, Cause.LoadAddrMisaligned,
+      Mux(saddr_invalid, Cause.StoreAddrMisaligned,
+      Mux(prv_inst && Vec(is_ecall)(cntr), Cause.Ecall + prv,
+      Mux(prv_inst && Vec(is_ebreak)(cntr), Cause.Breakpoint, Cause.IllegalInst)))))
+    regs(CSR.mstatus.litValue()) := (prv << 4.U) | (ie << 3.U) | (CSR.PRV_M << 1.U) | 0.U
+    when(iaddr_invalid || laddr_invalid || saddr_invalid) {
+      regs(CSR.mbadaddr.litValue()) := dut.io.addr
+    }
+  }.elsewhen(is_eret) {
+    regs(CSR.mstatus.litValue()) := (CSR.PRV_U << 4.U) | (1.U << 3.U) | (prv1 << 1.U) | ie1
+  }.elsewhen(wen) {
+    when(csr_addr === CSR.mstatus) {
+      regs(CSR.mstatus.litValue()) := wdata(5, 0)
+    }.elsewhen(csr_addr === CSR.mip) {
+      regs(CSR.mip.litValue()) := (wdata(7) << 7.U) | (wdata(3) << 3.U)
+    }.elsewhen(csr_addr === CSR.mie) {
+      regs(CSR.mie.litValue()) := (wdata(7) << 7.U) | (wdata(3) << 3.U)
+    }.elsewhen(csr_addr === CSR.mepc) {
+      regs(CSR.mepc.litValue()) := (wdata >> 2.U) << 2.U
+    }.elsewhen(csr_addr === CSR.mcause) {
+      regs(CSR.mcause.litValue()) := wdata & ((BigInt(1) << 31) | 0xf).U
+    }.elsewhen(csr_addr === CSR.timew || csr_addr === CSR.mtime) {
+      regs(CSR.time.litValue()) := wdata
+      regs(CSR.timew.litValue()) := wdata
+      regs(CSR.mtime.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.timehw || csr_addr === CSR.mtimeh) {
+      regs(CSR.timeh.litValue()) := wdata
+      regs(CSR.timehw.litValue()) := wdata
+      regs(CSR.mtimeh.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.cyclew) {
+      regs(CSR.cycle.litValue()) := wdata
+      regs(CSR.cyclew.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.cyclehw) {
+      regs(CSR.cycleh.litValue()) := wdata
+      regs(CSR.cyclehw.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.instretw) {
+      regs(CSR.instret.litValue()) := wdata
+      regs(CSR.instretw.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.instrethw) {
+      regs(CSR.instreth.litValue()) := wdata
+      regs(CSR.instrethw.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.mtimecmp) {
+      regs(CSR.mtimecmp.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.mscratch) {
+      regs(CSR.mscratch.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.mbadaddr) {
+      regs(CSR.mbadaddr.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.mtohost) {
+      regs(CSR.mtohost.litValue()) := wdata
+    }.elsewhen(csr_addr === CSR.mfromhost) {
+      regs(CSR.mfromhost.litValue()) := wdata
+    }
   }
 
-  c.csrFile foreach (x => poke(x._2, 0))
-  poke(c.io.stall, 0)
-  poke(c.io.host.fromhost.valid, 0)
-  val goldCSR = new GoldCSR
+  val epc = Wire(UInt())
+  val evec = Wire(UInt())
+  epc := regs(CSR.mepc.litValue())
+  evec := regs(CSR.mtvec.litValue()) + (prv << 6.U)
 
-  for (inst <- insts) {
-    val value = rand_data
-    val ctrl = GoldControl(new ControlIn(inst))
-    val in   = new CSRIn(ctrl.csr_cmd, value, inst, rand_addr, int(rnd.nextInt|0x3), 
-      ctrl.illegal, ctrl.pc_sel == Control.PC_ALU.litValue(), ctrl.st_type, ctrl.ld_type)
-    println(s"*** inst: ${dasm(inst)}, csr: ${csrName(csr(inst))}, value: %x ***".format(value))
-    poke(in)
-    val out = goldCSR(in)
-    if (t > 0L) expect(out)
-    step(1) // update registers
-  } 
+  when(done) { stop(); stop() } // from VendingMachine example...
+  when(cntr.orR) {
+    assert(dut.io.out  === rdata)
+    assert(dut.io.epc  === epc)
+    assert(dut.io.evec === evec)
+    assert(dut.io.expt === exception)
+  }
+
+  if (trace) {
+    printf("*** Counter: %d ***\n", cntr)
+    printf("[in] inst: 0x%x, pc: 0x%x, daddr: 0x%x, in: 0x%x\n",
+           dut.io.inst, dut.io.pc, dut.io.addr, dut.io.in)
+    printf("     cmd: 0x%x, st_type: 0x%x, ld_type: 0x%x, illegal: %d, pc_check: %d\n",
+           dut.io.cmd, dut.io.st_type, dut.io.ld_type, dut.io.illegal, dut.io.pc_check)
+    printf("[state] csr addr: %x\n", csr_addr)
+    regs.toSeq sortWith (_._1 < _._1) foreach {
+      case (addr, reg) => printf(s" ${addr.toString(16)} -> 0x%x\n", reg) }
+    printf("[out] read: 0x%x =? 0x%x, epc: 0x%x =? 0x%x, evec: 0x%x ?= 0x%x, expt: %d ?= %d\n",
+           dut.io.out, rdata, dut.io.epc, epc, dut.io.evec, evec, dut.io.expt, exception)
+  }
+}
+
+class CSRTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  "CSR" should "pass" in {
+    assert(TesterDriver execute (() => new CSRTester(new CSR)))
+  }
 }

@@ -1,219 +1,306 @@
 package mini
 
-import chisel3.util.log2Up
-import chisel3.iotesters._
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
 import junctions._
-import scala.collection.mutable.{Queue => ScalaQueue}
 
-class GoldCache(nSets: Int, bBytes: Int, xlen: Int, nastiBytes: Int) extends Processable {
-  val cpu_reqs = ScalaQueue[TestCacheReq]()
-  val cpu_resps = ScalaQueue[TestCacheResp]()
-  val nasti_ar = ScalaQueue[TestNastiReadAddr]()
-  val nasti_aw = ScalaQueue[TestNastiWriteAddr]()
-  val nasti_r = ScalaQueue[TestNastiReadData]()
-  val nasti_w = ScalaQueue[TestNastiWriteData]()
-  val nasti_b = ScalaQueue[TestNastiWriteResp]()
-  private val waitQ = ScalaQueue[TestCacheReq]()  
-  private val data = Array.fill(nSets){BigInt(0)}
-  private val tags = Array.fill(nSets){0}
-  private val v    = Array.fill(nSets){false}
-  private val d    = Array.fill(nSets){false}
-  private val blen = log2Up(bBytes)
-  private val slen = log2Up(nSets)
-  private val nastiSize = log2Up(nastiBytes)
-  private val nastiLen  = bBytes/nastiBytes - 1
-  private val dataMask = (BigInt(1) << xlen) - 1
-  require(nastiLen >= 0)
+class GoldCache(implicit val p: cde.Parameters) extends Module with CacheParams {
+  val io = IO(new Bundle {
+    val req   = Flipped(Decoupled(new CacheReq))
+    val resp  = Decoupled(new CacheResp) 
+    val nasti = new NastiIO
+  })
+  val size  = log2Up(nastiXDataBits / 8).U
+  val len   = (dataBeats - 1).U
 
-  def process {
-    if (!cpu_reqs.isEmpty) {
-      val req = cpu_reqs.dequeue
-      val off =  req.addr          & ((1 << blen)-1)
-      val idx = (req.addr >> blen) & ((1 << slen)-1)
-      val tag = (req.addr >> (blen + slen))
-      val read = data(idx)
-      if (v(idx) && tags(idx) == tag) {
-        if (req.mask != 0) {
-          data(idx) = ((0 until bBytes) foldLeft BigInt(0)){(write, i) =>
-            if (i >> 2 == off >> 2 && (((req.mask >> (i&0x3))) & 0x1) == 1) {
-              write | (req.data >> 8*(i&0x3)) << 8*i
-            } else {
-              write | read & (BigInt(0xff) << 8*i)
-            }
+  val data = Mem(nSets, UInt(bBits.W))
+  val tags = Mem(nSets, UInt(tlen.W))
+  val v    = Mem(nSets, Bool())
+  val d    = Mem(nSets, Bool())
+
+  val req   = io.req.bits
+  val tag   = req.addr >> (blen + slen).U
+  val idx   = req.addr(blen + slen - 1, blen)
+  val off   = req.addr(blen - 1, 0)
+  val read  = data(idx)
+  val write = (((0 until bBytes) foldLeft 0.U){ (write, i) => write | Mux(
+    ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U)(0),
+    ((req.data >> ((8 * (i & 0x3)).U)) & 0xff.U) << (8 * i).U, read & (BigInt(0xff) << (8 * i)).U)
+  })(bBits - 1, 0)
+
+  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(UInt(), 4)
+  val state = RegInit(sIdle)
+  val (wCnt, wDone) = Counter(state === sWrite, dataBeats)
+  val (rCnt, rDone) = Counter(state === sRead && io.nasti.r.valid, dataBeats)
+
+  io.resp.bits.data := read >> ((off / 4.U) * xlen.U)
+  io.resp.valid := false.B
+  io.req.ready := false.B
+  io.nasti.ar.bits := NastiReadAddressChannel(0.U, (req.addr >> blen.U) << blen.U, size, len)
+  io.nasti.ar.valid := false.B
+  io.nasti.aw.bits := NastiWriteAddressChannel(0.U, Cat(tags(idx), idx) << blen.U, size, len)
+  io.nasti.aw.valid := false.B
+  io.nasti.w.bits := NastiWriteDataChannel(read >> (wCnt * nastiXDataBits.U), None, wDone)
+  io.nasti.w.valid := state === sWrite
+  io.nasti.b.ready := state === sWrAck
+  io.nasti.r.ready := state === sRead
+
+  switch(state) {
+    is(sIdle) {
+      when(io.req.valid && io.resp.ready) {
+        when(v(idx) && (tags(idx) === tag)) {
+          when(req.mask.orR) {
+            d(idx)    := true.B
+            data(idx) := write 
+            printf("[cache] data[%x] <= %x, off: %x, req: %x, mask: %b\n",
+                   idx, write, off, io.req.bits.data, io.req.bits.mask)
+          }.otherwise {
+            printf("[cache] data[%x] => %x, off: %x, resp: %x\n",
+                   idx, read, off, io.resp.bits.data)
           }
-          v(idx) = true
-          d(idx) = true 
-          cpu_resps enqueue new TestCacheResp(BigInt(0))
-        } else {
-          cpu_resps enqueue new TestCacheResp((read >> (xlen * (off >> 2))) & dataMask)
-        }
-      } else {
-        if (d(idx)) {
-          val addr = ((tags(idx) << slen | idx)) << blen
-          val size = 8 * (1 << nastiSize)
-          val mask = (BigInt(1) << size) - 1
-          nasti_aw enqueue new TestNastiWriteAddr(0, addr, nastiSize, nastiLen)
-          (0 to nastiLen) foreach { i =>
-            val w_data = (data(idx) >> (i * size)) & mask
-            nasti_w enqueue new TestNastiWriteData(w_data, i == nastiLen)
+          io.req.ready := true.B
+          io.resp.valid := true.B
+        }.otherwise {
+          when(d(idx)) {
+            io.nasti.aw.valid := true.B
+            state := sWrite
+          }.otherwise {
+            data(idx) := 0.U
+            io.nasti.ar.valid := true.B
+            state := sRead
           }
         }
-        nasti_ar enqueue new TestNastiReadAddr(0, (req.addr >>> blen) << blen, nastiSize, nastiLen)
-        waitQ enqueue req
       }
-    } 
-    if (nasti_r.size > nastiLen) {
-      assert(!waitQ.isEmpty)
-      val req = waitQ.dequeue
-      val idx = (req.addr >> blen) & ((1 << slen)-1)
-      val tag = (req.addr >> (blen + slen))
-      v(idx)    = true
-      tags(idx) = tag
-      data(idx) = ((0 to nastiLen) foldLeft BigInt(0)){(res, i) =>
-        val read = nasti_r.dequeue
-        assert(i != nastiLen || read.last, s"[${i}] NastReadData: ${read}")
-        res | (read.data << (i * 8 * (1 << nastiSize)))
-      }
-      cpu_reqs enqueue req
-      process
     }
-  } 
-}
-
-class Mem(
-    cache_ar_Q: ScalaQueue[TestNastiReadAddr],  gold_ar_Q: ScalaQueue[TestNastiReadAddr],
-    cache_aw_Q: ScalaQueue[TestNastiWriteAddr], gold_aw_Q: ScalaQueue[TestNastiWriteAddr],
-    cache_r_Q: ScalaQueue[TestNastiReadData],   gold_r_Q: ScalaQueue[TestNastiReadData],
-    cache_w_Q: ScalaQueue[TestNastiWriteData],  gold_w_Q: ScalaQueue[TestNastiWriteData],
-    word_width: Int = 16, depth: Int = 1 << 20, verbose: Boolean = true)(
-    implicit logger: java.io.PrintStream) extends SimMem(word_width, depth, verbose)(logger) {
-  var aw: Option[TestNastiWriteAddr] = None
-  def process = aw match {
-    case Some(p) if cache_w_Q.size >= p.len && gold_w_Q.size >= p.len =>
-      val addr = p.addr >> off
-      val size = 8 * (1 << p.size)
-      write(addr, ((0 until p.len) foldLeft BigInt(0)){(data, i) =>
-        val cache_w = cache_w_Q.dequeue
-        val gold_w  = gold_w_Q.dequeue
-        assert(cache_w == gold_w, 
-          s"\n*Cache* => ${cache_w}\n*Gold*  => ${gold_w}")
-        assert(i != p.len || cache_w.last, cache_w.toString)
-        data | (cache_w.data << size)
-      })
-      aw = None
-    case None if !cache_aw_Q.isEmpty && !gold_aw_Q.isEmpty =>
-      val cache_aw = cache_aw_Q.dequeue
-      val gold_aw  = gold_aw_Q.dequeue
-      assert(cache_aw == gold_aw, 
-        s"\n*Cache* => ${cache_aw}\n*Gold*  => ${gold_aw}")
-      aw = Some(cache_aw)
-    case None if !cache_ar_Q.isEmpty && !gold_ar_Q.isEmpty =>
-      val cache_ar = cache_ar_Q.dequeue
-      val gold_ar  = gold_ar_Q.dequeue
-      assert(cache_ar == gold_ar, 
-        s"\n*Cache* => ${cache_ar}\n*Gold*  => ${gold_ar}")
-      val size = 8 * (1 << cache_ar.size)
-      val addr = cache_ar.addr >> off
-      val mask = (BigInt(1) << size) - 1
-      val data = read(addr)
-      (0 to cache_ar.len) foreach { i =>
-        val r_data = new TestNastiReadData(
-          cache_ar.id, (data >> (i * size)) & mask, i == cache_ar.len)
-        cache_r_Q enqueue r_data
-        gold_r_Q  enqueue r_data
+    is(sWrite) {
+      when(wDone) {
+        state := sWrAck
       }
-    case _ =>
+    }
+    is(sWrAck) {
+      when(io.nasti.b.valid) {
+        data(idx) := 0.U
+        io.nasti.ar.valid := true.B
+        state := sRead
+      }
+    }
+    is(sRead) {
+      when(io.nasti.r.valid) {
+        data(idx) := read | (io.nasti.r.bits.data << (rCnt * nastiXDataBits.U))
+      }
+      when(rDone) {
+        assert(io.nasti.r.bits.last)
+        tags(idx) := tag
+        v(idx) := true.B
+        state := sIdle
+      }
+    }
   }
 }
 
-class CacheTests(c: Cache) extends AdvTester(c) {
-  implicit def bigIntToInt(b: BigInt) = b.toInt
-  implicit def bigIntToBoolean(b: BigInt) = b != BigInt(0)
-  implicit def booleanToBigInt(b: Boolean) = if (b) BigInt(1) else BigInt(0)
-  // CacheIO
-  val req_h = new ValidSource(c.io.cpu.req, (req: CacheReq, in: TestCacheReq) => { 
-    reg_poke(req.addr, in.addr) ; reg_poke(req.data, in.data) ; reg_poke(req.mask, in.mask)})
-  val resp_h = new ValidSink(c.io.cpu.resp,
-    (resp: CacheResp) => new TestCacheResp(peek(resp.data)))
-  // NastiIO
-  val ar_h = new DecoupledSink(c.io.nasti.ar, 
-    (ar: NastiReadAddressChannel) => new TestNastiReadAddr(
-      peek(ar.id), peek(ar.addr), peek(ar.size), peek(ar.len)))
-  val aw_h = new DecoupledSink(c.io.nasti.aw, 
-    (aw: NastiWriteAddressChannel) => new TestNastiWriteAddr(
-      peek(aw.id), peek(aw.addr), peek(aw.size), peek(aw.len)))
-  val w_h = new DecoupledSink(c.io.nasti.w, (w: NastiWriteDataChannel) => 
-    new TestNastiWriteData(peek(w.data), peek(w.last)))
-  val r_h = new DecoupledSource(c.io.nasti.r, (r: NastiReadDataChannel, in: TestNastiReadData) => {
-    reg_poke(r.id, in.id) ; reg_poke(r.data, in.data) ; reg_poke(r.last, in.last)})
- 
-  val gold = new GoldCache(c.nSets, c.bBytes, c.xlen, c.nastiXDataBits/8)
-  val mem = new Mem(
-    ar_h.outputs, gold.nasti_ar,
-    aw_h.outputs, gold.nasti_aw,
-    r_h.inputs,   gold.nasti_r,
-    w_h.outputs,  gold.nasti_w, c.bBytes)
-  preprocessors += gold
-  preprocessors += mem
+class CacheTester(cache: => Cache)(implicit val p: cde.Parameters) extends BasicTester with CacheParams {
+  /* Target Design */
+  val dut = Module(cache)
+  val dut_mem = Wire(new NastiIO)
+  dut_mem.ar <> Queue(dut.io.nasti.ar, 32)
+  dut_mem.aw <> Queue(dut.io.nasti.aw, 32)
+  dut_mem.w <> Queue(dut.io.nasti.w, 32)
+  dut.io.nasti.b <> Queue(dut_mem.b, 32)
+  dut.io.nasti.r <> Queue(dut_mem.r, 32)
+
+  /* Gold Model */
+  val gold = Module(new GoldCache)
+  val gold_req = Wire(gold.io.req)
+  val gold_resp = Wire(gold.io.resp)
+  val gold_mem = Wire(new NastiIO)
+  gold.io.req <> Queue(gold_req, 32)
+  gold_resp <> Queue(gold.io.resp, 32)
+  gold_mem.ar <> Queue(gold.io.nasti.ar, 32)
+  gold_mem.aw <> Queue(gold.io.nasti.aw, 32)
+  gold_mem.w <> Queue(gold.io.nasti.w, 32)
+  gold.io.nasti.b <> Queue(gold_mem.b, 32)
+  gold.io.nasti.r <> Queue(gold_mem.r, 32)
+
+  val size  = log2Up(nastiXDataBits / 8).U
+  val len   = (dataBeats - 1).U
+
+  /* Main Memory */
+  val mem = Mem(1 << 20, UInt(nastiXDataBits.W))
+  val sMemIdle :: sMemWrite :: sMemWrAck :: sMemRead :: Nil = Enum(UInt(), 4)
+  val memState = RegInit(sMemIdle)
+  val (wCnt, wDone) = Counter(memState === sMemWrite && dut_mem.w.valid && gold_mem.w.valid, dataBeats)
+  val (rCnt, rDone) = Counter(memState === sMemRead && dut_mem.r.ready && gold_mem.r.ready, dataBeats)
+
+  dut_mem.ar.ready  := false.B
+  dut_mem.aw.ready  := false.B
+  dut_mem.w.ready   := false.B
+  dut_mem.b.valid   := memState === sMemWrAck
+  dut_mem.b.bits    := NastiWriteResponseChannel(0.U) 
+  dut_mem.r.valid   := memState === sMemRead
+  dut_mem.r.bits    := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size) + rCnt), rDone)
+  gold_mem.ar.ready := dut_mem.ar.ready
+  gold_mem.aw.ready := dut_mem.aw.ready
+  gold_mem.w.ready  := dut_mem.w.ready
+  gold_mem.b.valid  := dut_mem.b.valid
+  gold_mem.b.bits   := dut_mem.b.bits
+  gold_mem.r.valid  := dut_mem.r.valid
+  gold_mem.r.bits   := dut_mem.r.bits
+
+  switch(memState) {
+    is(sMemIdle) {
+      when(gold_mem.aw.valid && dut_mem.aw.valid) {
+        assert(dut_mem.aw.bits.id === gold_mem.aw.bits.id,
+          "* dut.io.nasti.aw.bits.id => %x != %x *\n", dut_mem.aw.bits.id, gold_mem.aw.bits.id)
+        assert(gold_mem.aw.bits.addr === dut_mem.aw.bits.addr,
+          "* dut.io.nasti.aw.bits.addr => %x != %x *\n", dut_mem.aw.bits.addr, gold_mem.aw.bits.addr)
+        assert(gold_mem.aw.bits.size === dut_mem.aw.bits.size,
+          "* dut.io.nasti.aw.bits.size => %x != %x *\n", dut_mem.aw.bits.size, gold_mem.aw.bits.size)
+        assert(gold_mem.aw.bits.len  === dut_mem.aw.bits.len,
+          "* dut.io.nasti.aw.bits.len => %x != %x *\n", dut_mem.aw.bits.len, gold_mem.aw.bits.len)
+        memState := sMemWrite
+      }.elsewhen(gold_mem.ar.valid && dut_mem.ar.valid) {
+        assert(dut_mem.ar.bits.id === gold_mem.ar.bits.id,
+          "* dut.io.nasti.ar.bits.id => %x != %x *\n", dut_mem.ar.bits.id, gold_mem.ar.bits.id)
+        assert(gold_mem.ar.bits.addr === dut_mem.ar.bits.addr,
+          "* dut.io.nasti.ar.bits.addr => %x != %x *\n", dut_mem.ar.bits.addr, gold_mem.ar.bits.addr)
+        assert(gold_mem.ar.bits.size === dut_mem.ar.bits.size,
+          "* dut.io.nasti.ar.bits.size => %x != %x *\n", dut_mem.ar.bits.size, gold_mem.ar.bits.size)
+        assert(gold_mem.ar.bits.len  === dut_mem.ar.bits.len,
+          "* dut.io.nasti.ar.bits.len => %x != %x *\nn", dut_mem.ar.bits.len, gold_mem.ar.bits.len)
+        memState := sMemRead
+      }
+    }
+    is(sMemWrite) {
+      assert(dut_mem.aw.bits.size === size)
+      assert(dut_mem.aw.bits.len  === len)
+      when(gold_mem.w.valid && dut_mem.w.valid) {
+        assert(dut_mem.w.bits.data === gold_mem.w.bits.data,
+          "* dut.io.nasti.w.bits.data => %x != %x *\n", dut_mem.w.bits.data, gold_mem.w.bits.data)
+        assert(dut_mem.w.bits.strb === gold_mem.w.bits.strb,
+          "* dut.io.nasti.w.bits.strb => %x != %x *\n", dut_mem.w.bits.strb, gold_mem.w.bits.strb)
+        assert(dut_mem.w.bits.last === gold_mem.w.bits.last,
+          "* dut.io.nasti.w.bits.last => %x != %x *\n", dut_mem.w.bits.last, gold_mem.w.bits.last)
+        assert(dut_mem.w.bits.strb === ((1 << (nastiXDataBits / 8)) - 1).U) // TODO: release it?
+        mem((dut_mem.aw.bits.addr >> size) + wCnt) := dut_mem.w.bits.data
+        printf("[write] mem[%x] <= %x\n", (dut_mem.aw.bits.addr >> size) + wCnt, dut_mem.w.bits.data)
+        dut_mem.w.ready := true.B
+      }
+      when(wDone) {
+        dut_mem.aw.ready := true.B
+        memState := sMemWrAck
+      }
+    }
+    is(sMemWrAck) {
+      when(gold_mem.b.ready && dut_mem.b.ready) {
+        memState := sMemIdle
+      }
+    }
+    is(sMemRead) {
+      when(dut_mem.r.ready && gold_mem.r.ready) {
+        printf("[read] mem[%x] => %x\n", (dut_mem.ar.bits.addr >> size) + rCnt, dut_mem.r.bits.data)
+      }
+      when(rDone) {
+        dut_mem.ar.ready := true.B
+        memState := sMemIdle 
+      } 
+    }
+  }
   
-  def rand_tag = rnd.nextInt(1 << c.tlen)
-  def rand_idx = rnd.nextInt(1 << c.slen)
-  def rand_off = rnd.nextInt(1 << c.blen) & -4
-  def rand_data = ((0 until c.bBytes) foldLeft BigInt(0))((r, i) => 
-                    r | (BigInt(rnd.nextInt() & 0xff) << 8*i))
-  def rand_mask = (1 << (c.xlen / 8)) - 1
+  /* Tests */
+  val rnd = new scala.util.Random
+  def rand_tag = rnd.nextInt(1 << tlen).U(tlen.W)
+  def rand_idx = rnd.nextInt(1 << slen).U(slen.W)
+  def rand_off = (rnd.nextInt(1 << blen) & -4).U(blen.W)
+  def rand_data = (((0 until (nastiXDataBits / 8)) foldLeft BigInt(0))((r, i) =>
+    r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))).U(nastiXDataBits.W)
+  def rand_mask = (rnd.nextInt((1 << (xlen / 8)) - 1) + 1).U((xlen / 8).W)
+  def test(tag: UInt, idx: UInt, off: UInt, mask: UInt = 0.U((xlen / 8).W)) =
+    Cat(mask, Cat(Seq.fill(bBits / nastiXDataBits)(rand_data)), tag, idx, off)
 
-  def addr(tag: Int, idx: Int, off: Int) = ((tag << c.slen | idx) << c.blen) | off
+  val tags = Vector.fill(3)(rand_tag)
+  val idxs = Vector.fill(2)(rand_idx)
+  val offs = Vector.fill(6)(rand_off)
 
-  def init(tags: Vector[Int], idxs: Vector[Int]) {
-    for (tag <- tags ; idx <- idxs) {
-      mem.write(tag << c.slen | idx, rand_data)
-    }
-  }
-
-  private var testCnt = 0
-  def test(tag: Int, idx: Int, off: Int, mask: Int = 0) = {
-    println(s"***** TEST ${testCnt} *****")
-    val req = new TestCacheReq(addr(tag, idx, off), int(rnd.nextInt), mask)
-    gold.cpu_reqs enqueue req
-    req_h.inputs  enqueue req
-    println(req.toString)
-
-    // cache access
-    req_h.process
-    takestep{resp_h.outputs.clear}    
-
-    if (eventually(!resp_h.outputs.isEmpty && !gold.cpu_resps.isEmpty, 10)) {
-      val cacheResp = resp_h.outputs.dequeue
-      val goldResp  = gold.cpu_resps.dequeue
-      if (mask == 0) {
-        assert(cacheResp.data == goldResp.data, 
-          s"\n*Cache* => ${cacheResp}\n*Gold*  => ${goldResp}")
+  val initAddr = for {
+    tag <- tags
+    idx <- idxs
+    off <- 0 until dataBeats
+  } yield Cat(tag, idx, off.U)
+  val initData = Seq.fill(initAddr.size)(rand_data)
+  val testVec  = Seq(
+    test(tags(0), idxs(0), offs(0)), // #0: read miss
+    test(tags(0), idxs(0), offs(1)), // #1: read hit
+    test(tags(1), idxs(0), offs(0)), // #2: read miss
+    test(tags(1), idxs(0), offs(2)), // #3: read hit
+    test(tags(1), idxs(0), offs(3)), // #4: read hit
+    test(tags(1), idxs(0), offs(4), rand_mask), // #5: write hit
+    test(tags(1), idxs(0), offs(4)), // #6: read hit
+    test(tags(2), idxs(0), offs(5)), // #7: read miss & write back
+    test(tags(0), idxs(1), offs(0), rand_mask), // #8: write miss
+    test(tags(0), idxs(1), offs(0)), // #9: read hit
+    test(tags(0), idxs(1), offs(1)), // #10: read hit
+    test(tags(1), idxs(1), offs(2), rand_mask), // #11: write miss & write back
+    test(tags(1), idxs(1), offs(3)), // #12: read hit
+    test(tags(2), idxs(1), offs(4)), // #13: read write back
+    test(tags(2), idxs(1), offs(5)) // #14: read hit
+  )
+  
+  val sInit :: sStart :: sWait :: sDone :: Nil = Enum(UInt(), 4)
+  val state = RegInit(sInit)
+  val timeout = Reg(UInt(32.W))
+  val (initCnt, initDone) = Counter(state === sInit, initAddr.size)
+  val (testCnt, testDone) = Counter(state === sDone, testVec.size)
+  val mask = (Vec(testVec)(testCnt) >> (blen + slen + tlen + bBits))
+  val data = (Vec(testVec)(testCnt) >> (blen + slen + tlen))(bBits-1, 0)
+  val tag  = (Vec(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
+  val idx  = (Vec(testVec)(testCnt) >> blen.U)(slen - 1, 0)
+  val off  = (Vec(testVec)(testCnt))(blen - 1, 0)
+  dut.io.cpu.req.bits.addr := Cat(tag, idx, off)
+  dut.io.cpu.req.bits.data := data
+  dut.io.cpu.req.bits.mask := mask
+  dut.io.cpu.req.valid     := state === sWait 
+  gold_req.bits            := dut.io.cpu.req.bits
+  gold_req.valid           := state === sStart
+  gold_resp.ready          := state === sDone
+      
+  switch(state) {
+    is(sInit) {
+      mem(Vec(initAddr)(initCnt)) := Vec(initData)(initCnt)
+      printf("[init] mem[%x] <= %x\n", Vec(initAddr)(initCnt), Vec(initData)(initCnt))
+      when(initDone) {
+        state := sStart
       }
     }
-    resp_h.outputs.clear
-    gold.cpu_resps.clear
-    testCnt += 1
+    is(sStart) {
+      when(gold_req.ready) {
+        timeout := 0.U
+        state := sWait
+      }
+    }
+    is(sWait) {
+      timeout := timeout + 1.U
+      assert(timeout < 100.U)
+      when(dut.io.cpu.resp.valid && gold_resp.valid) {
+        when(!mask.orR) {
+          assert(dut.io.cpu.resp.bits.data === gold_resp.bits.data,
+            "* dut.io.cpu.resp.bits.data => %x ?= %x *\n",
+            dut.io.cpu.resp.bits.data, gold_resp.bits.data)
+        }
+        state := sDone
+      }
+    }
+    is(sDone) {
+      state := sStart
+    }
   }
 
-  val tags = Vector(rand_tag, rand_tag, rand_tag)
-  val idxs = Vector(rand_idx, rand_idx)
-  val offs = Vector(rand_off, rand_off, rand_off, rand_off, rand_off, rand_off)
+  when(testDone) { stop(); stop() } // from VendingMachine example...
+}
 
-  init(tags, idxs)
-  test(tags(0), idxs(0), offs(0)) // #0: read miss
-  test(tags(0), idxs(0), offs(1)) // #1: read hit
-  test(tags(1), idxs(0), offs(0)) // #2: read hit
-  test(tags(1), idxs(0), offs(2)) // #3: read miss
-  test(tags(1), idxs(0), offs(3)) // #4: read hit
-  test(tags(1), idxs(0), offs(4), rand_mask) // #5: write hit
-  test(tags(1), idxs(0), offs(4)) // #6: read hit
-  test(tags(2), idxs(0), offs(5)) // #7: read miss & write back
-  test(tags(0), idxs(1), offs(0), rand_mask) // #8: write miss
-  test(tags(0), idxs(1), offs(0)) // #9: read hit
-  test(tags(0), idxs(1), offs(1)) // #10: read hit
-  test(tags(1), idxs(1), offs(2), rand_mask) // #11: write miss & write back
-  test(tags(1), idxs(1), offs(3)) // #12: read hit
-  test(tags(2), idxs(1), offs(4)) // #13: read write back
-  test(tags(2), idxs(1), offs(5)) // #14: read hit
+class CacheTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  "Cache" should "pass" in {
+    assert(TesterDriver execute (() => new CacheTester(new Cache)))
+  }
 }

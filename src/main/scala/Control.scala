@@ -9,58 +9,58 @@ object Control {
   val N = Bool(false)
 
   // pc_sel
-  val PC_4   = UInt(0, 2)
-  val PC_ALU = UInt(1, 2)
-  val PC_0   = UInt(2, 2)
-  val PC_EPC = UInt(3, 2)
+  val PC_4   = 0.U(2.W)
+  val PC_ALU = 1.U(2.W)
+  val PC_0   = 2.U(2.W)
+  val PC_EPC = 3.U(2.W)
 
   // A_sel
-  val A_XXX  = UInt(0, 1)
-  val A_PC   = UInt(0, 1)
-  val A_RS1  = UInt(1, 1)
+  val A_XXX  = 0.U(1.W)
+  val A_PC   = 0.U(1.W)
+  val A_RS1  = 1.U(1.W)
 
   // B_sel
-  val B_XXX  = UInt(0, 1)
-  val B_IMM  = UInt(0, 1)
-  val B_RS2  = UInt(1, 1)
+  val B_XXX  = 0.U(1.W)
+  val B_IMM  = 0.U(1.W)
+  val B_RS2  = 1.U(1.W)
 
   // imm_sel
-  val IMM_X  = UInt(0, 3)
-  val IMM_I  = UInt(1, 3)
-  val IMM_S  = UInt(2, 3)
-  val IMM_U  = UInt(3, 3)
-  val IMM_J  = UInt(4, 3)
-  val IMM_B  = UInt(5, 3)
-  val IMM_Z  = UInt(6, 3)
+  val IMM_X  = 0.U(3.W)
+  val IMM_I  = 1.U(3.W)
+  val IMM_S  = 2.U(3.W)
+  val IMM_U  = 3.U(3.W)
+  val IMM_J  = 4.U(3.W)
+  val IMM_B  = 5.U(3.W)
+  val IMM_Z  = 6.U(3.W)
 
   // br_type
-  val BR_XXX = UInt(0, 3)
-  val BR_LTU = UInt(1, 3)
-  val BR_LT  = UInt(2, 3)
-  val BR_EQ  = UInt(3, 3)
-  val BR_GEU = UInt(4, 3)
-  val BR_GE  = UInt(5, 3)
-  val BR_NE  = UInt(6, 3)
+  val BR_XXX = 0.U(3.W)
+  val BR_LTU = 1.U(3.W)
+  val BR_LT  = 2.U(3.W)
+  val BR_EQ  = 3.U(3.W)
+  val BR_GEU = 4.U(3.W)
+  val BR_GE  = 5.U(3.W)
+  val BR_NE  = 6.U(3.W)
 
   // st_type
-  val ST_XXX = UInt(0, 2)
-  val ST_SW  = UInt(1, 2)
-  val ST_SH  = UInt(2, 2)
-  val ST_SB  = UInt(3, 2)
+  val ST_XXX = 0.U(2.W)
+  val ST_SW  = 1.U(2.W)
+  val ST_SH  = 2.U(2.W)
+  val ST_SB  = 3.U(2.W)
 
   // ld_type
-  val LD_XXX = UInt(0, 3)
-  val LD_LW  = UInt(1, 3)
-  val LD_LH  = UInt(2, 3)
-  val LD_LB  = UInt(3, 3)
-  val LD_LHU = UInt(4, 3)
-  val LD_LBU = UInt(5, 3)
+  val LD_XXX = 0.U(3.W)
+  val LD_LW  = 1.U(3.W)
+  val LD_LH  = 2.U(3.W)
+  val LD_LB  = 3.U(3.W)
+  val LD_LHU = 4.U(3.W)
+  val LD_LBU = 5.U(3.W)
 
   // wb_sel
-  val WB_ALU = UInt(0, 2)
-  val WB_MEM = UInt(1, 2)
-  val WB_PC4 = UInt(2, 2)
-  val WB_CSR = UInt(3, 2)
+  val WB_ALU = 0.U(2.W)
+  val WB_MEM = 1.U(2.W)
+  val WB_PC4 = 2.U(2.W)
+  val WB_CSR = 3.U(2.W)
 
   import Instructions._
   import ALU._
@@ -123,20 +123,20 @@ object Control {
 }
 
 class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst      = UInt(INPUT, xlen)
-  val pc_sel    = UInt(OUTPUT, 2) 
-  val inst_kill = Bool(OUTPUT)
-  val A_sel     = UInt(OUTPUT, 1)
-  val B_sel     = UInt(OUTPUT, 1)
-  val imm_sel   = UInt(OUTPUT, 3)
-  val alu_op    = UInt(OUTPUT, 4)
-  val br_type   = UInt(OUTPUT, 3)
-  val st_type   = UInt(OUTPUT, 2)
-  val ld_type   = UInt(OUTPUT, 3)
-  val wb_sel    = UInt(OUTPUT, 2) 
-  val wb_en     = Bool(OUTPUT)
-  val csr_cmd   = UInt(OUTPUT, 3)
-  val illegal   = Bool(OUTPUT)
+  val inst      = Input(UInt(xlen.W))
+  val pc_sel    = Output(UInt(2.W))
+  val inst_kill = Output(Bool())
+  val A_sel     = Output(UInt(1.W))
+  val B_sel     = Output(UInt(1.W))
+  val imm_sel   = Output(UInt(3.W))
+  val alu_op    = Output(UInt(4.W))
+  val br_type   = Output(UInt(3.W))
+  val st_type   = Output(UInt(2.W))
+  val ld_type   = Output(UInt(3.W))
+  val wb_sel    = Output(UInt(2.W))
+  val wb_en     = Output(Bool())
+  val csr_cmd   = Output(UInt(3.W))
+  val illegal   = Output(Bool())
 }
 
 class Control(implicit p: Parameters) extends Module {

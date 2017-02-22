@@ -5,27 +5,27 @@ import chisel3.util._
 import cde.Parameters
 
 object ALU {
-  val ALU_ADD    = UInt(0, 4)
-  val ALU_SUB    = UInt(1, 4)
-  val ALU_AND    = UInt(2, 4)
-  val ALU_OR     = UInt(3, 4)
-  val ALU_XOR    = UInt(4, 4)
-  val ALU_SLT    = UInt(5, 4)
-  val ALU_SLL    = UInt(6, 4)
-  val ALU_SLTU   = UInt(7, 4)
-  val ALU_SRL    = UInt(8, 4)
-  val ALU_SRA    = UInt(9, 4)
-  val ALU_COPY_A = UInt(10, 4)
-  val ALU_COPY_B = UInt(11, 4)
-  val ALU_XXX    = UInt(15, 4)
+  val ALU_ADD    = 0.U(4.W)
+  val ALU_SUB    = 1.U(4.W)
+  val ALU_AND    = 2.U(4.W)
+  val ALU_OR     = 3.U(4.W)
+  val ALU_XOR    = 4.U(4.W)
+  val ALU_SLT    = 5.U(4.W)
+  val ALU_SLL    = 6.U(4.W)
+  val ALU_SLTU   = 7.U(4.W)
+  val ALU_SRL    = 8.U(4.W)
+  val ALU_SRA    = 9.U(4.W)
+  val ALU_COPY_A = 10.U(4.W)
+  val ALU_COPY_B = 11.U(4.W)
+  val ALU_XXX    = 15.U(4.W)
 }
 
 class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
-  val A = UInt(INPUT, xlen)
-  val B = UInt(INPUT, xlen)
-  val alu_op = UInt(INPUT, 4)
-  val out = UInt(OUTPUT, xlen)
-  val sum = UInt(OUTPUT, xlen)
+  val A = Input(UInt(xlen.W))
+  val B = Input(UInt(xlen.W))
+  val alu_op = Input(UInt(4.W))
+  val out = Output(UInt(xlen.W))
+  val sum = Output(UInt(xlen.W))
 }
 
 import ALU._

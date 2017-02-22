@@ -1,38 +1,56 @@
 package mini
 
-import chisel3.iotesters.PeekPokeTester
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
+import Control._
 
-case class BrCondIn(brType: BigInt, rs1: BigInt, rs2: BigInt)
-case class BrCondOut(taken: Boolean)
+class BrCondTester(br: => BrCond)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
+  val dut = Module(br)
+  val ctrl = Module(new Control)
+  val xlen = p(XLEN)
 
-object GoldBrCond {
-  import Control._
-  def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
-  def apply(in: BrCondIn) = new BrCondOut(if (in.brType == BR_EQ.litValue()) in.rs1 == in.rs2
-    else if (in.brType == BR_NE.litValue()) in.rs1 != in.rs2
-    else if (in.brType == BR_LT.litValue()) in.rs1.toInt < in.rs2.toInt
-    else if (in.brType == BR_GE.litValue()) in.rs1.toInt >= in.rs2.toInt
-    else if (in.brType == BR_LTU.litValue()) in.rs1 < in.rs2
-    else if (in.brType == BR_GEU.litValue()) in.rs1 >= in.rs2 else false)
-}
-
-class BrCondTests[+T <: BrCond](c: T) extends PeekPokeTester(c) with RandInsts {
-  override val insts = (List.fill(10){List(
+  override val insts = Seq.fill(10)(Seq(
     B(Funct3.BEQ, 0, 0, 0),
     B(Funct3.BNE, 0, 0, 0),
     B(Funct3.BLT, 0, 0, 0),
     B(Funct3.BGE, 0, 0, 0),
     B(Funct3.BLTU, 0, 0, 0),
-    B(Funct3.BGEU, 0, 0, 0))}).flatten
-  for (inst <- insts) {
-    val a = rand_data
-    val b = rand_data
-    val ctrl = GoldControl(new ControlIn(inst))
-    val gold = GoldBrCond(new BrCondIn(ctrl.br_type, a, b))
-    println(s"*** ${dasm(inst)} -> A: %x, B: %x ***".format(a, b))
-    poke(c.io.br_type, ctrl.br_type)
-    poke(c.io.rs1, a)
-    poke(c.io.rs2, b)
-    expect(c.io.taken, gold.taken) 
+    B(Funct3.BGEU, 0, 0, 0))).flatten
+
+  val (cntr, done) = Counter(true.B, insts.size)
+  val rs1 = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val rs2 = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
+  val eq  = Vec((rs1 zip rs2) map { case (a, b) => (a == b).B })
+  val ne  = Vec((rs1 zip rs2) map { case (a, b) => (a != b).B })
+  val lt  = Vec((rs1 zip rs2) map { case (a, b) => (a.toInt < b.toInt).B })
+  val ge  = Vec((rs1 zip rs2) map { case (a, b) => (a.toInt >= b.toInt).B })
+  val ltu = Vec((rs1 zip rs2) map { case (a, b) => (a < b).B })
+  val geu = Vec((rs1 zip rs2) map { case (a, b) => (a >= b).B })
+  val out = Mux(dut.io.br_type === BR_EQ,  eq(cntr),
+            Mux(dut.io.br_type === BR_NE,  ne(cntr),
+            Mux(dut.io.br_type === BR_LT,  lt(cntr),
+            Mux(dut.io.br_type === BR_GE,  ge(cntr),
+            Mux(dut.io.br_type === BR_LTU, ltu(cntr),
+            Mux(dut.io.br_type === BR_GEU, geu(cntr), false.B))))))
+
+  ctrl.io.inst := Vec(insts)(cntr)
+  dut.io.br_type := ctrl.io.br_type
+  dut.io.rs1 := Vec(rs1 map (_.U))(cntr)
+  dut.io.rs2 := Vec(rs2 map (_.U))(cntr)
+
+  when(done) { stop(); stop() } // from VendingMachine example...
+  assert(dut.io.taken === out)
+  printf("Counter: %d, BrType: 0x%x, rs1: 0x%x, rs2: 0x%x, Taken: %d ?= %d\n",
+         cntr, dut.io.br_type, dut.io.rs1, dut.io.rs2, dut.io.taken, out)
+}
+
+class BrCondTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  "BrCondSimple" should "pass" in {
+    assert(TesterDriver execute (() => new BrCondTester(new BrCondSimple)))
+  }
+  "BrCondArea" should "pass" in {
+    assert(TesterDriver execute (() => new BrCondTester(new BrCondArea)))
   }
 }

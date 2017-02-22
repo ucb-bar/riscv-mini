@@ -1,28 +1,42 @@
 package mini
 
-import chisel3.{Bits, SInt, UInt, Bool}
-import chisel3.util.BitPat
-import scala.collection.mutable.HashMap
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
+import scala.reflect.ClassTag
+import scala.concurrent.{Future, Await, ExecutionContext}
+import Instructions._
 
-trait RISCVCommon {
-  import Instructions._
+trait DatapathTest
+object BypassTest extends DatapathTest {
+  override def toString: String = "bypass test"
+}
+object ExceptionTest extends DatapathTest {
+  override def toString: String = "exception test"
+}
+// Define your own test
+
+trait TestUtils {
   implicit def boolToBoolean(x: Bool) = x.litValue() == 1
   implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
   implicit def uintToBitPat(u: UInt) = BitPat(u)
+  implicit def bigIntToInt(x: BigInt) = x.toInt
+  implicit def bigIntToBoolean(x: BigInt) = x != 0
+  def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
+
   def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
   def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
   def csr(inst: UInt) =  (inst.litValue() >> 20)
-  def reg(x: Int) = UInt(x & ((1 << 4) - 1), 5)
-  def imm(x: Int) = SInt(x & ((1 << 20) - 1), 21)
+  def reg(x: Int) = (x & ((1 << 5) - 1)).U(5.W)
+  def imm(x: Int) = (x & ((1 << 20) - 1)).S(21.W)
   def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
     assert(x.isLit() && y.isLit())
-    Bits(x.litValue() << y.getWidth | y.litValue(), x.getWidth + y.getWidth)
+    (x.litValue() << y.getWidth | y.litValue()).U((x.getWidth + y.getWidth).W)
   }
   def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
-  val fin   = Cat(CSR.mtohost, reg(1), Funct3.CSRRWI, reg(0), Opcode.SYSTEM)
-  val fence = Cat(UInt(0, 4), UInt(0xf, 4), UInt(0xf, 4), UInt(0, 13), Opcode.MEMORY)
-  val nop   = Cat(UInt(0, 12), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
+  val fence = Cat(0.U(4.W), 0xf.U(4.W), 0xf.U(4.W), 0.U(13.W), Opcode.MEMORY)
+  val nop   = Cat(0.U(12.W), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
   val csrRegs = CSR.regs map (_.litValue())
   private val csrMap  = (csrRegs zip List(
     "cycle", "time", "instret", "cycleh", "timeh", "instreth",
@@ -42,98 +56,30 @@ trait RISCVCommon {
   private def inst_7(inst: UInt)     = UInt((inst.litValue() >> 7)  & 0x1,  1)
 
   def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
-                             inst_30_25(inst), inst_24_21(inst), inst_20(inst)).litValue()
+                             inst_30_25(inst), inst_24_21(inst), inst_20(inst))
   def simm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
-                             inst_30_25(inst), inst_11_8(inst), inst_7(inst)).litValue()
+                             inst_30_25(inst), inst_11_8(inst), inst_7(inst))
   def bimm(inst: UInt) = Cat(Cat(Seq.fill(20){inst_31(inst)}),
-                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1)).litValue()
+                             inst_7(inst), inst_30_25(inst), inst_11_8(inst), UInt(0, 1))
   def uimm(inst: UInt) = Cat(inst_31(inst), inst_30_25(inst), inst_24_21(inst),
-                             inst_20(inst), inst_19_12(inst), UInt(0, 12)).litValue()
+                             inst_20(inst), inst_19_12(inst), UInt(0, 12))
   def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst),
-                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1)).litValue()
-  def zimm(inst: UInt) = (inst.litValue() >> 15) & 0x1f
-
-  private val instPats = List(AUIPC, LUI, JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU,
-    LB, LH, LW, LBU, LHU, SB, SH, SW, ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
-    ADD, SUB, SLT, SLTU, XOR, OR, AND, SLL, SRL, SRA, FENCE, CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI)
-  private val instFmts = List(
-    (x: UInt) => "AUIPC x%d, %x".format(rd(x), uimm(x)),
-    (x: UInt) => "LUI x%d, %x".format(rd(x), uimm(x)),
-    (x: UInt) => "JAL x%d, %x".format(rd(x), jimm(x)),
-    (x: UInt) => "JALR x%d, x%d, %x".format(rd(x), rs2(x), iimm(x)),
-    (x: UInt) => "BEQ x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BNE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BLT x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BGE x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BLTU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "BGEU x%d, x%d, %x".format(rs1(x), rs2(x), bimm(x)),
-    (x: UInt) => "LB x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LH x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LW x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LBU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "LHU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SB x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "SH x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "SW x%d, x%d, %x".format(rs2(x), rs1(x), simm(x)),
-    (x: UInt) => "ADDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLTI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLTIU x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "XORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "ORI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "ANDI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SLLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SRLI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "SRAI x%d, x%d, %x".format(rd(x), rs1(x), iimm(x)),
-    (x: UInt) => "ADD x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SUB x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLT x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLTU x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "XOR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "OR x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "AND x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SLL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SRL x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "SRA x%d, x%d, x%d".format(rd(x), rs1(x), rs2(x)),
-    (x: UInt) => "FENCE",
-    (x: UInt) => "CSRRW x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
-    (x: UInt) => "CSRRS x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
-    (x: UInt) => "CSRRC x%d, %s, x%d".format(rd(x), csrName(csr(x)), rs1(x)),
-    (x: UInt) => "CSRRWI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
-    (x: UInt) => "CSRRSI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x)),
-    (x: UInt) => "CSRRCI x%d, %s, %d".format(rd(x), csrName(csr(x)), rs1(x))
-  )
-
-  def dasm(x: UInt) = {
-    def iter(l: List[(BitPat, UInt => String)]): String = l match {
-      case Nil => "???(%x)".format(x.litValue())
-      case (p, f) :: tail => if (p.value == (p.mask & x.litValue())) f(x) else iter(tail)
-    }
-    if (x.litValue() == FENCEI.litValue()) "FENCEI"
-    else if (x.litValue() == ECALL.litValue()) "ECALL"
-    else if (x.litValue() == EBREAK.litValue()) "EBREAK"
-    else if (x.litValue() == ERET.litValue()) "ERET"
-    else if (x.litValue() == NOP.litValue()) "NOP"
-    else iter(instPats zip instFmts)
-  }
-}
-
-trait RandInsts extends chisel3.iotesters.PeekPokeTests with RISCVCommon {
-  import Instructions._
-  implicit def bigIntToInt(x: BigInt) = x.toInt
-  implicit def bigIntToBoolean(x: BigInt) = x != 0
+                             inst_20(inst), inst_30_25(inst), inst_24_21(inst), UInt(0, 1))
+  def zimm(inst: UInt) = UInt((inst.litValue() >> 15) & 0x1f)
 
   /* Define tests */
+  val rnd = new scala.util.Random
   def rand_fn7 = UInt(rnd.nextInt(1 << 7), 7)
   def rand_rs2 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_rs1 = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_fn3 = UInt(rnd.nextInt(1 << 3), 3) 
   def rand_rd  = UInt(rnd.nextInt((1 << 5) - 1) + 1, 5)
   def rand_csr = UInt(csrRegs(rnd.nextInt(csrRegs.size-1)))
-  def rand_inst = UInt(rnd.nextInt())
-  def rand_addr = UInt(rnd.nextInt())
-  def rand_data = int(rnd.nextInt())
+  def rand_inst = UInt(toBigInt(rnd.nextInt()))
+  def rand_addr = UInt(toBigInt(rnd.nextInt()))
+  def rand_data = UInt(toBigInt(rnd.nextInt()))
 
-  def insts: List[UInt] = List(
+  val insts: Seq[UInt]  = Seq(
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.LUI),
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.AUIPC), 
     Cat(rand_fn7, rand_rs2, rand_rs1, rand_fn3, rand_rd, Opcode.JAL),
@@ -202,6 +148,7 @@ trait RandInsts extends chisel3.iotesters.PeekPokeTests with RISCVCommon {
   def SYS(funct3: UInt, rd: Int, csr: UInt, rs1: Int) = 
     Cat(csr, reg(rs1), funct3, reg(rd), Opcode.SYSTEM)
 
+  val fin = Cat(CSR.mtohost, reg(31), Funct3.CSRRW, reg(0), Opcode.SYSTEM)
   val bypassTest = List(
     I(Funct3.ADD, 1, 0, 1),  // ADDI x1, x0, 1   # x1 <- 1
     S(Funct3.SW, 1, 0, 12),  // SW   x1, x0, 12  # Mem[12] <- 1
@@ -211,23 +158,72 @@ trait RandInsts extends chisel3.iotesters.PeekPokeTests with RISCVCommon {
     RU(Funct3.SLL, 5, 3, 4), // SLL  x5, x2, x4  # x5 <- 4
     RU(Funct3.SLT, 6, 4, 5), // SLT  x6, x4, x5  # x6 <- 1
     B(Funct3.BEQ, 1, 6, 8),  // BEQ  x1, x6, 8   # go to the BGE branch
-    J(0, 12),                // JAL  x0, 8       # skip nop, scrrw
+    J(0, 12),                // JAL  x0, 12      # skip nop
     B(Funct3.BGE, 4, 1, -4), // BGE  x4, x1, -4  # go to the jump
-    nop, nop, fin            // Finish
+    nop, nop,
+    RU(Funct3.ADD, 26,  0, 1), // ADD x26,  x0, x1  # x26 <- 1
+    RU(Funct3.ADD, 27, 26, 2), // ADD x27, x26, x2  # x27 <- 2
+    RU(Funct3.ADD, 28, 27, 3), // ADD x28, x27, x3  # x28 <- 4
+    RU(Funct3.ADD, 29, 28, 4), // ADD x29, x28, x4  # x29 <- 5
+    RU(Funct3.ADD, 30, 29, 5), // ADD x30, x29, x5  # x30 <- 9
+    RU(Funct3.ADD, 31, 30, 6), // ADD x31, x31, x6  # x31 <- 10
+    fin
   )
   val exceptionTest = List(
     fence,
-    I(Funct3.ADD, 1, 0, 2),  // ADDI x1, x0, 1   # x1 <- 2
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x2, x1, 1   # x2 <- 3
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x3, x2, 1   # x3 <- 4
-    rand_inst,               // excpetion
-    I(Funct3.ADD, 1, 1, 1),  // ADDI x1, x1, 1   # x1 <- 3
-    I(Funct3.ADD, 2, 1, 1),  // ADDI x1, x1, 1   # x1 <- 4
-    I(Funct3.ADD, 3, 2, 1),  // ADDI x1, x1, 1   # x1 <- 5
-    fin                      // fin
+    I(Funct3.ADD, 31, 0,  2),  // ADDI x31, x0,  1 # x31 <- 2
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 3
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x32, 1 # x31 <- 4
+    0.U,                       // excpetion
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 5
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 6
+    I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
+    fin
   )
+  val tests = Map(
+    BypassTest    -> bypassTest,
+    ExceptionTest -> exceptionTest)
   val testResults = Map(
-    bypassTest    -> Array((1, 1), (2, 1), (3, 2), (4, 1), (5, 4), (6, 1)),
-    exceptionTest -> Array((1, 2), (2, 3), (3, 4))
+    BypassTest    -> 10,
+    ExceptionTest -> 4
   )
+}
+
+trait HexUtils {
+  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+  // Group 256 chunks together
+  // because big vecs dramatically increase compile time... :(
+  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
+    assert(line.length % (chunk / 4) == 0)
+    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
+      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
+        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
+      }
+    }
+  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
+}
+
+object TestParams {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance) alter (
+    Map(Trace -> false))
+}
+
+abstract class IntegrationTests[T <: BasicTester : ClassTag](
+    tester: (Iterator[String], Long) => T,
+    testType: TestType,
+    N: Int = 6) extends org.scalatest.FlatSpec {
+  val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
+  behavior of dutName
+  import scala.concurrent.duration._
+  import ExecutionContext.Implicits.global
+
+  val results = testType.tests sliding (N, N) map { subtests =>
+    val subresults = subtests map { test =>
+      val stream = getClass.getResourceAsStream(s"/$test.hex")
+      val loadmem = io.Source.fromInputStream(stream).getLines
+      Future(test -> (TesterDriver execute (() => tester(loadmem, testType.maxcycles))))
+    }
+    Await.result(Future.sequence(subresults), Duration.Inf)
+  }
+  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
 }

@@ -1,181 +1,74 @@
 package mini
 
-import chisel3.UInt
-import chisel3.iotesters.PeekPokeTester
+import chisel3._
+import chisel3.util._
+import chisel3.testers._
 
-case class DatapathIn(iresp: TestCacheResp, dresp: TestCacheResp)
-case class DatapathOut(ireq: Option[TestCacheReq], dreq: Option[TestCacheReq], regs: List[BigInt], nop: Boolean)
+class DatapathTester(datapath: => Datapath,
+                     testType: DatapathTest)
+                    (implicit p: cde.Parameters) extends BasicTester with TestUtils {
+  val dut = Module(datapath)
+  val ctrl = Module(new Control)
+  val xlen = p(XLEN)
 
-class GoldDatapath extends RISCVCommon {
-  // state
-  private var pc   = Const.PC_START.litValue() - 4
-  private val regs = Array.fill(32){BigInt(0)}
+  dut.io.ctrl <> ctrl.io
+  dut.io.host.fromhost.bits := 0.U
+  dut.io.host.fromhost.valid := false.B
 
-  // pipeline registers
-  private var start     = true
-  private var fe_inst   = nop
-  private var fe_pc     = BigInt(0)
+  override val insts = tests(testType)
 
-  private var ew_inst   = nop
-  private var ew_pc     = BigInt(0)
-  private var ew_alu    = BigInt(0)
-  private var csr_in    = BigInt(0)
+  val sInit :: sRun :: Nil = Enum(UInt(), 2)
+  val state = RegInit(sInit)
+  val (cntr, done) = Counter(state === sInit, insts.size)
+  val timeout = RegInit(0.U(32.W))
+  val mem = Mem(1 << 20, UInt(xlen.W))
+  val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
+  val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
+  val write = ((0 until (xlen / 8)) foldLeft 0.U){ (data, i) => data |
+    (Mux(dut.io.dcache.req.bits.mask(i), dut.io.dcache.req.bits.data, mem(daddr)) & (BigInt(0xff) << (8 * i)).U)
+  }
+  dut.reset := state === sInit
+  dut.io.icache.resp.bits.data := RegNext(mem(iaddr))
+  dut.io.icache.resp.valid := state === sRun
+  dut.io.dcache.resp.bits.data := RegNext(mem(daddr))
+  dut.io.dcache.resp.valid := state === sRun
 
-  private var st_type   = BigInt(0)
-  private var ld_type   = BigInt(0)
-  private var wb_sel    = BigInt(0)
-  private var wb_en     = false
-  private var csr_cmd   = BigInt(0)
-  private var illegal   = false
-  private var pc_check  = false
-
-  private val goldCSR = new GoldCSR
-
-  import Control._
-
-  implicit def toBoolean(x: BigInt) = x != 0
-
-  def apply(in: DatapathIn) = {
-    // write back
-    val loffset = ((ew_alu & 0x3) * 8).toInt
-    val lbu = (in.dresp.data >> loffset) & 0xff
-    val lhu = (in.dresp.data >> loffset) & 0xffff
-    val lb = lbu | (if ((lbu >> 7)  > 0) BigInt(0xffffff) << 8  else BigInt(0))
-    val lh = lhu | (if ((lhu >> 15) > 0) BigInt(0xffff)   << 16 else BigInt(0))
-    val load = if (ld_type == LD_LH.litValue()) lh
-          else if (ld_type == LD_LB.litValue()) lb
-          else if (ld_type == LD_LHU.litValue()) lhu
-          else if (ld_type == LD_LBU.litValue()) lbu
-          else in.dresp.data
-    val csr = goldCSR(new CSRIn(csr_cmd, csr_in, ew_inst, ew_pc, ew_alu, illegal, pc_check, st_type, ld_type))
-    val reg_write = if (wb_sel == WB_MEM.litValue()) load
-               else if (wb_sel == WB_PC4.litValue()) ew_pc + 4
-               else if (wb_sel == WB_CSR.litValue()) csr.value
-               else ew_alu
-
-    // execute
-    val ctrl = GoldControl(new ControlIn(fe_inst))
-    val imm  = GoldImmGen(new ImmGenIn(fe_inst, ctrl.imm_sel))
-    val rd_addr  = rd(fe_inst)
-    val rs1_addr = rs1(fe_inst)
-    val rs2_addr = rs2(fe_inst)
-    val wb_rd_addr = rd(ew_inst)
-    val rs1hazard = ctrl.wb_en && rs1_addr != 0 && rs1_addr == wb_rd_addr
-    val rs2hazard = ctrl.wb_en && rs2_addr != 0 && rs2_addr == wb_rd_addr
-    val rs1_val = if (wb_sel == WB_ALU.litValue() && rs1hazard) ew_alu else regs(rs1_addr)
-    val rs2_val = if (wb_sel == WB_ALU.litValue() && rs2hazard) ew_alu else regs(rs2_addr)
-    val alu = GoldALU(new ALUIn(ctrl.alu_op, 
-        if (ctrl.a_sel == A_RS1.litValue()) rs1_val else fe_pc,
-        if (ctrl.b_sel == B_RS2.litValue()) rs2_val else imm.out))
-    val brcond = GoldBrCond(new BrCondIn(ctrl.br_type, rs1_val, rs2_val))
-    val daddr  = alu.out & -4
-    val ddata  = (rs2_val << (8 * (alu.out & 0x3)).toInt) & ((BigInt(1) << 32) - 1)
-    val dmask  = (if (ctrl.st_type == ST_SW.litValue()) BigInt(0xf)
-             else if (ctrl.st_type == ST_SH.litValue()) BigInt(0x3) << (alu.out & 0x3).toInt
-             else if (ctrl.st_type == ST_SB.litValue()) BigInt(0x1) << (alu.out & 0x3).toInt
-             else BigInt(0)) & ((BigInt(1) << 4) - 1)
-    val dreq   = if (ctrl.ld_type == 0 && ctrl.st_type == 0) None 
-             else Some(new TestCacheReq(daddr.toInt, ddata, dmask))
-    
-    // fetch
-    val is_nop = start || ctrl.inst_kill || brcond.taken || csr.expt
-    val npc = if (csr.expt) csr.evec
-         else if (ctrl.pc_sel == PC_EPC.litValue()) csr.epc
-         else if (ctrl.pc_sel == PC_ALU.litValue() || brcond.taken) alu.out & -2
-         else if (ctrl.pc_sel == PC_0.litValue()) pc
-         else pc + 4
-    val inst = if (is_nop) nop else UInt(in.iresp.data)
-    val ireq = Some(new TestCacheReq(npc.toInt, 0, 0))
-    val out  = new DatapathOut(ireq, dreq, regs.toList, is_nop)
-
-    // state update
-    if (!csr.expt) {
-      if (wb_en) regs(wb_rd_addr) = reg_write
-      ew_pc    = fe_pc
-      ew_inst  = fe_inst
-      ew_alu   = alu.out
-      csr_in   = if (ctrl.imm_sel == IMM_Z.litValue()) imm.out else rs1_val
-      wb_sel   = ctrl.wb_sel
+  switch(state) {
+    is(sInit) {
+      (0 until Const.PC_START by 4) foreach { addr =>
+        mem((addr / 4).U) := (if (addr == Const.PC_EVEC + (3 << 6)) fin else nop)
+      }
+      mem((Const.PC_START / (xlen / 8)).U + cntr) := Vec(insts)(cntr)
+      when(done) { state := sRun }
     }
-    st_type  = if (!csr.expt) ctrl.st_type else BigInt(0)
-    ld_type  = if (!csr.expt) ctrl.ld_type else BigInt(0)
-    wb_en    = !csr.expt && ctrl.wb_en 
-    csr_cmd  = if (!csr.expt) ctrl.csr_cmd else BigInt(0)
-    illegal  = !csr.expt && ctrl.illegal 
-    pc_check = !csr.expt && ctrl.pc_sel == PC_ALU.litValue() 
-    fe_pc    = pc
-    fe_inst  = inst
-    pc       = npc
-    start    = false
-    out
+    is(sRun) {
+      when(dut.io.icache.req.valid) {
+        printf(s"INST[%x] => %x, iaddr: %x\n", dut.io.icache.req.bits.addr, mem(iaddr), iaddr)
+      }
+      when(dut.io.dcache.req.valid) {
+        when(dut.io.dcache.req.bits.mask.orR) {
+          mem(daddr) := write
+          printf("MEM[%x] <= %x\n", dut.io.dcache.req.bits.addr, write)
+        }.otherwise {
+          printf("MEM[%x] => %x\n", dut.io.dcache.req.bits.addr, mem(daddr))
+        }
+      }
+      timeout := timeout + 1.U
+      assert(timeout < 100.U)
+      when(dut.io.host.tohost =/= 0.U) {
+        assert(dut.io.host.tohost === testResults(testType).U,
+               s"* tohost: %d != ${testResults(testType)} *", dut.io.host.tohost)
+        stop(); stop()
+      }
+    }
   }
 }
 
-class DatapathTests(c: Datapath) extends PeekPokeTester(c) with RandInsts {
-  def poke(ctrl: ControlOut) {
-    poke(c.io.ctrl.pc_sel,    ctrl.pc_sel)
-    poke(c.io.ctrl.inst_kill, ctrl.inst_kill) 
-    poke(c.io.ctrl.A_sel,     ctrl.a_sel)
-    poke(c.io.ctrl.B_sel,     ctrl.b_sel)
-    poke(c.io.ctrl.imm_sel,   ctrl.imm_sel)
-    poke(c.io.ctrl.alu_op,    ctrl.alu_op)
-    poke(c.io.ctrl.br_type,   ctrl.br_type)
-    poke(c.io.ctrl.alu_op,    ctrl.alu_op)
-    poke(c.io.ctrl.st_type,   ctrl.st_type)
-    poke(c.io.ctrl.ld_type,   ctrl.ld_type)
-    poke(c.io.ctrl.wb_sel,    ctrl.wb_sel)
-    poke(c.io.ctrl.wb_en,     ctrl.wb_en)
-    poke(c.io.ctrl.csr_cmd,   ctrl.csr_cmd)
-    poke(c.io.ctrl.illegal,   ctrl.illegal)
-  }
-
-  def test(out: DatapathOut) {
-    out.ireq match {
-      case None =>
-        expect(c.io.icache.req.valid, 0)
-      case Some(req) =>
-        expect(c.io.icache.req.valid, 1)
-        expect(c.io.icache.req.bits.addr, req.addr)
-        expect(c.io.icache.req.bits.data, req.data)
-        expect(c.io.icache.req.bits.mask, req.mask)
-    }
-    out.dreq match {
-      case None =>
-        expect(c.io.dcache.req.valid, 0)
-      case Some(req) =>
-        expect(c.io.dcache.req.valid, 1)
-        expect(c.io.dcache.req.bits.addr, req.addr)
-        expect(c.io.dcache.req.bits.data, req.data)
-        expect(c.io.dcache.req.bits.mask, req.mask)
-    }
-    for ((reg, i) <- out.regs.zipWithIndex) {
-      val reg_i = peekAt(c.regFile.regs, i)
-      expect(reg_i == reg, "regs[%d] => %x == %x".format(i, reg_i, reg))
-    }
-  }
-
-  (0 until 32) foreach (pokeAt(c.regFile.regs, 0, _))
-  c.csr.csrFile foreach (x => poke(x._2, 0))
-  poke(c.io.host.fromhost.bits,  rand_data)
-  poke(c.io.host.fromhost.valid, 1)
-
-  var i = 0
-  println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
-  val goldDatapath = new GoldDatapath
-  while (i < insts.size) {
-    val inst = insts(i)
-    val data = rand_data
-    val out = goldDatapath(new DatapathIn(new TestCacheResp(inst), new TestCacheResp(data)))
-    poke(c.io.icache.resp.bits.data, inst)
-    poke(c.io.icache.resp.valid,     1)
-    poke(c.io.dcache.resp.bits.data, data)
-    poke(c.io.dcache.resp.valid,     1)
-    test(out)
-    step(1)
-    poke(GoldControl(new ControlIn(if (out.nop) nop else inst)))
-    if (!out.nop) {
-      i += 1
-      if (i < insts.size) println(s"*** ${dasm(insts(i))} (%x) ***".format(insts(i).litValue()))
+class DatapathTests extends org.scalatest.FlatSpec {
+  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  Seq(BypassTest, ExceptionTest) foreach { test =>
+    "Datapath" should s"pass $test" in {
+      assert(TesterDriver execute (() => new DatapathTester(new Datapath, test)))
     }
   }
 }
