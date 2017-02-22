@@ -1,3 +1,5 @@
+// See LICENSE for license details.
+
 package mini
 
 import java.io.{File, FileWriter}
