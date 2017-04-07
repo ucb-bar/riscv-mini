@@ -19,7 +19,6 @@ object MiniBuild extends Build {
 
   lazy val firrtl    = project
   lazy val chisel    = project dependsOn firrtl
-  lazy val cde       = project
-  lazy val junctions = project dependsOn (chisel, cde)
-  lazy val mini      = project in file(".") dependsOn junctions
+  lazy val lib       = project dependsOn chisel
+  lazy val mini      = project in file(".") dependsOn lib
 }

@@ -29,7 +29,7 @@ class TileTester(tile: => Tile,
                  loadmem: Iterator[String],
                  maxcycles: Long,
                  latency: Int = 8)
-                (implicit val p: cde.Parameters) extends BasicTester with HexUtils with CacheParams {
+                (implicit val p: config.Parameters) extends BasicTester with HexUtils with CacheParams {
   val dut = Module(tile)
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B

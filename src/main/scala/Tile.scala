@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import junctions._
-import cde.Parameters
+import config.Parameters
 
 class MemArbiter(implicit p: Parameters) extends Module {
   val io = IO(new ParameterizedBundle {

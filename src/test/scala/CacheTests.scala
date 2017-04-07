@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import junctions._
 
-class GoldCache(implicit val p: cde.Parameters) extends Module with CacheParams {
+class GoldCache(implicit val p: config.Parameters) extends Module with CacheParams {
   val io = IO(new Bundle {
     val req   = Flipped(Decoupled(new CacheReq))
     val resp  = Decoupled(new CacheResp) 
@@ -101,7 +101,7 @@ class GoldCache(implicit val p: cde.Parameters) extends Module with CacheParams 
   }
 }
 
-class CacheTester(cache: => Cache)(implicit val p: cde.Parameters) extends BasicTester with CacheParams {
+class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends BasicTester with CacheParams {
   /* Target Design */
   val dut = Module(cache)
   val dut_mem = Wire(new NastiIO)
@@ -301,7 +301,7 @@ class CacheTester(cache: => Cache)(implicit val p: cde.Parameters) extends Basic
 }
 
 class CacheTests extends org.scalatest.FlatSpec {
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
   "Cache" should "pass" in {
     assert(TesterDriver execute (() => new CacheTester(new Cache)))
   }

@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import ALU._
 
-class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester with TestUtils {
+class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(alu)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
@@ -51,7 +51,7 @@ class ALUTester(alu: => ALU)(implicit p: cde.Parameters) extends BasicTester wit
 }
 
 class ALUTests extends org.scalatest.FlatSpec {
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
   "ALUSimple" should "pass" in {
     assert(TesterDriver execute (() => new ALUTester(new ALUSimple)))
   }

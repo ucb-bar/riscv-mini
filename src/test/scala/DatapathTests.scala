@@ -8,7 +8,7 @@ import chisel3.testers._
 
 class DatapathTester(datapath: => Datapath,
                      testType: DatapathTest)
-                    (implicit p: cde.Parameters) extends BasicTester with TestUtils {
+                    (implicit p: config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(datapath)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
@@ -67,7 +67,7 @@ class DatapathTester(datapath: => Datapath,
 }
 
 class DatapathTests extends org.scalatest.FlatSpec {
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
   Seq(BypassTest, ExceptionTest) foreach { test =>
     "Datapath" should s"pass $test" in {
       assert(TesterDriver execute (() => new DatapathTester(new Datapath, test)))

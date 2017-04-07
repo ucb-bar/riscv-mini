@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import cde.Parameters
+import config.Parameters
 import Control._
 
 class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {

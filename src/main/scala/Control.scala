@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util.ListLookup
-import cde.Parameters
+import config.Parameters
 
 object Control {
   val Y = Bool(true)

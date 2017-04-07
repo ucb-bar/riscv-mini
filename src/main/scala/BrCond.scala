@@ -3,7 +3,7 @@
 package mini
 
 import chisel3._
-import cde.Parameters
+import config.Parameters
 import Control._
 
 class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {

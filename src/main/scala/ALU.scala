@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import cde.Parameters
+import config.Parameters
 
 object ALU {
   val ALU_ADD    = 0.U(4.W)

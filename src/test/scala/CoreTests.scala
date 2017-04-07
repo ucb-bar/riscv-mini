@@ -10,7 +10,7 @@ import TestParams._
 class CoreTester(core: => Core,
                  loadmem: Iterator[String],
                  maxcycles: Long)
-                (implicit p: cde.Parameters) extends BasicTester with HexUtils {
+                (implicit p: config.Parameters) extends BasicTester with HexUtils {
   val xlen = p(XLEN)
   val dut = Module(core)
   dut.io.host.fromhost.bits := 0.U

@@ -3,7 +3,7 @@
 package mini
 
 import chisel3._
-import cde.Parameters
+import config.Parameters
 
 class RegFileIO(implicit p: Parameters)  extends CoreBundle()(p) {
   val raddr1 = Input(UInt(5.W))

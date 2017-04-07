@@ -3,9 +3,9 @@
 package mini
 
 import chisel3.Bundle
-import cde.Parameters
+import config.Parameters
 
-abstract class ParameterizedBundle(implicit p: cde.Parameters) extends chisel3.Bundle {
+abstract class ParameterizedBundle(implicit p: config.Parameters) extends chisel3.Bundle {
   override def cloneType =
     this.getClass.getConstructors.head.newInstance(p).asInstanceOf[this.type]
 }

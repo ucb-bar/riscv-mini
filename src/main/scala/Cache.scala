@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import junctions._
-import cde.{Parameters, Field}
+import config.{Parameters, Field}
 
 case object NWays extends Field[Int]
 case object NSets extends Field[Int]

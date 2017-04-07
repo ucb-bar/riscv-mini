@@ -206,8 +206,8 @@ trait HexUtils {
 }
 
 object TestParams {
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance) alter (
-    Map(Trace -> false))
+  implicit val p = config.Parameters.root(
+    (new MiniConfig).toInstance) alterPartial { case Trace => false }
 }
 
 abstract class IntegrationTests[T <: BasicTester : ClassTag](

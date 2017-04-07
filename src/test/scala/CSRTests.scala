@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: cde.Parameters)
+class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters)
    extends BasicTester with TestUtils {
   val dut = Module(c)
   val ctrl = Module(new Control)
@@ -239,7 +239,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: cde.Parameters)
 }
 
 class CSRTests extends org.scalatest.FlatSpec {
-  implicit val p = cde.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
   "CSR" should "pass" in {
     assert(TesterDriver execute (() => new CSRTester(new CSR)))
   }

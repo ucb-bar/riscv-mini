@@ -3,11 +3,10 @@
 package mini
 
 import chisel3.Module
-import cde.{Parameters, Config}
+import config.{Parameters, Config}
 import junctions._
 
-class MiniConfig extends Config(
-  (key, site, here) => key match {
+class MiniConfig extends Config((site, here, up) => {
     // Core
     case XLEN => 32
     case Trace => true
