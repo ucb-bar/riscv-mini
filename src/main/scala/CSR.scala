@@ -120,14 +120,14 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val PRV1 = RegInit(CSR.PRV_M)
   val PRV2 = 0.U(2.W)
   val PRV3 = 0.U(2.W)
-  val IE  = RegInit(Bool(false))
-  val IE1 = RegInit(Bool(false))
-  val IE2 = Bool(false)
-  val IE3 = Bool(false)
+  val IE  = RegInit(false.B)
+  val IE1 = RegInit(false.B)
+  val IE2 = false.B
+  val IE3 = false.B
   // virtualization management field
   val VM = 0.U(5.W)
   // memory privilege
-  val MPRV = Bool(false)
+  val MPRV = false.B
   // extention context status
   val XS = 0.U(2.W)
   val FS = 0.U(2.W)
@@ -137,20 +137,20 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
   val mtdeleg = 0x0.U(xlen.W)
   
   // interrupt registers
-  val MTIP = RegInit(Bool(false))
-  val HTIP = Bool(false)
-  val STIP = Bool(false)
-  val MTIE = RegInit(Bool(false))
-  val HTIE = Bool(false)
-  val STIE = Bool(false)
-  val MSIP = RegInit(Bool(false))
-  val HSIP = Bool(false)
-  val SSIP = Bool(false)
-  val MSIE = RegInit(Bool(false))
-  val HSIE = Bool(false)
-  val SSIE = Bool(false)
-  val mip = Cat(0.U((xlen-8).W), MTIP, HTIP, STIP, Bool(false), MSIP, HSIP, SSIP, Bool(false))
-  val mie = Cat(0.U((xlen-8).W), MTIE, HTIE, STIE, Bool(false), MSIE, HSIE, SSIE, Bool(false))
+  val MTIP = RegInit(false.B)
+  val HTIP = false.B
+  val STIP = false.B
+  val MTIE = RegInit(false.B)
+  val HTIE = false.B
+  val STIE = false.B
+  val MSIP = RegInit(false.B)
+  val HSIP = false.B
+  val SSIP = false.B
+  val MSIE = RegInit(false.B)
+  val HSIE = false.B
+  val SSIE = false.B
+  val mip = Cat(0.U((xlen-8).W), MTIP, HTIP, STIP, false.B, MSIP, HSIP, SSIP, false.B)
+  val mie = Cat(0.U((xlen-8).W), MTIE, HTIE, STIE, false.B, MSIE, HSIE, SSIE, false.B)
 
   val mtimecmp = Reg(UInt(xlen.W)) 
 
@@ -215,9 +215,9 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
     CSR.C -> (io.out & ~io.in)
   ))
   val iaddrInvalid = io.pc_check && io.addr(1)
-  val laddrInvalid = MuxLookup(io.ld_type, Bool(false), Seq(
+  val laddrInvalid = MuxLookup(io.ld_type, false.B, Seq(
     Control.LD_LW -> io.addr(1, 0).orR, Control.LD_LH -> io.addr(0), Control.LD_LHU -> io.addr(0)))
-  val saddrInvalid = MuxLookup(io.st_type, Bool(false), Seq(
+  val saddrInvalid = MuxLookup(io.st_type, false.B, Seq(
     Control.ST_SW -> io.addr(1, 0).orR, Control.ST_SH -> io.addr(0)))
   io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
              io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO || 
@@ -243,7 +243,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
                 Mux(isEcall,      Cause.Ecall + PRV,
                 Mux(isEbreak,     Cause.Breakpoint, Cause.IllegalInst)))))
       PRV  := CSR.PRV_M
-      IE   := Bool(false)
+      IE   := false.B
       PRV1 := PRV
       IE1  := IE
       when(iaddrInvalid || laddrInvalid || saddrInvalid) { mbadaddr := io.addr }
@@ -251,7 +251,7 @@ class CSR(implicit val p: Parameters) extends Module with CoreParams {
       PRV  := PRV1
       IE   := IE1
       PRV1 := CSR.PRV_U
-      IE1  := Bool(true)
+      IE1  := true.B
     }.elsewhen(wen) {
       when(csr_addr === CSR.mstatus) { 
         PRV1 := wdata(5, 4)

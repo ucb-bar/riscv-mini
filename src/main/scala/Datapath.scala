@@ -61,7 +61,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   io.icache.req.bits.data := 0.U
   io.icache.req.bits.mask := 0.U
   io.icache.req.valid     := !stall
-  io.icache.abort         := Bool(false)
+  io.icache.abort         := false.B
  
   // Pipelining
   when (!stall) {
@@ -117,10 +117,10 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   when(reset || !stall && csr.io.expt) {
     st_type   := 0.U
     ld_type   := 0.U
-    wb_en     := Bool(false)
+    wb_en     := false.B
     csr_cmd   := 0.U
-    illegal   := Bool(false)
-    pc_check  := Bool(false)
+    illegal   := false.B
+    pc_check  := false.B
   }.elsewhen(!stall && !csr.io.expt) {
     ew_pc     := fe_pc
     ew_inst   := fe_inst

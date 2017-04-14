@@ -113,7 +113,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     if (rdata_buf.size == 1) io.nasti.r.bits.data
     else Cat(io.nasti.r.bits.data, Cat(rdata_buf.init.reverse)))
   when(wen) {
-    v := v.bitSet(idx_reg, Bool(true))
+    v := v.bitSet(idx_reg, true.B)
     metaMem.write(idx_reg, wmeta)
     dataMem.zipWithIndex foreach { case (mem, i) =>
       val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
@@ -124,21 +124,21 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
 
   io.nasti.ar.bits := NastiReadAddressChannel(
     0.U, Cat(tag_reg, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
-  io.nasti.ar.valid := Bool(false)
+  io.nasti.ar.valid := false.B
   // read data
   io.nasti.r.ready := state === s_REFILL
   when(io.nasti.r.fire()) { rdata_buf(read_count) := io.nasti.r.bits.data }
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
     0.U, Cat(rmeta.tag, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
-  io.nasti.aw.valid := Bool(false)
+  io.nasti.aw.valid := false.B
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
     Vec.tabulate(dataBeats)(i => rdata((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
     None, write_wrap_out)
-  io.nasti.w.valid := Bool(false)
+  io.nasti.w.valid := false.B
   // write resp
-  io.nasti.b.ready := Bool(false)
+  io.nasti.b.ready := false.B
 
   // Cache FSM
   val is_dirty = v(idx_reg) && rmeta.dirty
@@ -179,19 +179,19 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
       }
     }
     is(s_WRITE_BACK) {
-      io.nasti.w.valid := Bool(true)
+      io.nasti.w.valid := true.B
       when(write_wrap_out) {
         state := s_WRITE_ACK
       }
     }
     is(s_WRITE_ACK) {
-      io.nasti.b.ready := Bool(true)
+      io.nasti.b.ready := true.B
       when(io.nasti.b.fire()) {
         state := s_REFILL_READY
       }
     }
     is(s_REFILL_READY) {
-      io.nasti.ar.valid := Bool(true)
+      io.nasti.ar.valid := true.B
       when(io.nasti.ar.fire()) {
         state := s_REFILL
       }

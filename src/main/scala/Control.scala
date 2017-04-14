@@ -7,8 +7,8 @@ import chisel3.util.ListLookup
 import config.Parameters
 
 object Control {
-  val Y = Bool(true)
-  val N = Bool(false)
+  val Y = true.B
+  val N = false.B
 
   // pc_sel
   val PC_4   = 0.U(2.W)
