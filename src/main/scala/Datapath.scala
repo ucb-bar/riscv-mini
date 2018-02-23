@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 object Const {
   val PC_START = 0x200
@@ -48,7 +48,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val pc_check = Reg(Bool())
  
   /****** Fetch *****/
-  val started = RegNext(reset)
+  val started = RegNext(reset.toBool)
   val stall = !io.icache.resp.valid || !io.dcache.resp.valid
   val pc   = RegInit(Const.PC_START.U(xlen.W) - 4.U(xlen.W))
   val npc  = Mux(stall, pc, Mux(csr.io.expt, csr.io.evec,
@@ -114,7 +114,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
     ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) ))
   
   // Pipelining
-  when(reset || !stall && csr.io.expt) {
+  when(reset.toBool || !stall && csr.io.expt) {
     st_type   := 0.U
     ld_type   := 0.U
     wb_en     := false.B

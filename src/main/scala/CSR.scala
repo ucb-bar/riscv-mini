@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 import scala.collection.immutable.ListMap
 
 object CSR {

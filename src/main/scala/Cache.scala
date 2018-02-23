@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import junctions._
-import config.{Parameters, Field}
+import freechips.rocketchip.config.{Parameters, Field}
 
 case object NWays extends Field[Int]
 case object NSets extends Field[Int]
@@ -51,6 +51,7 @@ class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
+  import Chisel._ // FIXME: read enable signals for memories are broken by new chisel
   val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::

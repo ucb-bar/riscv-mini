@@ -3,9 +3,9 @@
 package mini
 
 import chisel3.Bundle
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
-abstract class ParameterizedBundle(implicit p: config.Parameters) extends chisel3.Bundle {
+abstract class ParameterizedBundle(implicit p: Parameters) extends chisel3.Bundle {
   override def cloneType =
     this.getClass.getConstructors.head.newInstance(p).asInstanceOf[this.type]
 }

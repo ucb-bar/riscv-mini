@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util.ListLookup
-import config.Parameters
+import freechips.rocketchip.config.Parameters
 
 object Control {
   val Y = true.B
