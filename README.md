@@ -19,18 +19,16 @@ It is developed as an intermediate example before diving into [rocket-chip](http
     $ git clone https://github.com/ucb-bar/riscv-mini.git
     $ cd riscv-mini
     $ git submodule update --init
-    $ make publish    # you need to local-publish firrtl due to sbt's limitation
     $ make            # this will give you the firrtl & verilog output files in generated-src
     
-The verilog output file can be used for the ASIC tools,
-as provided in [strober-examples](https://github.com/donggyukim/strober-examples) with [plsi](https://github.com/ucb-bar/plsi).
+The verilog output file can be used for the ASIC tools.
     
 ## Tests
 
 `riscv-mini` provides *theoretically* synthesizable unit & integration tests.
 Theres are six sets of unit tests(`ALUTests`, `BrCondTests`, `ImmGenTests`, `CSRTests`, `CacheTests`, `DatapathTests`),
 running user-defined test vectors.
-To execute them, first launch `sbt` and run:
+To execute them, first launch sbt with `make sbt` and run:
 
     > testOnly mini.[testname]
   
