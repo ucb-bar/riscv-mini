@@ -10,8 +10,8 @@ import TestParams._
 
 class LatencyPipe[T <: Data](gen: T, latency: Int) extends Module {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(gen))
-    val out = Decoupled(gen)
+    val in = Flipped(Decoupled(chiselTypeOf(gen)))
+    val out = Decoupled(chiselTypeOf(gen))
   })
  
   io.out <> ((0 until latency) foldLeft io.in)((in, i) => Queue(in, 1, pipe=true))
@@ -29,14 +29,14 @@ class TileTester(tile: => Tile,
                  loadmem: Iterator[String],
                  maxcycles: Long,
                  latency: Int = 8)
-                (implicit val p: config.Parameters) extends BasicTester with HexUtils with CacheParams {
+                (implicit val p: freechips.rocketchip.config.Parameters) extends BasicTester with HexUtils with CacheParams {
   val dut = Module(tile)
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = Vec(loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse))) 
+  val _hex = VecInit(loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse))) 
   val _mem = Mem(1 << 20, UInt(nastiXDataBits.W))
-  val sInit :: sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(UInt(), 5)
+  val sInit :: sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(5)
   val state = RegInit(sInit)
   val cycle = RegInit(0.U(32.W))
   val (cntr, done) = Counter(state === sInit, _hex.size * (1 << 8))
@@ -48,8 +48,8 @@ class TileTester(tile: => Tile,
   val write = ((0 until (nastiXDataBits / 8)) foldLeft 0.U(nastiXDataBits.W)){ (write, i) => write |
     (Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(8*(i+1)-1, 8*i)) << (8*i).U
   }
-  val bpipe = Wire(dut.io.nasti.b)
-  val rpipe = Wire(dut.io.nasti.r)
+  val bpipe = WireInit(dut.io.nasti.b)
+  val rpipe = WireInit(dut.io.nasti.r)
 
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle 

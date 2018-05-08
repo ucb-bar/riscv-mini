@@ -5,3 +5,5 @@ project/target
 logs
 *.key
 *.log
+*.swp
+.ivy2

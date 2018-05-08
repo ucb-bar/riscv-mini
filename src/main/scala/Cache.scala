@@ -37,12 +37,12 @@ trait CacheParams extends CoreParams with HasNastiParameters {
   val nSets  = p(NSets)
   val bBytes = p(CacheBlockBytes)
   val bBits  = bBytes << 3
-  val blen   = log2Up(bBytes)
-  val slen   = log2Up(nSets)
+  val blen   = log2Ceil(bBytes)
+  val slen   = log2Ceil(nSets)
   val tlen   = xlen - (slen + blen)
   val nWords = bBits / xlen
   val wBytes = xlen / 8
-  val byteOffsetBits = log2Up(wBytes)
+  val byteOffsetBits = log2Ceil(wBytes)
   val dataBeats = bBits / nastiXDataBits
 } 
 
@@ -55,7 +55,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
-       s_REFILL_READY :: s_REFILL :: Nil) = Enum(UInt(), 7)
+       s_REFILL_READY :: s_REFILL :: Nil) = Enum(7)
   val state = RegInit(s_IDLE)
   // memory
   val v        = RegInit(0.U(nSets.W))
@@ -90,10 +90,10 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val off_reg  = addr_reg(blen-1, byteOffsetBits)
 
   val rmeta = metaMem.read(idx, ren)
-  val rdata = Cat((dataMem map (_.read(idx, ren).toBits)).reverse)
+  val rdata = Cat((dataMem map (_.read(idx, ren).asUInt)).reverse)
   val rdata_buf = RegEnable(rdata, ren_reg)
   val refill_buf = Reg(Vec(dataBeats, UInt(nastiXDataBits.W)))
-  val read = Mux(is_alloc_reg, refill_buf.toBits, Mux(ren_reg, rdata, rdata_buf))
+  val read = Mux(is_alloc_reg, refill_buf.asUInt, Mux(ren_reg, rdata, rdata_buf))
 
   hit := v(idx_reg) && rmeta.tag === tag_reg 
 

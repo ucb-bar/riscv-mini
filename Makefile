@@ -5,14 +5,10 @@ src_dir    = $(base_dir)/src/main/scala/
 gen_dir    = $(base_dir)/generated-src
 
 SBT       = sbt
-SBT_FLAGS =
+SBT_FLAGS = -ivy $(base_dir)/.ivy2
 
 sbt:
 	$(SBT) $(SBT_FLAGS)
-
-# Sad reality of sbt...
-publish:
-	cd firrtl && $(SBT) $(SBT_FLAGS) publishLocal
 
 compile: $(gen_dir)/Tile.v
 

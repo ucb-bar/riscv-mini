@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters)
+class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketchip.config.Parameters)
    extends BasicTester with TestUtils {
   val dut = Module(c)
   val ctrl = Module(new Control)
@@ -58,19 +58,20 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters
     else if (addr == CSR.mtvec.litValue()) Const.PC_EVEC.U(xlen.W) else 0.U(xlen.W)
   )}).toMap
 
-  ctrl.io.inst    := Vec(insts)(cntr)
+  ctrl.io.inst    := VecInit(insts)(cntr)
   dut.io.inst     := ctrl.io.inst
   dut.io.cmd      := ctrl.io.csr_cmd
   dut.io.illegal  := ctrl.io.illegal
   dut.io.st_type  := ctrl.io.st_type
   dut.io.ld_type  := ctrl.io.ld_type
   dut.io.pc_check := ctrl.io.pc_sel === PC_ALU
-  dut.io.pc       := Vec(pc map (_.U))(cntr)
-  dut.io.addr     := Vec(addr map (_.U))(cntr)
-  dut.io.in       := Vec(data map (_.U))(cntr)
+  dut.io.pc       := VecInit(pc map (_.U))(cntr)
+  dut.io.addr     := VecInit(addr map (_.U))(cntr)
+  dut.io.in       := VecInit(data map (_.U))(cntr)
 
   dut.io.stall := false.B
   dut.io.host.fromhost.valid := false.B
+  dut.io.host.fromhost.bits  := 0.U
 
   // values known statically
   val _csr_addr  = insts map csr
@@ -95,35 +96,35 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters
   val rs1_addr  = Wire(UInt())
   val csr_ro    = Wire(Bool())
   val csr_valid = Wire(Bool())
-  csr_addr  := Vec(_csr_addr map (_.U))(cntr)
-  rs1_addr  := Vec(_rs1_addr map (_.U))(cntr)
-  csr_ro    := Vec(_csr_ro map (_.B))(cntr)
-  csr_valid := Vec(_csr_valid map (_.B))(cntr)
-  val wen  = dut.io.cmd === CSR.W || dut.io.cmd(1) && rs1_addr != 0.U
+  csr_addr  := VecInit(_csr_addr map (_.U))(cntr)
+  rs1_addr  := VecInit(_rs1_addr map (_.U))(cntr)
+  csr_ro    := VecInit(_csr_ro map (_.B))(cntr)
+  csr_valid := VecInit(_csr_valid map (_.B))(cntr)
+  val wen  = dut.io.cmd === CSR.W || dut.io.cmd(1) && rs1_addr =/= 0.U
   val prv1 = (regs(CSR.mstatus.litValue()) >> 4.U) & 0x3.U
   val ie1  = (regs(CSR.mstatus.litValue()) >> 3.U) & 0x1.U
   val prv  = (regs(CSR.mstatus.litValue()) >> 1.U) & 0x3.U 
   val ie   =  regs(CSR.mstatus.litValue()) & 0x1.U
   val prv_inst  = dut.io.cmd === CSR.P
-  val prv_valid = Vec(_prv_level map (_.U))(cntr) <= prv
-  val iaddr_invalid = Vec(_iaddr_invalid map (_.B))(cntr) && dut.io.pc_check
+  val prv_valid = VecInit(_prv_level map (_.U))(cntr) <= prv
+  val iaddr_invalid = VecInit(_iaddr_invalid map (_.B))(cntr) && dut.io.pc_check
   val laddr_invalid =
-    Vec(_haddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LH || dut.io.ld_type === LD_LHU) ||
-    Vec(_waddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LW)
+    VecInit(_haddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LH || dut.io.ld_type === LD_LHU) ||
+    VecInit(_waddr_invalid map (_.B))(cntr) && (dut.io.ld_type === LD_LW)
   val saddr_invalid =
-    Vec(_haddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SH ||
-    Vec(_waddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SW
-  val is_ecall = prv_inst && Vec(_is_ecall map (_.B))(cntr)
-  val is_ebreak = prv_inst && Vec(_is_ebreak map (_.B))(cntr)
-  val is_eret = prv_inst && Vec(_is_eret map (_.B))(cntr)
+    VecInit(_haddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SH ||
+    VecInit(_waddr_invalid map (_.B))(cntr) && dut.io.st_type === ST_SW
+  val is_ecall = prv_inst && VecInit(_is_ecall map (_.B))(cntr)
+  val is_ebreak = prv_inst && VecInit(_is_ebreak map (_.B))(cntr)
+  val is_eret = prv_inst && VecInit(_is_eret map (_.B))(cntr)
   val exception = dut.io.illegal || iaddr_invalid || laddr_invalid || saddr_invalid ||
     (((dut.io.cmd & 0x3.U) > 0.U) && (!csr_valid || !prv_valid)) ||
     (csr_ro && wen) || (prv_inst && !prv_valid) || is_ecall || is_ebreak
   val instret = dut.io.inst =/= nop && (!exception || is_ecall || is_ebreak)
 
-  val rdata = Lookup(csr_addr, UInt(0), regs.toSeq map {
+  val rdata = Lookup(csr_addr, 0.U, regs.toSeq map {
     case (addr, reg) => BitPat(addr.U(12.W)) -> reg }) 
-  val wdata = Lookup(dut.io.cmd, UInt(0), Seq(
+  val wdata = Lookup(dut.io.cmd, 0.U, Seq(
     BitPat(CSR.W) -> dut.io.in,
     BitPat(CSR.S) -> (dut.io.in | rdata),
     BitPat(CSR.C) -> (~dut.io.in & rdata)
@@ -159,8 +160,8 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters
       Mux(iaddr_invalid, Cause.InstAddrMisaligned,
       Mux(laddr_invalid, Cause.LoadAddrMisaligned,
       Mux(saddr_invalid, Cause.StoreAddrMisaligned,
-      Mux(prv_inst && Vec(is_ecall)(cntr), Cause.Ecall + prv,
-      Mux(prv_inst && Vec(is_ebreak)(cntr), Cause.Breakpoint, Cause.IllegalInst)))))
+      Mux(prv_inst && VecInit(is_ecall)(cntr), Cause.Ecall + prv,
+      Mux(prv_inst && VecInit(is_ebreak)(cntr), Cause.Breakpoint, Cause.IllegalInst)))))
     regs(CSR.mstatus.litValue()) := (prv << 4.U) | (ie << 3.U) | (CSR.PRV_M << 1.U) | 0.U
     when(iaddr_invalid || laddr_invalid || saddr_invalid) {
       regs(CSR.mbadaddr.litValue()) := dut.io.addr
@@ -239,7 +240,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters
 }
 
 class CSRTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   "CSR" should "pass" in {
     assert(TesterDriver execute (() => new CSRTester(new CSR)))
   }

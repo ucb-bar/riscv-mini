@@ -8,18 +8,18 @@ import chisel3.testers._
 
 class DatapathTester(datapath: => Datapath,
                      testType: DatapathTest)
-                    (implicit p: config.Parameters) extends BasicTester with TestUtils {
+                    (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(datapath)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
 
   dut.io.ctrl <> ctrl.io
-  dut.io.host.fromhost.bits := 0.U
+  dut.io.host.fromhost.bits := DontCare
   dut.io.host.fromhost.valid := false.B
 
   override val insts = tests(testType)
 
-  val sInit :: sRun :: Nil = Enum(UInt(), 2)
+  val sInit :: sRun :: Nil = Enum(2)
   val state = RegInit(sInit)
   val (cntr, done) = Counter(state === sInit, insts.size)
   val timeout = RegInit(0.U(32.W))
@@ -40,7 +40,7 @@ class DatapathTester(datapath: => Datapath,
       (0 until Const.PC_START by 4) foreach { addr =>
         mem((addr / 4).U) := (if (addr == Const.PC_EVEC + (3 << 6)) fin else nop)
       }
-      mem((Const.PC_START / (xlen / 8)).U + cntr) := Vec(insts)(cntr)
+      mem((Const.PC_START / (xlen / 8)).U + cntr) := VecInit(insts)(cntr)
       when(done) { state := sRun }
     }
     is(sRun) {
@@ -67,7 +67,7 @@ class DatapathTester(datapath: => Datapath,
 }
 
 class DatapathTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   Seq(BypassTest, ExceptionTest) foreach { test =>
     "Datapath" should s"pass $test" in {
       assert(TesterDriver execute (() => new DatapathTester(new Datapath, test)))

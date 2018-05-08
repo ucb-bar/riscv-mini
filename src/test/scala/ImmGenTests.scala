@@ -7,19 +7,19 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(imm)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
 
   val (cntr, done) = Counter(true.B, insts.size)
-  val i = Vec(insts map iimm)
-  val s = Vec(insts map simm)
-  val b = Vec(insts map bimm)
-  val u = Vec(insts map uimm)
-  val j = Vec(insts map jimm)
-  val z = Vec(insts map zimm)
-  val x = Vec(insts map iimm map (x => (x.litValue() & -2).U))
+  val i = VecInit(insts map iimm)
+  val s = VecInit(insts map simm)
+  val b = VecInit(insts map bimm)
+  val u = VecInit(insts map uimm)
+  val j = VecInit(insts map jimm)
+  val z = VecInit(insts map zimm)
+  val x = VecInit(insts map iimm map (x => (x.litValue() & -2).U))
   val out = Mux(dut.io.sel === IMM_I, i(cntr),
             Mux(dut.io.sel === IMM_S, s(cntr),
             Mux(dut.io.sel === IMM_B, b(cntr),
@@ -27,7 +27,7 @@ class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicT
             Mux(dut.io.sel === IMM_J, j(cntr),
             Mux(dut.io.sel === IMM_Z, z(cntr), x(cntr)))))))
 
-  ctrl.io.inst := Vec(insts)(cntr)
+  ctrl.io.inst := VecInit(insts)(cntr)
   dut.io.inst  := ctrl.io.inst
   dut.io.sel   := ctrl.io.imm_sel
 
@@ -38,7 +38,7 @@ class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicT
 }
 
 class ImmGenTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   "ImmGenWire" should "pass" in {
     assert(TesterDriver execute (() => new ImmGenTester(new ImmGenWire)))
   }

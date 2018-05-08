@@ -7,13 +7,13 @@ import chisel3.util._
 import chisel3.testers._
 import junctions._
 
-class GoldCache(implicit val p: config.Parameters) extends Module with CacheParams {
+class GoldCache(implicit val p: freechips.rocketchip.config.Parameters) extends Module with CacheParams {
   val io = IO(new Bundle {
     val req   = Flipped(Decoupled(new CacheReq))
     val resp  = Decoupled(new CacheResp) 
     val nasti = new NastiIO
   })
-  val size  = log2Up(nastiXDataBits / 8).U
+  val size  = log2Ceil(nastiXDataBits / 8).U
   val len   = (dataBeats - 1).U
 
   val data = Mem(nSets, UInt(bBits.W))
@@ -31,7 +31,7 @@ class GoldCache(implicit val p: config.Parameters) extends Module with CachePara
     ((req.data >> ((8 * (i & 0x3)).U)) & 0xff.U) << (8 * i).U, read & (BigInt(0xff) << (8 * i)).U)
   })(bBits - 1, 0)
 
-  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(UInt(), 4)
+  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
   val state = RegInit(sIdle)
   val (wCnt, wDone) = Counter(state === sWrite, dataBeats)
   val (rCnt, rDone) = Counter(state === sRead && io.nasti.r.valid, dataBeats)
@@ -101,7 +101,7 @@ class GoldCache(implicit val p: config.Parameters) extends Module with CachePara
   }
 }
 
-class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends BasicTester with CacheParams {
+class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.Parameters) extends BasicTester with CacheParams {
   /* Target Design */
   val dut = Module(cache)
   val dut_mem = Wire(new NastiIO)
@@ -113,8 +113,8 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
 
   /* Gold Model */
   val gold = Module(new GoldCache)
-  val gold_req = Wire(gold.io.req)
-  val gold_resp = Wire(gold.io.resp)
+  val gold_req = WireInit(gold.io.req)
+  val gold_resp = WireInit(gold.io.resp)
   val gold_mem = Wire(new NastiIO)
   gold.io.req <> Queue(gold_req, 32)
   gold_resp <> Queue(gold.io.resp, 32)
@@ -124,12 +124,12 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
   gold.io.nasti.b <> Queue(gold_mem.b, 32)
   gold.io.nasti.r <> Queue(gold_mem.r, 32)
 
-  val size  = log2Up(nastiXDataBits / 8).U
+  val size  = log2Ceil(nastiXDataBits / 8).U
   val len   = (dataBeats - 1).U
 
   /* Main Memory */
   val mem = Mem(1 << 20, UInt(nastiXDataBits.W))
-  val sMemIdle :: sMemWrite :: sMemWrAck :: sMemRead :: Nil = Enum(UInt(), 4)
+  val sMemIdle :: sMemWrite :: sMemWrAck :: sMemRead :: Nil = Enum(4)
   val memState = RegInit(sMemIdle)
   val (wCnt, wDone) = Counter(memState === sMemWrite && dut_mem.w.valid && gold_mem.w.valid, dataBeats)
   val (rCnt, rDone) = Counter(memState === sMemRead && dut_mem.r.ready && gold_mem.r.ready, dataBeats)
@@ -248,28 +248,29 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
     test(tags(2), idxs(1), offs(5)) // #14: read hit
   )
   
-  val sInit :: sStart :: sWait :: sDone :: Nil = Enum(UInt(), 4)
+  val sInit :: sStart :: sWait :: sDone :: Nil = Enum(4)
   val state = RegInit(sInit)
   val timeout = Reg(UInt(32.W))
   val (initCnt, initDone) = Counter(state === sInit, initAddr.size)
   val (testCnt, testDone) = Counter(state === sDone, testVec.size)
-  val mask = (Vec(testVec)(testCnt) >> (blen + slen + tlen + bBits))
-  val data = (Vec(testVec)(testCnt) >> (blen + slen + tlen))(bBits-1, 0)
-  val tag  = (Vec(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
-  val idx  = (Vec(testVec)(testCnt) >> blen.U)(slen - 1, 0)
-  val off  = (Vec(testVec)(testCnt))(blen - 1, 0)
-  dut.io.cpu.req.bits.addr := Cat(tag, idx, off)
-  dut.io.cpu.req.bits.data := data
-  dut.io.cpu.req.bits.mask := mask
-  dut.io.cpu.req.valid     := state === sWait 
-  gold_req.bits            := dut.io.cpu.req.bits
-  gold_req.valid           := state === sStart
-  gold_resp.ready          := state === sDone
+  val mask = (VecInit(testVec)(testCnt) >> (blen + slen + tlen + bBits))
+  val data = (VecInit(testVec)(testCnt) >> (blen + slen + tlen))(bBits-1, 0)
+  val tag  = (VecInit(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
+  val idx  = (VecInit(testVec)(testCnt) >> blen.U)(slen - 1, 0)
+  val off  = (VecInit(testVec)(testCnt))(blen - 1, 0)
+  dut.io.cpu.req.bits.addr  := Cat(tag, idx, off)
+  dut.io.cpu.req.bits.data  := data
+  dut.io.cpu.req.bits.mask  := mask
+  dut.io.cpu.req.valid      := state === sWait 
+  dut.io.cpu.abort          := DontCare
+  gold_req.bits             := dut.io.cpu.req.bits
+  gold_req.valid            := state === sStart
+  gold_resp.ready           := state === sDone
       
   switch(state) {
     is(sInit) {
-      mem(Vec(initAddr)(initCnt)) := Vec(initData)(initCnt)
-      printf("[init] mem[%x] <= %x\n", Vec(initAddr)(initCnt), Vec(initData)(initCnt))
+      mem(VecInit(initAddr)(initCnt)) := VecInit(initData)(initCnt)
+      printf("[init] mem[%x] <= %x\n", VecInit(initAddr)(initCnt), VecInit(initData)(initCnt))
       when(initDone) {
         state := sStart
       }
@@ -301,7 +302,7 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
 }
 
 class CacheTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   "Cache" should "pass" in {
     assert(TesterDriver execute (() => new CacheTester(new Cache)))
   }

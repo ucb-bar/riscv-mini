@@ -108,10 +108,10 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   io.dcache.req.bits.addr := daddr 
   io.dcache.req.bits.data := rs2 << woffset
   io.dcache.req.bits.mask := MuxLookup(Mux(stall, st_type, io.ctrl.st_type), 
-              UInt("b0000"), Seq(
-    ST_SW ->  UInt("b1111"),
-    ST_SH -> (UInt("b11") << alu.io.sum(1,0)),
-    ST_SB -> (UInt("b1")  << alu.io.sum(1,0)) ))
+              "b0000".U, Seq(
+    ST_SW ->  "b1111".U,
+    ST_SH -> ("b11".U << alu.io.sum(1,0)),
+    ST_SB -> ("b1".U  << alu.io.sum(1,0))))
   
   // Pipelining
   when(reset.toBool || !stall && csr.io.expt) {

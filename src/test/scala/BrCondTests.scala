@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import Control._
 
-class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class BrCondTester(br: => BrCond)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(br)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
@@ -23,12 +23,12 @@ class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTe
   val (cntr, done) = Counter(true.B, insts.size)
   val rs1 = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
   val rs2 = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
-  val eq  = Vec((rs1 zip rs2) map { case (a, b) => (a == b).B })
-  val ne  = Vec((rs1 zip rs2) map { case (a, b) => (a != b).B })
-  val lt  = Vec((rs1 zip rs2) map { case (a, b) => (a.toInt < b.toInt).B })
-  val ge  = Vec((rs1 zip rs2) map { case (a, b) => (a.toInt >= b.toInt).B })
-  val ltu = Vec((rs1 zip rs2) map { case (a, b) => (a < b).B })
-  val geu = Vec((rs1 zip rs2) map { case (a, b) => (a >= b).B })
+  val eq  = VecInit((rs1 zip rs2) map { case (a, b) => (a == b).B })
+  val ne  = VecInit((rs1 zip rs2) map { case (a, b) => (a != b).B })
+  val lt  = VecInit((rs1 zip rs2) map { case (a, b) => (a.toInt < b.toInt).B })
+  val ge  = VecInit((rs1 zip rs2) map { case (a, b) => (a.toInt >= b.toInt).B })
+  val ltu = VecInit((rs1 zip rs2) map { case (a, b) => (a < b).B })
+  val geu = VecInit((rs1 zip rs2) map { case (a, b) => (a >= b).B })
   val out = Mux(dut.io.br_type === BR_EQ,  eq(cntr),
             Mux(dut.io.br_type === BR_NE,  ne(cntr),
             Mux(dut.io.br_type === BR_LT,  lt(cntr),
@@ -36,10 +36,10 @@ class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTe
             Mux(dut.io.br_type === BR_LTU, ltu(cntr),
             Mux(dut.io.br_type === BR_GEU, geu(cntr), false.B))))))
 
-  ctrl.io.inst := Vec(insts)(cntr)
+  ctrl.io.inst := VecInit(insts)(cntr)
   dut.io.br_type := ctrl.io.br_type
-  dut.io.rs1 := Vec(rs1 map (_.U))(cntr)
-  dut.io.rs2 := Vec(rs2 map (_.U))(cntr)
+  dut.io.rs1 := VecInit(rs1 map (_.U))(cntr)
+  dut.io.rs2 := VecInit(rs2 map (_.U))(cntr)
 
   when(done) { stop(); stop() } // from VendingMachine example...
   assert(dut.io.taken === out)
@@ -48,7 +48,7 @@ class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTe
 }
 
 class BrCondTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   "BrCondSimple" should "pass" in {
     assert(TesterDriver execute (() => new BrCondTester(new BrCondSimple)))
   }

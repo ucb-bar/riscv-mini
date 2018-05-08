@@ -8,13 +8,13 @@ import junctions._
 import freechips.rocketchip.config.Parameters
 
 class MemArbiter(implicit p: Parameters) extends Module {
-  val io = IO(new ParameterizedBundle {
+  val io = IO(new Bundle {
     val icache = Flipped(new NastiIO)
     val dcache = Flipped(new NastiIO)
     val nasti  =  new NastiIO
   })
 
-  val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(UInt(), 5)
+  val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(5)
   val state = RegInit(s_IDLE)
 
   // Write Address

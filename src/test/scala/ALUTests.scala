@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import ALU._
 
-class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   val dut = Module(alu)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
@@ -15,16 +15,16 @@ class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester 
   val (cntr, done) = Counter(true.B, insts.size)
   val rs1  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
   val rs2  = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
-  val sum  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt + b.toInt).U(xlen.W) })
-  val diff = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt - b.toInt).U(xlen.W) })
-  val and  = Vec((rs1 zip rs2) map { case (a, b) => (a & b).U(xlen.W) })
-  val or   = Vec((rs1 zip rs2) map { case (a, b) => (a | b).U(xlen.W) })
-  val xor  = Vec((rs1 zip rs2) map { case (a, b) => (a ^ b).U(xlen.W) })
-  val slt  = Vec((rs1 zip rs2) map { case (a, b) => (if (a.toInt < b.toInt) 1 else 0).U(xlen.W) })
-  val sltu = Vec((rs1 zip rs2) map { case (a, b) => (if (a < b) 1 else 0).U(xlen.W) })
-  val sll  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt << (b.toInt & 0x1f)).U(xlen.W) })
-  val srl  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >>> (b.toInt & 0x1f)).U(xlen.W) })
-  val sra  = Vec((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >> (b.toInt & 0x1f)).U(xlen.W) })
+  val sum  = VecInit((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt + b.toInt).U(xlen.W) })
+  val diff = VecInit((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt - b.toInt).U(xlen.W) })
+  val and  = VecInit((rs1 zip rs2) map { case (a, b) => (a & b).U(xlen.W) })
+  val or   = VecInit((rs1 zip rs2) map { case (a, b) => (a | b).U(xlen.W) })
+  val xor  = VecInit((rs1 zip rs2) map { case (a, b) => (a ^ b).U(xlen.W) })
+  val slt  = VecInit((rs1 zip rs2) map { case (a, b) => (if (a.toInt < b.toInt) 1 else 0).U(xlen.W) })
+  val sltu = VecInit((rs1 zip rs2) map { case (a, b) => (if (a < b) 1 else 0).U(xlen.W) })
+  val sll  = VecInit((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt << (b.toInt & 0x1f)).U(xlen.W) })
+  val srl  = VecInit((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >>> (b.toInt & 0x1f)).U(xlen.W) })
+  val sra  = VecInit((rs1 zip rs2) map { case (a, b) => toBigInt(a.toInt >> (b.toInt & 0x1f)).U(xlen.W) })
   val out = (Mux(dut.io.alu_op === ALU_ADD,  sum(cntr),
              Mux(dut.io.alu_op === ALU_SUB,  diff(cntr),
              Mux(dut.io.alu_op === ALU_AND,  and(cntr),
@@ -38,10 +38,10 @@ class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester 
              Mux(dut.io.alu_op === ALU_COPY_A, dut.io.A, dut.io.B))))))))))),
              Mux(dut.io.alu_op(0), diff(cntr), sum(cntr)))
 
-  ctrl.io.inst := Vec(insts)(cntr)
+  ctrl.io.inst := VecInit(insts)(cntr)
   dut.io.alu_op := ctrl.io.alu_op
-  dut.io.A := Vec(rs1 map (_.U))(cntr)
-  dut.io.B := Vec(rs2 map (_.U))(cntr)
+  dut.io.A := VecInit(rs1 map (_.U))(cntr)
+  dut.io.B := VecInit(rs2 map (_.U))(cntr)
 
   when(done) { stop(); stop() } // from VendingMachine example...
   assert(dut.io.out === out._1)
@@ -51,7 +51,7 @@ class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester 
 }
 
 class ALUTests extends org.scalatest.FlatSpec {
-  implicit val p = config.Parameters.root((new MiniConfig).toInstance)
+  implicit val p = (new MiniConfig).toInstance
   "ALUSimple" should "pass" in {
     assert(TesterDriver execute (() => new ALUTester(new ALUSimple)))
   }

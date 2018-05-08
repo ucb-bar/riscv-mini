@@ -17,14 +17,14 @@ abstract trait CoreParams {
   val xlen = p(XLEN)
 }
 
-abstract class CoreBundle(implicit val p: Parameters) extends ParameterizedBundle()(p) with CoreParams
+abstract class CoreBundle(implicit val p: Parameters) extends Bundle with CoreParams
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
   val fromhost = Flipped(Valid(UInt(xlen.W)))
   val tohost   = Output(UInt(xlen.W))
 }
 
-class CoreIO(implicit p: Parameters) extends Bundle {
+class CoreIO(implicit p: Parameters) extends CoreBundle()(p) {
   val host = new HostIO
   val icache = Flipped((new CacheIO))
   val dcache = Flipped((new CacheIO))

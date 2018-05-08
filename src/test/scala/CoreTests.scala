@@ -10,16 +10,16 @@ import TestParams._
 class CoreTester(core: => Core,
                  loadmem: Iterator[String],
                  maxcycles: Long)
-                (implicit p: config.Parameters) extends BasicTester with HexUtils {
+                (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with HexUtils {
   val xlen = p(XLEN)
   val dut = Module(core)
-  dut.io.host.fromhost.bits := 0.U
+  dut.io.host.fromhost.bits := DontCare
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = Vec(loadMem(loadmem, xlen) map (x => Cat(x.reverse))) 
+  val _hex = VecInit(loadMem(loadmem, xlen) map (x => Cat(x.reverse))) 
   val imem = Mem(1 << 20, UInt(xlen.W))
   val dmem = Mem(1 << 20, UInt(xlen.W))
-  val sInit :: sRun :: Nil = Enum(UInt(), 2)
+  val sInit :: sRun :: Nil = Enum(2)
   val state = RegInit(sInit)
   val cycle = RegInit(0.U(32.W))
   val (cntr, done) = Counter(state === sInit, _hex.size * (1 << 8))
