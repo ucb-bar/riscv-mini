@@ -2,8 +2,11 @@ generated-src
 test_run_dir
 target
 project/target
-logs
 *.key
 *.log
 *.swp
+*.out
 .ivy2
+VTile
+dump.vcd*
+DVEfiles
