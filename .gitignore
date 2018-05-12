@@ -1,11 +1,11 @@
 generated-src
+outputs
 test_run_dir
 target
 project/target
 *.key
 *.log
 *.swp
-*.out
 .ivy2
 VTile
 dump.vcd*

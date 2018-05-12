@@ -1,0 +1,4 @@
+main
+*.o
+*.hex
+*.dump

@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
   VL_PRINTF("Enabling waves...\n");
   tfp = new VerilatedVcdC;
   top->trace(tfp, 99);	// Trace 99 levels of hierarchy
-  tfp->open("dump.vcd"); // Open the dump file
+  tfp->open(argc > 2 ? argv[2] : "dump.vcd"); // Open the dump file
 #endif
 
   cout << "Starting simulation!\n";
