@@ -8,8 +8,8 @@ including [Chisel3](https://github.com/ucb-bar/chisel3.git), [FIRRTL](https://gi
 It implements RV32I of the User-level ISA Version 2.0 and the Machine-level ISA of the Privileged Architecture Version 1.7.
 Unlike other simple pipelines, it also contains simple instruction and data caches.
 
-Note that the goal of `riscv-mini` is not a realistic processor.
-It is developed as an intermediate example before diving into [rocket-chip](https://github.com/ucb-bar/rocket-chip). 
+Note that a real-world processor is not the goal of `riscv-mini`.
+It is developed as an intermediate example before diving into [rocket-chip](https://github.com/freechipsproject/rocket-chip). 
 
 ## Datapath Diagram
 ![pipeline](diagram.png)
@@ -18,14 +18,31 @@ It is developed as an intermediate example before diving into [rocket-chip](http
 
     $ git clone https://github.com/ucb-bar/riscv-mini.git
     $ cd riscv-mini
-    $ git submodule update --init
-    $ make            # this will give you the firrtl & verilog output files in generated-src
+    $ make            # generate firrtl & verilog files in generated-src
     
-The verilog output file can be used for the ASIC tools.
+The verilog output file can be used for verilator simulation or the ASIC tool flow.
     
-## Tests
+## Running Verilator Simulation
 
-`riscv-mini` provides *theoretically* synthesizable unit & integration tests.
+First, generate the verilator binary:
+
+    $ make verilator
+    
+This will generate `VTile` in the top-level directory.
+
+Now, you can run verilator simulation for a given hex file as follows:
+
+    $ ./VTile <hex file> [<vcd file> 2> <log file>]
+    
+`<vcd file>` and the pipe to `<log file>` are optional. The waveform is dumped to `dump.vcd` and the execution trace is printed in the screen by default.
+
+The following command runs the whole test hex files in verilator and dumps the traces and the waveforms to the 'outputs' directory:
+
+    $ make run-tests
+
+## Unit and Integration Tests with `sbt`
+
+`riscv-mini` provides synthesizable unit & integration tests.
 Theres are six sets of unit tests(`ALUTests`, `BrCondTests`, `ImmGenTests`, `CSRTests`, `CacheTests`, `DatapathTests`),
 running user-defined test vectors.
 To execute them, first launch sbt with `make sbt` and run:
@@ -45,6 +62,15 @@ Finally, to run all the tests, just in sbt:
 
     > test
     
-## FAQ
+## Running Your Own Program on `riscv-mini`
 
-Coming soon.
+At this point, you may want to implement and exeucte your custom application on `riscv-mini`. In this case, you need to install RISC-V tools for priv 1.7. This repo provides a script to install the correct version of tools. Run the script as follows:
+
+    $ export RISCV=<path to riscv tools for priv 1.7>
+    $ ./build-riscv-tools
+    
+It takes a while to install the toolchain, so please be patient.
+
+This repo also provides a template for your own program in `custom-bmark`. Add your c or assembly code and edit `Makefile`. Next, to compile you program, run `make` in `custom-bmark` to generate the binary, dump, and the hex files. Finally, run the following command in the base directory:
+
+    $ make run-custom-bmark
