@@ -10,3 +10,4 @@ project/target
 VTile
 dump.vcd*
 DVEfiles
+riscv-tools-priv1.7
