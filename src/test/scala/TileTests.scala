@@ -25,12 +25,20 @@ object LatencyPipe {
   }
 }
 
-class TileTester(tile: => Tile,
-                 loadmem: Iterator[String],
-                 maxcycles: Long,
-                 latency: Int = 8)
-                (implicit val p: freechips.rocketchip.config.Parameters) extends BasicTester with HexUtils with CacheParams {
+class TileTester(
+    tile: => TileBase,
+    loadmem: Iterator[String],
+    maxcycles: Long,
+    latency: Int = 8)
+   (implicit val p: freechips.rocketchip.config.Parameters)
+    extends BasicTester with HexUtils with CacheParams {
   val dut = Module(tile)
+  // Connect black box clock
+  dut match {
+    case bbox: core.BaseBlackBox =>
+      bbox.clock := clock
+    case _ =>
+  }
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B
 
@@ -51,6 +59,7 @@ class TileTester(tile: => Tile,
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
 
+  dut.reset := reset.toBool || state === sInit
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle 
   dut.io.nasti.w.ready  := state === sWrite

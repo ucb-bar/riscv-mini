@@ -54,7 +54,7 @@ object CSR {
   val mcause   = 0x342.U(12.W)
   val mbadaddr = 0x343.U(12.W)
   val mip      = 0x344.U(12.W)
-  // Hachine HITF
+  // Machine HITF
   val mtohost   = 0x780.U(12.W)
   val mfromhost = 0x781.U(12.W)
 

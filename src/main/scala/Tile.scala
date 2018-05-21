@@ -92,14 +92,20 @@ class TileIO(implicit p: Parameters) extends ParameterizedBundle {
   val nasti = new NastiIO
 }
 
-class Tile(tileParams: Parameters) extends Module {
+trait TileBase extends core.BaseModule {
+  def io: TileIO
+  def clock: Clock
+  def reset: core.Reset
+}
+
+class Tile(tileParams: Parameters) extends Module with TileBase {
   implicit val p = tileParams
   val io     = IO(new TileIO)
   val core   = Module(new Core)
   val icache = Module(new Cache)
   val dcache = Module(new Cache)
   val arb    = Module(new MemArbiter)
-  
+
   io.host <> core.io.host
   core.io.icache <> icache.io.cpu
   core.io.dcache <> dcache.io.cpu
