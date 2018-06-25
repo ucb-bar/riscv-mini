@@ -13,7 +13,6 @@ object Main extends App {
   writer.close
 
   val verilog = new FileWriter(new File(dir, s"${chirrtl.main}.v"))
-  new firrtl.VerilogCompiler compile (
-    firrtl.CircuitState(chirrtl, firrtl.ChirrtlForm), verilog)
+  verilog write (new firrtl.VerilogCompiler).compileAndEmit(firrtl.CircuitState(chirrtl, firrtl.ChirrtlForm)).getEmittedCircuit.value
   verilog.close
 }
