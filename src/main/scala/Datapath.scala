@@ -49,7 +49,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
  
   /****** Fetch *****/
   val started = RegNext(reset.toBool)
-  val stall = !io.icache.resp.valid || !io.dcache.resp.valid
+  val stall = !io.icache.resp.valid && !io.dcache.resp.valid
   val pc   = RegInit(Const.PC_START.U(xlen.W) - 4.U(xlen.W))
   val npc  = Mux(stall, pc, Mux(csr.io.expt, csr.io.evec,
              Mux(io.ctrl.pc_sel === PC_EPC,  csr.io.epc,
