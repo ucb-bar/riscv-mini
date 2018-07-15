@@ -110,21 +110,21 @@ int main(int argc, char** argv) {
 
   int retcode = top->io_host_tohost >> 1;
 
-  if (main_time >= timeout) {
-    cout << "Simulation terminated by timeout at time " << main_time
-         << " (cycle " << main_time / 10 << ")"<< endl;
-    return EXIT_FAILURE;
-  } else {
-    cout << "Simulation completed at time " << main_time <<
-           " (cycle " << main_time / 10 << ")"<< endl;
-    if (retcode) {
-      cout << "TOHOST = " << retcode << endl;
-    }
-  }
-
   // Run for 10 more clocks
   for (size_t i = 0 ; i < 10 ; i++) {
     tick();
+  }
+
+  if (main_time >= timeout) {
+    cerr << "Simulation terminated by timeout at time " << main_time
+         << " (cycle " << main_time / 10 << ")"<< endl;
+    return EXIT_FAILURE;
+  } else {
+    cerr << "Simulation completed at time " << main_time <<
+           " (cycle " << main_time / 10 << ")"<< endl;
+    if (retcode) {
+      cerr << "TOHOST = " << retcode << endl;
+    }
   }
 
 #if VM_TRACE
@@ -133,6 +133,8 @@ int main(int argc, char** argv) {
 #endif
   delete top;
   delete mem;
+
+  cout << "Finishing simulation!\n";
 
   return retcode == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
