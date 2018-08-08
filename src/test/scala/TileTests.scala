@@ -141,3 +141,4 @@ abstract class TileTests(testType: TestType) extends IntegrationTests(
 class TileSimpleTests extends TileTests(SimpleTests)
 class TileISATests extends TileTests(ISATests)
 class TileBmarkTests extends TileTests(BmarkTests)
+class TileLargeBmarkTests extends TileTests(LargeBmarkTests)

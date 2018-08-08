@@ -87,7 +87,7 @@ class MemArbiter(implicit p: Parameters) extends Module {
   }
 }
 
-class TileIO(implicit p: Parameters) extends ParameterizedBundle {
+class TileIO(implicit val p: Parameters) extends Bundle {
   val host  = new HostIO
   val nasti = new NastiIO
 }

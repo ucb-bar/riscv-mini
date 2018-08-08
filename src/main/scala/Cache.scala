@@ -21,13 +21,13 @@ class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
   val data = UInt(xlen.W)
 }
 
-class CacheIO (implicit p: Parameters) extends ParameterizedBundle()(p) {
+class CacheIO (implicit val p: Parameters) extends Bundle {
   val abort = Input(Bool())
   val req   = Flipped(Valid(new CacheReq))
   val resp  = Valid(new CacheResp)
 }
 
-class CacheModuleIO(implicit p: Parameters) extends ParameterizedBundle()(p) {
+class CacheModuleIO(implicit val p: Parameters) extends Bundle {
   val cpu   = new CacheIO
   val nasti = new NastiIO
 }
@@ -46,7 +46,7 @@ trait CacheParams extends CoreParams with HasNastiParameters {
   val dataBeats = bBits / nastiXDataBits
 } 
 
-class MetaData(implicit val p: Parameters) extends ParameterizedBundle()(p) with CacheParams {
+class MetaData(implicit val p: Parameters) extends Bundle with CacheParams {
   val tag   = UInt(tlen.W)
 }
 
