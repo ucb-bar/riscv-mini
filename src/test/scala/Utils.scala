@@ -2,14 +2,6 @@
 
 package mini
 
-import chisel3.Bundle
-import freechips.rocketchip.config.Parameters
-
-abstract class ParameterizedBundle(implicit p: Parameters) extends chisel3.Bundle {
-  override def cloneType =
-    this.getClass.getConstructors.head.newInstance(p).asInstanceOf[this.type]
-}
-
 trait TestType {
   def tests: List[String]
   def maxcycles: Long
@@ -36,4 +28,12 @@ case object BmarkTests extends TestType {
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
   val maxcycles = 1500000L
+}
+
+case object LargeBmarkTests extends TestType {
+  val tests = List(
+    "median.riscv-large", "multiply.riscv-large", "qsort.riscv-large",
+    "towers.riscv-large", "vvadd.riscv-large"
+  )
+  val maxcycles = 5000000L
 }
