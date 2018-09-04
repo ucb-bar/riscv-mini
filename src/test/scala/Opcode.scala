@@ -47,7 +47,7 @@ object Funct3 {
   val SH   = BigInt("001", 2).U(3.W)
   val SW   = BigInt("010", 2).U(3.W)
 
-  // Arithemetic R-type and I-type functions codes
+  // Arithmetic R-type and I-type functions codes
   val ADD  = BigInt("000", 2).U(3.W)
   val SLL  = BigInt("001", 2).U(3.W)
   val SLT  = BigInt("010", 2).U(3.W)
