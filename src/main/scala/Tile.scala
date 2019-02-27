@@ -7,12 +7,14 @@ import chisel3.util._
 import junctions._
 import freechips.rocketchip.config.Parameters
 
+class MemArbiterIO(implicit val p: Parameters) extends Bundle {
+  val icache = Flipped(new NastiIO)
+  val dcache = Flipped(new NastiIO)
+  val nasti  = new NastiIO
+}
+
 class MemArbiter(implicit p: Parameters) extends Module {
-  val io = IO(new Bundle {
-    val icache = Flipped(new NastiIO)
-    val dcache = Flipped(new NastiIO)
-    val nasti  =  new NastiIO
-  })
+  val io = IO(new MemArbiterIO)
 
   val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(5)
   val state = RegInit(s_IDLE)

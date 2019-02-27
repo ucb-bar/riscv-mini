@@ -8,12 +8,14 @@ import chisel3.testers._
 import junctions._
 import TestParams._
 
+class LatencyPipeIO[T <: Data](val gen: T) extends Bundle {
+  val in = Flipped(Decoupled(gen))
+  val out = Decoupled(gen)
+}
+
 class LatencyPipe[T <: Data](gen: T, latency: Int) extends Module {
-  val io = IO(new Bundle {
-    val in = Flipped(Decoupled(chiselTypeOf(gen)))
-    val out = Decoupled(chiselTypeOf(gen))
-  })
- 
+  val io = IO(new LatencyPipeIO(chiselTypeOf(gen)))
+  io := DontCare
   io.out <> ((0 until latency) foldLeft io.in)((in, i) => Queue(in, 1, pipe=true))
 }
 

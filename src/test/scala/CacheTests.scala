@@ -6,15 +6,18 @@ import chisel3._
 import chisel3.util._
 import chisel3.testers._
 import junctions._
+import freechips.rocketchip.config.Parameters
 
-class GoldCache(implicit val p: freechips.rocketchip.config.Parameters) extends Module with CacheParams {
-  val io = IO(new Bundle {
-    val req   = Flipped(Decoupled(new CacheReq))
-    val resp  = Decoupled(new CacheResp) 
-    val nasti = new NastiIO
-  })
-  val size  = log2Ceil(nastiXDataBits / 8).U
-  val len   = (dataBeats - 1).U
+class GoldCacheIO(implicit val p: Parameters) extends Bundle {
+  val req   = Flipped(Decoupled(new CacheReq))
+  val resp  = Decoupled(new CacheResp)
+  val nasti = new NastiIO
+}
+
+class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
+  val io   = IO(new GoldCacheIO)
+  val size = log2Ceil(nastiXDataBits / 8).U
+  val len  = (dataBeats - 1).U
 
   val data = Mem(nSets, UInt(bBits.W))
   val tags = Mem(nSets, UInt(tlen.W))
