@@ -2,7 +2,6 @@
 
 package mini
 
-import aoplib.histogram.HistogramSignal
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
@@ -21,25 +20,6 @@ object ALU {
   val ALU_COPY_A = 10.U(4.W)
   val ALU_COPY_B = 11.U(4.W)
   val ALU_XXX    = 15.U(4.W)
-
-  def histogram(alu: ALU): Seq[HistogramSignal] = {
-    Seq(
-      new HistogramSignal(alu.io.A) {
-        override def untilMax: Int = 1000
-        override def nBins: Int = 10
-      },
-      new HistogramSignal(alu.io.B) {
-        override def untilMax: Int = 1000
-        override def nBins: Int = 10
-      }
-    )
-  }
-
-  def logALUOp(alu: ALU, op: Int): Unit = {
-    when(alu.io.alu_op === op.U) {
-      printf("A == %d, B == %d, opcode == %d\n", alu.io.A, alu.io.B, alu.io.alu_op)
-    }
-  }
 }
 
 class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
@@ -102,5 +82,4 @@ class ALUArea(implicit p: Parameters) extends ALU()(p) {
 
   io.out := out
   io.sum := sum
-
 }

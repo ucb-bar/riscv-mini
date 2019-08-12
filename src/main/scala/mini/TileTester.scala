@@ -1,7 +1,6 @@
 package mini
 
 import chisel3._
-import chisel3.aop.Aspect
 import chisel3.experimental.ExtModule
 import chisel3.testers._
 import chisel3.util._

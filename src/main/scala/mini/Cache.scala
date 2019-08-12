@@ -51,7 +51,6 @@ class MetaData(implicit val p: Parameters) extends Bundle with CacheParams {
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
-  //import Chisel._ // FIXME: read enable signals for memories are broken by new chisel
   val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
