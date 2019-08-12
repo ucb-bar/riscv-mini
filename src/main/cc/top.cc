@@ -93,6 +93,7 @@ int main(int argc, char** argv) {
 #endif
 
   cout << "Starting simulation!\n";
+  fflush(cout);
 
   // reset
   top->reset = 1;

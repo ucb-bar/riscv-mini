@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import freechips.rocketchip.config.Parameters
-import Control._
+import mini.Control._
 
 class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
   val rs1 = Input(UInt(xlen.W))

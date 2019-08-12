@@ -3,10 +3,11 @@
 package mini
 
 import chisel3._
-import chisel3.util._
 import chisel3.testers._
-import junctions._
+import chisel3.util._
 import freechips.rocketchip.config.Parameters
+import junctions._
+import mini._
 
 class GoldCacheIO(implicit val p: Parameters) extends Bundle {
   val req   = Flipped(Decoupled(new CacheReq))

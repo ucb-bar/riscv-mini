@@ -3,11 +3,15 @@
 package mini
 
 import chisel3._
-import chisel3.util._
+import chisel3.aop.Aspect
 import chisel3.testers._
+import chisel3.util._
+import firrtl.AnnotationSeq
+import mini.Instructions.{EBREAK, ECALL, ERET, FENCEI}
+import mini._
+
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.reflect.ClassTag
-import scala.concurrent.{Future, Await, ExecutionContext}
-import Instructions._
 
 trait DatapathTest
 object BypassTest extends DatapathTest {
@@ -191,20 +195,6 @@ trait TestUtils {
   )
 }
 
-trait HexUtils {
-  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
-  // Group 256 chunks together
-  // because big vecs dramatically increase compile time... :(
-  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
-    assert(line.length % (chunk / 4) == 0)
-    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
-      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
-        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
-      }
-    }
-  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
-}
-
 object TestParams {
   implicit val p = 
     (new MiniConfig).toInstance alterPartial { case Trace => false }
@@ -213,17 +203,18 @@ object TestParams {
 abstract class IntegrationTests[T <: BasicTester : ClassTag](
     tester: (Iterator[String], Long) => T,
     testType: TestType,
-    N: Int = 6) extends org.scalatest.FlatSpec {
+    N: Int = 6,
+    annotations: AnnotationSeq = Nil) extends org.scalatest.FlatSpec {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
   behavior of dutName
-  import scala.concurrent.duration._
   import ExecutionContext.Implicits.global
+  import scala.concurrent.duration._
 
   val results = testType.tests sliding (N, N) map { subtests =>
     val subresults = subtests map { test =>
       val stream = getClass.getResourceAsStream(s"/$test.hex")
       val loadmem = io.Source.fromInputStream(stream).getLines
-      Future(test -> (TesterDriver execute (() => tester(loadmem, testType.maxcycles))))
+      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), Nil, annotations)))
     }
     Await.result(Future.sequence(subresults), Duration.Inf)
   }

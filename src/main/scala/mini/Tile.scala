@@ -4,8 +4,8 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import junctions._
 import freechips.rocketchip.config.Parameters
+import junctions._
 
 class MemArbiterIO(implicit val p: Parameters) extends Bundle {
   val icache = Flipped(new NastiIO)

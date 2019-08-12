@@ -64,8 +64,8 @@ object Control {
   val WB_PC4 = 2.U(2.W)
   val WB_CSR = 3.U(2.W)
 
-  import Instructions._
   import ALU._
+  import Instructions._
 
   val default =
     //                                                            kill                        wb_en  illegal?

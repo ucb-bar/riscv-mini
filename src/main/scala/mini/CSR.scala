@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
-import scala.collection.immutable.ListMap
+
 
 object CSR {
   val N = 0.U(3.W)

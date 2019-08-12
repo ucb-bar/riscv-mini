@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
-import Control._
+import mini.Control._
 
 class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
   val inst = Input(UInt(xlen.W))

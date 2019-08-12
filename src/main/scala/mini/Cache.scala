@@ -4,8 +4,8 @@ package mini
 
 import chisel3._
 import chisel3.util._
+import freechips.rocketchip.config.{Field, Parameters}
 import junctions._
-import freechips.rocketchip.config.{Parameters, Field}
 
 case object NWays extends Field[Int]
 case object NSets extends Field[Int]
@@ -51,7 +51,7 @@ class MetaData(implicit val p: Parameters) extends Bundle with CacheParams {
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
-  import Chisel._ // FIXME: read enable signals for memories are broken by new chisel
+  //import Chisel._ // FIXME: read enable signals for memories are broken by new chisel
   val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
@@ -60,12 +60,14 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   // memory
   val v        = RegInit(0.U(nSets.W))
   val d        = RegInit(0.U(nSets.W))
-  val metaMem  = SeqMem(nSets, new MetaData)
-  val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(8.W))))
+  //val metaMem  = SeqMem(nSets, new MetaData)
+  val metaMem  = SyncReadMem(nSets, new MetaData)
+  //val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(8.W))))
+  val dataMem  = Seq.fill(nWords)(SyncReadMem(nSets, Vec(wBytes, UInt(8.W))))
 
-  val addr_reg = Reg(io.cpu.req.bits.addr.cloneType)
-  val cpu_data = Reg(io.cpu.req.bits.data.cloneType)
-  val cpu_mask = Reg(io.cpu.req.bits.mask.cloneType)
+  val addr_reg = Reg(chiselTypeOf(io.cpu.req.bits.addr))
+  val cpu_data = Reg(chiselTypeOf(io.cpu.req.bits.data))
+  val cpu_mask = Reg(chiselTypeOf(io.cpu.req.bits.mask))
 
   // Counters
   require(dataBeats > 0)
@@ -98,7 +100,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   hit := v(idx_reg) && rmeta.tag === tag_reg 
 
   // Read Mux
-  io.cpu.resp.bits.data := Vec.tabulate(nWords)(i => read((i+1)*xlen-1, i*xlen))(off_reg)
+  io.cpu.resp.bits.data := VecInit(Seq.tabulate(nWords)(i => read((i+1)*xlen-1, i*xlen)))(off_reg)
   io.cpu.resp.valid     := is_idle || is_read && hit || is_alloc_reg && !cpu_mask.orR
 
   when(io.cpu.resp.valid) { 
@@ -110,7 +112,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val wmeta = Wire(new MetaData)
   wmeta.tag := tag_reg
 
-  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, SInt(-1))
+  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, (-1).S)
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), 
     if (refill_buf.size == 1) io.nasti.r.bits.data
     else Cat(io.nasti.r.bits.data, Cat(refill_buf.init.reverse)))
@@ -121,8 +123,8 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
       metaMem.write(idx_reg, wmeta)
     }
     dataMem.zipWithIndex foreach { case (mem, i) =>
-      val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
-      mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
+      val data = VecInit(Seq.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8)))
+      mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).asBools)
       mem suggestName s"dataMem_${i}"
     }
   }
@@ -140,7 +142,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   io.nasti.aw.valid := false.B
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
-    Vec.tabulate(dataBeats)(i => read((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
+    VecInit(Seq.tabulate(dataBeats)(i => read((i+1)*nastiXDataBits-1, i*nastiXDataBits)))(write_count),
     None, write_wrap_out)
   io.nasti.w.valid := false.B
   // write resp
@@ -148,7 +150,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
 
   // Cache FSM
   val is_dirty = v(idx_reg) && d(idx_reg)
-  switch(state) {
+  switch (state) {
     is(s_IDLE) {
       when(io.cpu.req.valid) {
         state := Mux(io.cpu.req.bits.mask.orR, s_WRITE_CACHE, s_READ_CACHE)

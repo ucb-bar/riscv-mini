@@ -4,15 +4,13 @@ package mini
 
 import java.io.{File, FileWriter}
 
-object Main extends App {
-  val dir = new File(args(0)) ; dir.mkdirs
-  val params = (new MiniConfig).toInstance
-  val chirrtl = firrtl.Parser.parse(chisel3.Driver.emit(() => new Tile(params)))
-  val writer = new FileWriter(new File(dir, s"${chirrtl.main}.fir"))
-  writer write chirrtl.serialize
-  writer.close
+import chisel3.stage.ChiselGeneratorAnnotation
+import firrtl.options.TargetDirAnnotation
 
-  val verilog = new FileWriter(new File(dir, s"${chirrtl.main}.v"))
-  verilog write (new firrtl.VerilogCompiler).compileAndEmit(firrtl.CircuitState(chirrtl, firrtl.ChirrtlForm)).getEmittedCircuit.value
-  verilog.close
+object Main extends App {
+  val params = (new MiniConfig).toInstance
+  new chisel3.stage.ChiselStage().execute(args, Seq(
+    ChiselGeneratorAnnotation(() => new Tile(params)),
+    TargetDirAnnotation("test_run_dir")
+  ))
 }
