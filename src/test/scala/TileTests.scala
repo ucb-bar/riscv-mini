@@ -37,7 +37,7 @@ class TileTester(
   val dut = Module(tile)
   // Connect black box clock
   dut match {
-    case bbox: core.BaseBlackBox =>
+    case bbox: BlackBox =>
       bbox.clock := clock
     case _ =>
   }
@@ -61,7 +61,7 @@ class TileTester(
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
 
-  dut.reset := reset.toBool || state === sInit
+  dut.reset := reset.asBool || state === sInit
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle 
   dut.io.nasti.w.ready  := state === sWrite
