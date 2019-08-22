@@ -8,6 +8,7 @@ import chisel3.testers._
 import scala.reflect.ClassTag
 import scala.concurrent.{Future, Await, ExecutionContext}
 import Instructions._
+import scala.language.implicitConversions
 
 trait DatapathTest
 object BypassTest extends DatapathTest {

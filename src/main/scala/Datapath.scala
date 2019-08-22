@@ -48,7 +48,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   val pc_check = Reg(Bool())
  
   /****** Fetch *****/
-  val started = RegNext(reset.toBool)
+  val started = RegNext(reset.asBool)
   val stall = !io.icache.resp.valid || !io.dcache.resp.valid
   val pc   = RegInit(Const.PC_START.U(xlen.W) - 4.U(xlen.W))
   val npc  = Mux(stall, pc, Mux(csr.io.expt, csr.io.evec,
@@ -103,7 +103,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
 
   // D$ access
   val daddr   = Mux(stall, ew_alu, alu.io.sum) >> 2.U << 2.U
-  val woffset = alu.io.sum(1) << 4.U | alu.io.sum(0) << 3.U
+  val woffset = (alu.io.sum(1) << 4.U).asUInt | (alu.io.sum(0) << 3.U).asUInt
   io.dcache.req.valid     := !stall && (io.ctrl.st_type.orR || io.ctrl.ld_type.orR)
   io.dcache.req.bits.addr := daddr 
   io.dcache.req.bits.data := rs2 << woffset
@@ -114,7 +114,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
     ST_SB -> ("b1".U  << alu.io.sum(1,0))))
   
   // Pipelining
-  when(reset.toBool || !stall && csr.io.expt) {
+  when(reset.asBool || !stall && csr.io.expt) {
     st_type   := 0.U
     ld_type   := 0.U
     wb_en     := false.B
@@ -136,7 +136,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   }
 
   // Load
-  val loffset = ew_alu(1) << 4.U | ew_alu(0) << 3.U
+  val loffset = (ew_alu(1) << 4.U).asUInt | (ew_alu(0) << 3.U).asUInt
   val lshift  = io.dcache.resp.bits.data >> loffset
   val load    = MuxLookup(ld_type, io.dcache.resp.bits.data.zext, Seq(
     LD_LH  -> lshift(15, 0).asSInt, LD_LB  -> lshift(7, 0).asSInt,
