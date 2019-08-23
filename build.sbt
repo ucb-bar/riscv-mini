@@ -13,7 +13,7 @@ val commonSettings = Seq(
 
 val miniSettings = commonSettings ++ Seq(
   name := "riscv-mini",
-  version := "2.0-SNAPSHOT",
+  version := "2.0",
   organization := "edu.berkeley.cs")
 
 lazy val lib  = project settings commonSettings
