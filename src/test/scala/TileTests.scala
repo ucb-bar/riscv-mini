@@ -37,7 +37,7 @@ class TileTester(
   val dut = Module(tile)
   // Connect black box clock
   dut match {
-    case bbox: core.BaseBlackBox =>
+    case bbox: BlackBox =>
       bbox.clock := clock
     case _ =>
   }
@@ -56,12 +56,12 @@ class TileTester(
   val len = Reg(UInt(nastiXLenBits.W))
   val off = Reg(UInt(nastiXLenBits.W))
   val write = ((0 until (nastiXDataBits / 8)) foldLeft 0.U(nastiXDataBits.W)){ (write, i) => write |
-    (Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(8*(i+1)-1, 8*i)) << (8*i).U
+    ((Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(8*(i+1)-1, 8*i)) << (8*i).U).asUInt
   }
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
 
-  dut.reset := reset.toBool || state === sInit
+  dut.reset := reset.asBool || state === sInit
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle 
   dut.io.nasti.w.ready  := state === sWrite
@@ -77,14 +77,14 @@ class TileTester(
     assert(cycle < maxcycles.U)
     when(dut.io.host.tohost =/= 0.U) {
       printf("cycles: %d\n", cycle)
-      assert((dut.io.host.tohost >> 1.U) === 0.U,
+      assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
         "* tohost: %d *\n", dut.io.host.tohost)
       stop(); stop()
     }
   }
  
   val chunk = Wire(UInt(nastiXDataBits.W))
-  chunk := _hex(cntr >> 8.U) >> (cntr(7, 0) * nastiXDataBits.U)
+  chunk := _hex((cntr >> 8.U).asUInt) >> (cntr(7, 0) * nastiXDataBits.U)
 
   switch(state) {
     is(sInit) {
@@ -94,14 +94,14 @@ class TileTester(
     }
     is(sIdle) {
       when(dut.io.nasti.aw.valid) {
-        assert((1.U << dut.io.nasti.aw.bits.size) === (nastiXDataBits / 8).U)
+        assert((1.U << dut.io.nasti.aw.bits.size).asUInt === (nastiXDataBits / 8).U)
         addr := dut.io.nasti.aw.bits.addr / (nastiXDataBits / 8).U
         id := dut.io.nasti.aw.bits.id
         len := dut.io.nasti.aw.bits.len
         off := 0.U
         state := sWrite
       }.elsewhen(dut.io.nasti.ar.valid) {
-        assert((1.U << dut.io.nasti.ar.bits.size) === (nastiXDataBits / 8).U)
+        assert((1.U << dut.io.nasti.ar.bits.size).asUInt === (nastiXDataBits / 8).U)
         addr := dut.io.nasti.ar.bits.addr / (nastiXDataBits / 8).U
         id := dut.io.nasti.aw.bits.id
         len := dut.io.nasti.ar.bits.len
@@ -143,4 +143,4 @@ abstract class TileTests(testType: TestType) extends IntegrationTests(
 class TileSimpleTests extends TileTests(SimpleTests)
 class TileISATests extends TileTests(ISATests)
 class TileBmarkTests extends TileTests(BmarkTests)
-class TileLargeBmarkTests extends TileTests(LargeBmarkTests)
+// class TileLargeBmarkTests extends TileTests(LargeBmarkTests)

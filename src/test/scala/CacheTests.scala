@@ -24,15 +24,16 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   val v    = Mem(nSets, Bool())
   val d    = Mem(nSets, Bool())
 
-  val req   = io.req.bits
-  val tag   = req.addr >> (blen + slen).U
-  val idx   = req.addr(blen + slen - 1, blen)
-  val off   = req.addr(blen - 1, 0)
-  val read  = data(idx)
-  val write = (((0 until bBytes) foldLeft 0.U){ (write, i) => write | Mux(
-    ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U)(0),
-    ((req.data >> ((8 * (i & 0x3)).U)) & 0xff.U) << (8 * i).U, read & (BigInt(0xff) << (8 * i)).U)
-  })(bBits - 1, 0)
+  val req = io.req.bits
+  val tag = (req.addr >> (blen + slen).U).asUInt
+  val idx = req.addr(blen + slen - 1, blen)
+  val off = req.addr(blen - 1, 0)
+  val read = data(idx)
+  val write = (((0 until bBytes) foldLeft 0.U) { (write, i) =>
+    write | Mux(
+      ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U) (0),
+      (((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt << (8 * i).U).asUInt, read & (BigInt(0xff) << (8 * i)).U)
+  }) (bBits - 1, 0)
 
   val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
   val state = RegInit(sIdle)
@@ -42,11 +43,11 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   io.resp.bits.data := read >> ((off / 4.U) * xlen.U)
   io.resp.valid := false.B
   io.req.ready := false.B
-  io.nasti.ar.bits := NastiReadAddressChannel(0.U, (req.addr >> blen.U) << blen.U, size, len)
+  io.nasti.ar.bits := NastiReadAddressChannel(0.U, ((req.addr >> blen.U).asUInt << blen.U).asUInt, size, len)
   io.nasti.ar.valid := false.B
-  io.nasti.aw.bits := NastiWriteAddressChannel(0.U, Cat(tags(idx), idx) << blen.U, size, len)
+  io.nasti.aw.bits := NastiWriteAddressChannel(0.U, (Cat(tags(idx), idx) << blen.U).asUInt, size, len)
   io.nasti.aw.valid := false.B
-  io.nasti.w.bits := NastiWriteDataChannel(read >> (wCnt * nastiXDataBits.U), None, wDone)
+  io.nasti.w.bits := NastiWriteDataChannel((read >> (wCnt * nastiXDataBits.U)).asUInt, None, wDone)
   io.nasti.w.valid := state === sWrite
   io.nasti.b.ready := state === sWrAck
   io.nasti.r.ready := state === sRead
@@ -57,7 +58,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
         when(v(idx) && (tags(idx) === tag)) {
           when(req.mask.orR) {
             d(idx)    := true.B
-            data(idx) := write 
+            data(idx) := write
             printf("[cache] data[%x] <= %x, off: %x, req: %x, mask: %b\n",
                    idx, write, off, io.req.bits.data, io.req.bits.mask)
           }.otherwise {
@@ -92,7 +93,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
     }
     is(sRead) {
       when(io.nasti.r.valid) {
-        data(idx) := read | (io.nasti.r.bits.data << (rCnt * nastiXDataBits.U))
+        data(idx) := read | ((io.nasti.r.bits.data << (rCnt * nastiXDataBits.U)).asUInt)
       }
       when(rDone) {
         assert(io.nasti.r.bits.last)
@@ -141,9 +142,9 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   dut_mem.aw.ready  := false.B
   dut_mem.w.ready   := false.B
   dut_mem.b.valid   := memState === sMemWrAck
-  dut_mem.b.bits    := NastiWriteResponseChannel(0.U) 
+  dut_mem.b.bits    := NastiWriteResponseChannel(0.U)
   dut_mem.r.valid   := memState === sMemRead
-  dut_mem.r.bits    := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size) + rCnt), rDone)
+  dut_mem.r.bits    := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size).asUInt + rCnt), rDone)
   gold_mem.ar.ready := dut_mem.ar.ready
   gold_mem.aw.ready := dut_mem.aw.ready
   gold_mem.w.ready  := dut_mem.w.ready
@@ -187,8 +188,8 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
         assert(dut_mem.w.bits.last === gold_mem.w.bits.last,
           "* dut.io.nasti.w.bits.last => %x != %x *\n", dut_mem.w.bits.last, gold_mem.w.bits.last)
         assert(dut_mem.w.bits.strb === ((1 << (nastiXDataBits / 8)) - 1).U) // TODO: release it?
-        mem((dut_mem.aw.bits.addr >> size) + wCnt) := dut_mem.w.bits.data
-        printf("[write] mem[%x] <= %x\n", (dut_mem.aw.bits.addr >> size) + wCnt, dut_mem.w.bits.data)
+        mem((dut_mem.aw.bits.addr >> size).asUInt + wCnt) := dut_mem.w.bits.data
+        printf("[write] mem[%x] <= %x\n", (dut_mem.aw.bits.addr >> size).asUInt + wCnt, dut_mem.w.bits.data)
         dut_mem.w.ready := true.B
       }
       when(wDone) {
@@ -203,15 +204,15 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
     }
     is(sMemRead) {
       when(dut_mem.r.ready && gold_mem.r.ready) {
-        printf("[read] mem[%x] => %x\n", (dut_mem.ar.bits.addr >> size) + rCnt, dut_mem.r.bits.data)
+        printf("[read] mem[%x] => %x\n", (dut_mem.ar.bits.addr >> size).asUInt + rCnt, dut_mem.r.bits.data)
       }
       when(rDone) {
         dut_mem.ar.ready := true.B
-        memState := sMemIdle 
-      } 
+        memState := sMemIdle
+      }
     }
   }
-  
+
   /* Tests */
   val rnd = new scala.util.Random
   def rand_tag = rnd.nextInt(1 << tlen).U(tlen.W)
@@ -250,13 +251,13 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
     test(tags(2), idxs(1), offs(4)), // #13: read write back
     test(tags(2), idxs(1), offs(5)) // #14: read hit
   )
-  
+
   val sInit :: sStart :: sWait :: sDone :: Nil = Enum(4)
   val state = RegInit(sInit)
   val timeout = Reg(UInt(32.W))
   val (initCnt, initDone) = Counter(state === sInit, initAddr.size)
   val (testCnt, testDone) = Counter(state === sDone, testVec.size)
-  val mask = (VecInit(testVec)(testCnt) >> (blen + slen + tlen + bBits))
+  val mask = (VecInit(testVec)(testCnt) >> (blen + slen + tlen + bBits)).asUInt
   val data = (VecInit(testVec)(testCnt) >> (blen + slen + tlen))(bBits-1, 0)
   val tag  = (VecInit(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
   val idx  = (VecInit(testVec)(testCnt) >> blen.U)(slen - 1, 0)
@@ -264,12 +265,12 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   dut.io.cpu.req.bits.addr  := Cat(tag, idx, off)
   dut.io.cpu.req.bits.data  := data
   dut.io.cpu.req.bits.mask  := mask
-  dut.io.cpu.req.valid      := state === sWait 
+  dut.io.cpu.req.valid      := state === sWait
   dut.io.cpu.abort          := DontCare
   gold_req.bits             := dut.io.cpu.req.bits
   gold_req.valid            := state === sStart
   gold_resp.ready           := state === sDone
-      
+
   switch(state) {
     is(sInit) {
       mem(VecInit(initAddr)(initCnt)) := VecInit(initData)(initCnt)

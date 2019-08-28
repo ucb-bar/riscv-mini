@@ -51,7 +51,6 @@ class MetaData(implicit val p: Parameters) extends Bundle with CacheParams {
 }
 
 class Cache(implicit val p: Parameters) extends Module with CacheParams {
-  import Chisel._ // FIXME: read enable signals for memories are broken by new chisel
   val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
@@ -60,8 +59,8 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   // memory
   val v        = RegInit(0.U(nSets.W))
   val d        = RegInit(0.U(nSets.W))
-  val metaMem  = SeqMem(nSets, new MetaData)
-  val dataMem  = Seq.fill(nWords)(SeqMem(nSets, Vec(wBytes, UInt(8.W))))
+  val metaMem  = SyncReadMem(nSets, new MetaData)
+  val dataMem  = Seq.fill(nWords)(SyncReadMem(nSets, Vec(wBytes, UInt(8.W))))
 
   val addr_reg = Reg(io.cpu.req.bits.addr.cloneType)
   val cpu_data = Reg(io.cpu.req.bits.data.cloneType)
@@ -98,7 +97,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   hit := v(idx_reg) && rmeta.tag === tag_reg 
 
   // Read Mux
-  io.cpu.resp.bits.data := Vec.tabulate(nWords)(i => read((i+1)*xlen-1, i*xlen))(off_reg)
+  io.cpu.resp.bits.data := VecInit.tabulate(nWords)(i => read((i+1)*xlen-1, i*xlen))(off_reg)
   io.cpu.resp.valid     := is_idle || is_read && hit || is_alloc_reg && !cpu_mask.orR
 
   when(io.cpu.resp.valid) { 
@@ -110,7 +109,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val wmeta = Wire(new MetaData)
   wmeta.tag := tag_reg
 
-  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, SInt(-1))
+  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).asUInt.zext, (-1).S)
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), 
     if (refill_buf.size == 1) io.nasti.r.bits.data
     else Cat(io.nasti.r.bits.data, Cat(refill_buf.init.reverse)))
@@ -121,14 +120,14 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
       metaMem.write(idx_reg, wmeta)
     }
     dataMem.zipWithIndex foreach { case (mem, i) =>
-      val data = Vec.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
-      mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).toBools)
+      val data = VecInit.tabulate(wBytes)(k => wdata(i*xlen+(k+1)*8-1, i*xlen+k*8))
+      mem.write(idx_reg, data, wmask((i+1)*wBytes-1, i*wBytes).asBools())
       mem suggestName s"dataMem_${i}"
     }
   }
 
   io.nasti.ar.bits := NastiReadAddressChannel(
-    0.U, Cat(tag_reg, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
+    0.U, (Cat(tag_reg, idx_reg) << blen.U).asUInt, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
   io.nasti.ar.valid := false.B
   // read data
   io.nasti.r.ready := state === s_REFILL
@@ -136,11 +135,11 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
 
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
-    0.U, Cat(rmeta.tag, idx_reg) << blen.U, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
+    0.U, (Cat(rmeta.tag, idx_reg) << blen.U).asUInt, log2Up(nastiXDataBits/8).U, (dataBeats-1).U)
   io.nasti.aw.valid := false.B
   // write data
   io.nasti.w.bits := NastiWriteDataChannel(
-    Vec.tabulate(dataBeats)(i => read((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
+    VecInit.tabulate(dataBeats)(i => read((i+1)*nastiXDataBits-1, i*nastiXDataBits))(write_count),
     None, write_wrap_out)
   io.nasti.w.valid := false.B
   // write resp
