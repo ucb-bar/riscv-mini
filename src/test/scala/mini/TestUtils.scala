@@ -11,6 +11,9 @@ import mini._
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.reflect.ClassTag
+import scala.concurrent.{Future, Await, ExecutionContext}
+import Instructions._
+import scala.language.implicitConversions
 
 trait DatapathTest
 object BypassTest extends DatapathTest {
@@ -192,6 +195,20 @@ trait TestUtils {
     BypassTest    -> 10,
     ExceptionTest -> 4
   )
+}
+
+trait HexUtils {
+  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+  // Group 256 chunks together
+  // because big vecs dramatically increase compile time... :(
+  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
+    assert(line.length % (chunk / 4) == 0)
+    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
+      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
+        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
+      }
+    }
+  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
 }
 
 object TestParams {

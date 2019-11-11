@@ -102,9 +102,9 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   csr_ro    := VecInit(_csr_ro map (_.B))(cntr)
   csr_valid := VecInit(_csr_valid map (_.B))(cntr)
   val wen  = dut.io.cmd === CSR.W || dut.io.cmd(1) && rs1_addr =/= 0.U
-  val prv1 = (regs(CSR.mstatus.litValue()) >> 4.U) & 0x3.U
-  val ie1  = (regs(CSR.mstatus.litValue()) >> 3.U) & 0x1.U
-  val prv  = (regs(CSR.mstatus.litValue()) >> 1.U) & 0x3.U 
+  val prv1 = (regs(CSR.mstatus.litValue()) >> 4.U).asUInt & 0x3.U
+  val ie1  = (regs(CSR.mstatus.litValue()) >> 3.U).asUInt & 0x1.U
+  val prv  = (regs(CSR.mstatus.litValue()) >> 1.U).asUInt & 0x3.U
   val ie   =  regs(CSR.mstatus.litValue()) & 0x1.U
   val prv_inst  = dut.io.cmd === CSR.P
   val prv_valid = VecInit(_prv_level map (_.U))(cntr) <= prv
@@ -128,7 +128,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   val wdata = Lookup(dut.io.cmd, 0.U, Seq(
     BitPat(CSR.W) -> dut.io.in,
     BitPat(CSR.S) -> (dut.io.in | rdata),
-    BitPat(CSR.C) -> (~dut.io.in & rdata)
+    BitPat(CSR.C) -> ((~dut.io.in).asUInt & rdata)
   ))
 
   // compute state
@@ -163,19 +163,19 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
       Mux(saddr_invalid, Cause.StoreAddrMisaligned,
       Mux(prv_inst && VecInit(is_ecall)(cntr), Cause.Ecall + prv,
       Mux(prv_inst && VecInit(is_ebreak)(cntr), Cause.Breakpoint, Cause.IllegalInst)))))
-    regs(CSR.mstatus.litValue()) := (prv << 4.U) | (ie << 3.U) | (CSR.PRV_M << 1.U) | 0.U
+    regs(CSR.mstatus.litValue()) := (prv << 4.U).asUInt | (ie << 3.U).asUInt | (CSR.PRV_M << 1.U).asUInt | 0.U
     when(iaddr_invalid || laddr_invalid || saddr_invalid) {
       regs(CSR.mbadaddr.litValue()) := dut.io.addr
     }
   }.elsewhen(is_eret) {
-    regs(CSR.mstatus.litValue()) := (CSR.PRV_U << 4.U) | (1.U << 3.U) | (prv1 << 1.U) | ie1
+    regs(CSR.mstatus.litValue()) := (CSR.PRV_U << 4.U).asUInt | (1.U << 3.U).asUInt | (prv1 << 1.U).asUInt | ie1
   }.elsewhen(wen) {
     when(csr_addr === CSR.mstatus) {
       regs(CSR.mstatus.litValue()) := wdata(5, 0)
     }.elsewhen(csr_addr === CSR.mip) {
-      regs(CSR.mip.litValue()) := (wdata(7) << 7.U) | (wdata(3) << 3.U)
+      regs(CSR.mip.litValue()) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
     }.elsewhen(csr_addr === CSR.mie) {
-      regs(CSR.mie.litValue()) := (wdata(7) << 7.U) | (wdata(3) << 3.U)
+      regs(CSR.mie.litValue()) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
     }.elsewhen(csr_addr === CSR.mepc) {
       regs(CSR.mepc.litValue()) := (wdata >> 2.U) << 2.U
     }.elsewhen(csr_addr === CSR.mcause) {
@@ -216,7 +216,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   val epc = Wire(UInt())
   val evec = Wire(UInt())
   epc := regs(CSR.mepc.litValue())
-  evec := regs(CSR.mtvec.litValue()) + (prv << 6.U)
+  evec := regs(CSR.mtvec.litValue()) + (prv << 6.U).asUInt
 
   when(done) { stop(); stop() } // from VendingMachine example...
   when(cntr.orR) {
