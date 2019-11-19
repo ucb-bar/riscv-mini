@@ -177,7 +177,7 @@ trait TestUtils {
     I(Funct3.ADD, 31, 0,  2),  // ADDI x31, x0,  1 # x31 <- 2
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 3
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x32, 1 # x31 <- 4
-    0.U,                       // excpetion
+    0.U,                       // exception
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 5
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 6
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
@@ -224,7 +224,7 @@ abstract class IntegrationTests[T <: BasicTester : ClassTag](
     val subresults = subtests map { test =>
       val stream = getClass.getResourceAsStream(s"/$test.hex")
       val loadmem = io.Source.fromInputStream(stream).getLines
-      Future(test -> (TesterDriver execute (() => tester(loadmem, testType.maxcycles))))
+      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), nameHint = Some(test))))
     }
     Await.result(Future.sequence(subresults), Duration.Inf)
   }
