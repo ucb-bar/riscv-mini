@@ -3,13 +3,8 @@
 package mini
 
 import chisel3._
-import chisel3.testers._
 import chisel3.util._
-import firrtl.AnnotationSeq
-import mini.Instructions.{EBREAK, ECALL, ERET, FENCEI}
-import mini._
-
-import scala.concurrent.{Await, ExecutionContext, Future}
+import chisel3.testers._
 import scala.reflect.ClassTag
 import scala.concurrent.{Future, Await, ExecutionContext}
 import Instructions._
@@ -182,7 +177,7 @@ trait TestUtils {
     I(Funct3.ADD, 31, 0,  2),  // ADDI x31, x0,  1 # x31 <- 2
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 3
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x32, 1 # x31 <- 4
-    0.U,                       // excpetion
+    0.U,                       // exception
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 5
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 6
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
@@ -219,20 +214,17 @@ object TestParams {
 abstract class IntegrationTests[T <: BasicTester : ClassTag](
     tester: (Iterator[String], Long) => T,
     testType: TestType,
-    N: Int = 6,
-    annotations: AnnotationSeq = Nil) extends org.scalatest.FlatSpec {
+    N: Int = 6) extends org.scalatest.FlatSpec {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
   behavior of dutName
-  import ExecutionContext.Implicits.global
   import scala.concurrent.duration._
-
-  implicit val p = (new MiniConfig).toInstance
+  import ExecutionContext.Implicits.global
 
   val results = testType.tests sliding (N, N) map { subtests =>
     val subresults = subtests map { test =>
       val stream = getClass.getResourceAsStream(s"/$test.hex")
       val loadmem = io.Source.fromInputStream(stream).getLines
-      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), Nil, annotations)))
+      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), nameHint = Some(test))))
     }
     Await.result(Future.sequence(subresults), Duration.Inf)
   }

@@ -75,4 +75,5 @@ abstract class CoreTests(testType: TestType) extends IntegrationTests(
   (loadmem, maxcycles) => new CoreTester(new Core, loadmem, maxcycles), testType)
 class CoreSimpleTests extends CoreTests(SimpleTests)
 class CoreISATests extends CoreTests(ISATests)
-class CoreBmarkTests extends CoreTests(BmarkTests)
+//TODO:  These are uncommented because they take a long time with Treadle.
+// class CoreBmarkTests extends CoreTests(BmarkTests)

@@ -3,11 +3,11 @@
 package mini
 
 import chisel3._
-import chisel3.testers._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
+import chisel3.testers._
 import junctions._
-import mini._
+import freechips.rocketchip.config.Parameters
+import mini.TesterDriver.{TreadleBackend, VerilatorBackend}
 
 class GoldCacheIO(implicit val p: Parameters) extends Bundle {
   val req   = Flipped(Decoupled(new CacheReq))
@@ -20,7 +20,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   val size = log2Ceil(nastiXDataBits / 8).U
   val len  = (dataBeats - 1).U
 
-  val data = Mem(nSets, UInt(bBits.W))
+  val dataMemory = Mem(nSets, UInt(bBits.W))
   val tags = Mem(nSets, UInt(tlen.W))
   val v    = Mem(nSets, Bool())
   val d    = Mem(nSets, Bool())
@@ -29,11 +29,15 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   val tag = (req.addr >> (blen + slen).U).asUInt
   val idx = req.addr(blen + slen - 1, blen)
   val off = req.addr(blen - 1, 0)
-  val read = data(idx)
-  val write = (((0 until bBytes) foldLeft 0.U) { (write, i) =>
-    write | Mux(
-      ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U) (0),
-      (((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt << (8 * i).U).asUInt, read & (BigInt(0xff) << (8 * i)).U)
+
+  val readData  = dataMemory(idx)
+  val writeData = ((0 until bBytes).foldLeft(0.U) { (write, i) =>
+    write | {
+      val condition    =  ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U) (0)
+      val trueClause   = ((((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt) << (8 * BigInt(i)).U).asUInt
+      val falseClause  = readData & (BigInt(0xff) << (8 * i)).U
+      Mux(condition, trueClause, falseClause)
+    }
   }) (bBits - 1, 0)
 
   val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
@@ -41,14 +45,14 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   val (wCnt, wDone) = Counter(state === sWrite, dataBeats)
   val (rCnt, rDone) = Counter(state === sRead && io.nasti.r.valid, dataBeats)
 
-  io.resp.bits.data := read >> ((off / 4.U) * xlen.U)
+  io.resp.bits.data := readData >> ((off / 4.U) * xlen.U)
   io.resp.valid := false.B
   io.req.ready := false.B
   io.nasti.ar.bits := NastiReadAddressChannel(0.U, ((req.addr >> blen.U).asUInt << blen.U).asUInt, size, len)
   io.nasti.ar.valid := false.B
   io.nasti.aw.bits := NastiWriteAddressChannel(0.U, (Cat(tags(idx), idx) << blen.U).asUInt, size, len)
   io.nasti.aw.valid := false.B
-  io.nasti.w.bits := NastiWriteDataChannel((read >> (wCnt * nastiXDataBits.U)).asUInt, None, wDone)
+  io.nasti.w.bits := NastiWriteDataChannel((readData >> (wCnt * nastiXDataBits.U)).asUInt, None, wDone)
   io.nasti.w.valid := state === sWrite
   io.nasti.b.ready := state === sWrAck
   io.nasti.r.ready := state === sRead
@@ -59,12 +63,12 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
         when(v(idx) && (tags(idx) === tag)) {
           when(req.mask.orR) {
             d(idx)    := true.B
-            data(idx) := write
-            printf("[cache] data[%x] <= %x, off: %x, req: %x, mask: %b\n",
-                   idx, write, off, io.req.bits.data, io.req.bits.mask)
+            dataMemory(idx) := writeData
+            printf("[cache] data[%x] <= writeData %x, readData %x, off: %x, req: %x, mask: %b\n",
+                   idx, writeData, readData, off, io.req.bits.data, io.req.bits.mask)
           }.otherwise {
             printf("[cache] data[%x] => %x, off: %x, resp: %x\n",
-                   idx, read, off, io.resp.bits.data)
+                   idx, readData, off, io.resp.bits.data)
           }
           io.req.ready := true.B
           io.resp.valid := true.B
@@ -73,7 +77,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
             io.nasti.aw.valid := true.B
             state := sWrite
           }.otherwise {
-            data(idx) := 0.U
+            dataMemory(idx) := 0.U
             io.nasti.ar.valid := true.B
             state := sRead
           }
@@ -87,14 +91,14 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
     }
     is(sWrAck) {
       when(io.nasti.b.valid) {
-        data(idx) := 0.U
+        dataMemory(idx) := 0.U
         io.nasti.ar.valid := true.B
         state := sRead
       }
     }
     is(sRead) {
       when(io.nasti.r.valid) {
-        data(idx) := read | ((io.nasti.r.bits.data << (rCnt * nastiXDataBits.U)).asUInt)
+        dataMemory(idx) := readData | ((io.nasti.r.bits.data << (rCnt * nastiXDataBits.U)).asUInt)
       }
       when(rDone) {
         assert(io.nasti.r.bits.last)
@@ -308,7 +312,12 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
 
 class CacheTests extends org.scalatest.FlatSpec {
   implicit val p = (new MiniConfig).toInstance
-  "Cache" should "pass" in {
-    assert(TesterDriver execute (() => new CacheTester(new Cache)))
+
+  "Cache" should "pass with verilator" in {
+    assert(TesterDriver.execute(() => new CacheTester(new Cache), annotations = Seq(VerilatorBackend)))
+  }
+
+  "Cache" should "pass with treadle" in {
+    assert(TesterDriver.execute(() => new CacheTester(new Cache), annotations = Seq(TreadleBackend)))
   }
 }
