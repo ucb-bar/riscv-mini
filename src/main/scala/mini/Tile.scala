@@ -3,6 +3,7 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.BaseModule
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import junctions._
@@ -94,10 +95,10 @@ class TileIO(implicit val p: Parameters) extends Bundle {
   val nasti = new NastiIO
 }
 
-trait TileBase extends core.BaseModule {
+trait TileBase extends BaseModule {
   def io: TileIO
   def clock: Clock
-  def reset: core.Reset
+  def reset: Reset
 }
 
 class Tile(tileParams: Parameters) extends Module with TileBase {

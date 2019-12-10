@@ -26,9 +26,10 @@ class CoreTester(core: => Core,
   val (cntr, done) = Counter(state === sInit, _hex.size * (1 << 8))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
   val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
-  val write = ((0 until (xlen / 8)) foldLeft 0.U(xlen.W)){ (write, i) => write |
-    (Mux(dut.io.dcache.req.valid && dut.io.dcache.req.bits.mask(i),
-         dut.io.dcache.req.bits.data, dmem(daddr))(8*(i+1)-1, 8*i)) << (8*i).U
+  val write = ((0 until (xlen / 8)) foldLeft 0.U(xlen.W)) { (write, i) =>
+    write |
+      ((Mux((dut.io.dcache.req.valid && dut.io.dcache.req.bits.mask(i)).asBool,
+        dut.io.dcache.req.bits.data, dmem(daddr))(8 * (i + 1) - 1, 8 * i)) << (8 * i).U).asUInt
   }
   dut.reset := state === sInit
   dut.io.icache.resp.valid := state === sRun
@@ -37,7 +38,7 @@ class CoreTester(core: => Core,
   dut.io.dcache.resp.bits.data := RegNext(dmem(daddr))
  
   val chunk = Wire(UInt(xlen.W))
-  chunk := _hex(cntr >> 8.U) >> (cntr(7, 0) * xlen.U)
+  chunk := _hex((cntr >> 8.U).asUInt) >> (cntr(7, 0) * xlen.U)
 
   switch(state) {
     is(sInit) {
@@ -62,7 +63,7 @@ class CoreTester(core: => Core,
       assert(cycle < maxcycles.U)
       when(dut.io.host.tohost =/= 0.U) {
         printf("cycles: %d\n", cycle)
-        assert((dut.io.host.tohost >> 1.U) === 0.U,
+        assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
           "* tohost: %d *\n", dut.io.host.tohost)
         stop(); stop()
       }

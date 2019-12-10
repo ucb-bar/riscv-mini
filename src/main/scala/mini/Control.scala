@@ -147,7 +147,7 @@ class Control(implicit p: Parameters) extends Module {
 
   // Control signals for Fetch
   io.pc_sel    := ctrlSignals(0)
-  io.inst_kill := ctrlSignals(6).toBool 
+  io.inst_kill := ctrlSignals(6).asBool
 
   // Control signals for Execute
   io.A_sel   := ctrlSignals(1)
@@ -160,7 +160,7 @@ class Control(implicit p: Parameters) extends Module {
   // Control signals for Write Back
   io.ld_type := ctrlSignals(8)
   io.wb_sel  := ctrlSignals(9)
-  io.wb_en   := ctrlSignals(10).toBool
+  io.wb_en   := ctrlSignals(10).asBool
   io.csr_cmd := ctrlSignals(11)
   io.illegal := ctrlSignals(12)
 }

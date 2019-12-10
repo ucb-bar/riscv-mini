@@ -1,3 +1,5 @@
+// See LICENSE for license details.
+
 package mini
 
 import chisel3._
@@ -22,14 +24,13 @@ trait HexUtils {
   }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
 }
 
-
 class TileTester(
-                  tile: => TileBase,
-                  loadmem: Iterator[String],
-                  maxcycles: Long,
-                  latency: Int = 8)
-                (implicit val p: freechips.rocketchip.config.Parameters)
-  extends BasicTester with HexUtils with CacheParams {
+    tile: => TileBase,
+    loadmem: Iterator[String],
+    maxcycles: Long,
+    latency: Int = 8)
+   (implicit val p: freechips.rocketchip.config.Parameters)
+    extends BasicTester with HexUtils with CacheParams {
   val dut = Module(tile)
   // Connect black box clock
   dut match {
@@ -54,12 +55,12 @@ class TileTester(
   val len = Reg(UInt(nastiXLenBits.W))
   val off = Reg(UInt(nastiXLenBits.W))
   val write = ((0 until (nastiXDataBits / 8)) foldLeft 0.U(nastiXDataBits.W)){ (write, i) => write |
-    (Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(8*(i+1)-1, 8*i)) << (8*i).U
+    ((Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(8*(i+1)-1, 8*i)) << (8*i).U).asUInt
   }
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
 
-  dut.reset := reset.toBool || state === sInit
+  dut.reset := reset.asBool || state === sInit
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle
   dut.io.nasti.w.ready  := state === sWrite
@@ -88,9 +89,9 @@ class TileTester(
       "* tohost: %d *\n", dut.io.host.tohost)
     stop(); stop()
   }
-
+ 
   val chunk = Wire(UInt(nastiXDataBits.W))
-  chunk := _hex(cntr >> 8.U) >> (cntr(7, 0) * nastiXDataBits.U)
+  chunk := _hex((cntr >> 8.U).asUInt) >> (cntr(7, 0) * nastiXDataBits.U)
 
   switch(state) {
     is(sInit) {
@@ -100,14 +101,14 @@ class TileTester(
     }
     is(sIdle) {
       when(dut.io.nasti.aw.valid) {
-        assert((1.U << dut.io.nasti.aw.bits.size) === (nastiXDataBits / 8).U)
+        assert((1.U << dut.io.nasti.aw.bits.size).asUInt === (nastiXDataBits / 8).U)
         addr := dut.io.nasti.aw.bits.addr / (nastiXDataBits / 8).U
         id := dut.io.nasti.aw.bits.id
         len := dut.io.nasti.aw.bits.len
         off := 0.U
         state := sWrite
       }.elsewhen(dut.io.nasti.ar.valid) {
-        assert((1.U << dut.io.nasti.ar.bits.size) === (nastiXDataBits / 8).U)
+        assert((1.U << dut.io.nasti.ar.bits.size).asUInt === (nastiXDataBits / 8).U)
         addr := dut.io.nasti.ar.bits.addr / (nastiXDataBits / 8).U
         id := dut.io.nasti.aw.bits.id
         len := dut.io.nasti.ar.bits.len
@@ -118,7 +119,7 @@ class TileTester(
     is(sWrite) {
       when(dut.io.nasti.w.valid) {
         _mem(addr + off) := write
-        if (p(Trace)) printf("MEM[%x] <= %x\n", (addr + off) * (nastiXDataBits / 8).U, write)
+        if (p(Trace)) printf("MEM[%x] <= %x\n", (addr + off) * (nastiXDataBits / 8).U, write) 
         when(off === len) {
           assert(dut.io.nasti.w.bits.last)
           state := sWrAck
@@ -130,7 +131,7 @@ class TileTester(
     is(sWrAck) {
       when(bpipe.ready) {
         state := sIdle
-      }
+      }  
     }
     is(sRead) {
       when(rpipe.ready) {
@@ -164,3 +165,11 @@ object LatencyPipe {
     pipe.io.out
   }
 }
+
+abstract class TileTests(testType: TestType) extends IntegrationTests(
+  (loadmem, maxcycles) => new TileTester(new Tile(p), loadmem, maxcycles), testType)
+class TileSimpleTests extends TileTests(SimpleTests)
+class TileISATests extends TileTests(ISATests)
+class TileBmarkTests extends TileTests(BmarkTests)
+// class TileLargeBmarkTests extends TileTests(LargeBmarkTests)
+
