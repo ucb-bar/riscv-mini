@@ -226,6 +226,8 @@ abstract class IntegrationTests[T <: BasicTester : ClassTag](
   import ExecutionContext.Implicits.global
   import scala.concurrent.duration._
 
+  implicit val p = (new MiniConfig).toInstance
+
   val results = testType.tests sliding (N, N) map { subtests =>
     val subresults = subtests map { test =>
       val stream = getClass.getResourceAsStream(s"/$test.hex")
