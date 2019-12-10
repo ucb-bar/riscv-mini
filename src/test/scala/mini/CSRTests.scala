@@ -3,12 +3,13 @@
 package mini
 
 import chisel3._
-import chisel3.util._
 import chisel3.testers._
-import Control._
+import chisel3.util._
+import mini._
 
 class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketchip.config.Parameters)
    extends BasicTester with TestUtils {
+  import Control._
   val dut = Module(c)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)

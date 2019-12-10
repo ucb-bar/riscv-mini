@@ -3,9 +3,10 @@
 package mini
 
 import chisel3._
-import chisel3.util._
 import chisel3.testers._
-import TestParams._
+import chisel3.util._
+import mini.TestParams.p
+import mini._
 
 class CoreTester(core: => Core,
                  loadmem: Iterator[String],

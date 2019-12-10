@@ -62,9 +62,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val metaMem  = SyncReadMem(nSets, new MetaData)
   val dataMem  = Seq.fill(nWords)(SyncReadMem(nSets, Vec(wBytes, UInt(8.W))))
 
-  val addr_reg = Reg(io.cpu.req.bits.addr.cloneType)
-  val cpu_data = Reg(io.cpu.req.bits.data.cloneType)
-  val cpu_mask = Reg(io.cpu.req.bits.mask.cloneType)
+  val addr_reg = Reg(chiselTypeOf(io.cpu.req.bits.addr))
+  val cpu_data = Reg(chiselTypeOf(io.cpu.req.bits.data))
+  val cpu_mask = Reg(chiselTypeOf(io.cpu.req.bits.mask))
 
   // Counters
   require(dataBeats > 0)
@@ -109,7 +109,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val wmeta = Wire(new MetaData)
   wmeta.tag := tag_reg
 
-  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).asUInt.zext, (-1).S)
+  val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, (-1).S)
   val wdata = Mux(!is_alloc, Fill(nWords, cpu_data), 
     if (refill_buf.size == 1) io.nasti.r.bits.data
     else Cat(io.nasti.r.bits.data, Cat(refill_buf.init.reverse)))

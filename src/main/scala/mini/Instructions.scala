@@ -2,7 +2,6 @@
 
 package mini
 
-import chisel3.UInt
 import chisel3.util.BitPat
 
 object Instructions {

@@ -3,8 +3,9 @@
 package mini
 
 import chisel3._
-import chisel3.util._
 import chisel3.testers._
+import chisel3.util._
+import mini._
 
 class DatapathTester(datapath: => Datapath,
                      testType: DatapathTest)
