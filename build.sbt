@@ -32,8 +32,8 @@ val defaultVersions = Seq(
 )
 
 val commonSettings = Seq(
-  scalaVersion := "2.12.6",
-  crossScalaVersions := Seq("2.12.6", "2.11.12"),
+  scalaVersion := "2.12.10",
+  crossScalaVersions := Seq("2.12.10", "2.11.12"),
   libraryDependencies ++= defaultVersions.map { case (dep, ver) =>
     "edu.berkeley.cs" %% dep % sys.props.getOrElse(dep + "Version", ver) },
   libraryDependencies ++= Seq(
@@ -82,7 +82,7 @@ pomExtra := (
   </developer>
   <developer>
     <id>chick</id>
-    <name>Charles Markley</name>
+    <name>Chick</name>
     <url>https://aspire.eecs.berkeley.edu/author/chick/</url>
   </developer>
 </developers>
