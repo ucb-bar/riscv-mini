@@ -3,29 +3,24 @@
 package mini
 
 import chisel3._
-import chisel3.util._
+import chisel3.experimental.ExtModule
 import chisel3.testers._
+import chisel3.util._
 import junctions._
-import TestParams._
 
-class LatencyPipeIO[T <: Data](val gen: T) extends Bundle {
-  val in = Flipped(Decoupled(gen))
-  val out = Decoupled(gen)
-}
-
-class LatencyPipe[T <: Data](gen: T, latency: Int) extends Module {
-  val io = IO(new LatencyPipeIO(chiselTypeOf(gen)))
-  io := DontCare
-  io.out <> ((0 until latency) foldLeft io.in)((in, i) => Queue(in, 1, pipe=true))
-}
-
-object LatencyPipe {
-  def apply[T <: Data](in: DecoupledIO[T], latency: Int) = {
-    val pipe = Module(new LatencyPipe(in.bits, latency))
-    pipe.io.in <> in
-    pipe.io.out
-  }
-}
+//trait HexUtils {
+//  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
+//  // Group 256 chunks together
+//  // because big vecs dramatically increase compile time... :(
+//  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
+//    assert(line.length % (chunk / 4) == 0)
+//    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
+//      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
+//        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
+//      }
+//    }
+//  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
+//}
 
 class TileTester(
     tile: => TileBase,
@@ -37,6 +32,8 @@ class TileTester(
   val dut = Module(tile)
   // Connect black box clock
   dut match {
+    case bbox: ExtModule =>
+      bbox.clock := clock
     case bbox: BlackBox =>
       bbox.clock := clock
     case _ =>
@@ -44,7 +41,7 @@ class TileTester(
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = VecInit(loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse))) 
+  val _hex = VecInit(loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse)))
   val _mem = Mem(1 << 20, UInt(nastiXDataBits.W))
   val sInit :: sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(5)
   val state = RegInit(sInit)
@@ -63,7 +60,7 @@ class TileTester(
 
   dut.reset := reset.asBool || state === sInit
   dut.io.nasti.aw.ready := state === sIdle
-  dut.io.nasti.ar.ready := state === sIdle 
+  dut.io.nasti.ar.ready := state === sIdle
   dut.io.nasti.w.ready  := state === sWrite
   dut.io.nasti.b <> LatencyPipe(bpipe, latency)
   dut.io.nasti.r <> LatencyPipe(rpipe, latency)
@@ -72,15 +69,23 @@ class TileTester(
   rpipe.bits  := NastiReadDataChannel(id, _mem(addr + off), off === len)
   rpipe.valid := state === sRead
 
+  val isDone = WireInit(false.B)
+  val setDone = WireInit(false.B)
+
   when(state =/= sInit) {
     cycle := cycle + 1.U
     assert(cycle < maxcycles.U)
     when(dut.io.host.tohost =/= 0.U) {
-      printf("cycles: %d\n", cycle)
-      assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
-        "* tohost: %d *\n", dut.io.host.tohost)
-      stop(); stop()
+      isDone := true.B
     }
+  }
+
+  setDone := isDone
+  when(setDone) {
+    printf("cycles: %d\n", cycle)
+    assert((dut.io.host.tohost >> 1.U) === 0.U,
+      "* tohost: %d *\n", dut.io.host.tohost)
+    stop(); stop()
   }
  
   val chunk = Wire(UInt(nastiXDataBits.W))
@@ -138,9 +143,35 @@ class TileTester(
   }
 }
 
+
+
+class LatencyPipeIO[T <: Data](val gen: T) extends Bundle {
+  val in = Flipped(Decoupled(gen))
+  val out = Decoupled(gen)
+}
+
+class LatencyPipe[T <: Data](gen: T, latency: Int) extends Module {
+  val io = IO(new LatencyPipeIO(chiselTypeOf(gen)))
+  io := DontCare
+  io.out <> ((0 until latency) foldLeft io.in)((in, i) => Queue(in, 1, pipe=true))
+}
+
+object LatencyPipe {
+  def apply[T <: Data](in: DecoupledIO[T], latency: Int) = {
+    val pipe = Module(new LatencyPipe(in.bits, latency))
+    pipe.io.in <> in
+    pipe.io.out
+  }
+}
+
 abstract class TileTests(testType: TestType) extends IntegrationTests(
-  (loadmem, maxcycles) => new TileTester(new Tile(p), loadmem, maxcycles), testType)
+  (loadmem, maxcycles) => {
+    implicit val p = (new MiniConfig).toInstance
+    new TileTester(new Tile(p), loadmem, maxcycles)
+  }, testType
+)
 class TileSimpleTests extends TileTests(SimpleTests)
 class TileISATests extends TileTests(ISATests)
 class TileBmarkTests extends TileTests(BmarkTests)
 // class TileLargeBmarkTests extends TileTests(LargeBmarkTests)
+

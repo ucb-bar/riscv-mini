@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util.Valid
-import freechips.rocketchip.config.{Parameters, Field}
+import freechips.rocketchip.config.{Field, Parameters}
 
 case object XLEN extends Field[Int]
 case object Trace extends Field[Boolean]
