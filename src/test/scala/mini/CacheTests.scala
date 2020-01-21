@@ -219,7 +219,10 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   }
 
   /* Tests */
-  val rnd = new scala.util.Random
+  val seed = System.currentTimeMillis()
+  val rnd = new scala.util.Random(seed)
+  println(s"CacheTester using seed $seed")
+
   def rand_tag = rnd.nextInt(1 << tlen).U(tlen.W)
   def rand_idx = rnd.nextInt(1 << slen).U(slen.W)
   def rand_off = (rnd.nextInt(1 << blen) & -4).U(blen.W)
