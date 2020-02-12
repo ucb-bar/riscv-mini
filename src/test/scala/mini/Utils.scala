@@ -5,11 +5,13 @@ package mini
 trait TestType {
   def tests: List[String]
   def maxcycles: Long
+  def namePrefix: String
 }
 
 case object SimpleTests extends TestType {
   val tests = List("rv32ui-p-simple")
   val maxcycles = 15000L
+  val namePrefix = "SimpleTests"
 }
 
 case object ISATests extends TestType {
@@ -21,6 +23,7 @@ case object ISATests extends TestType {
     "sbreak", "scall", "illegal", "ma_fetch", "ma_addr", "csr" //, TODO: "timer"
   ) map (t => s"rv32mi-p-${t}"))
   val maxcycles = 15000L
+  val namePrefix = "ISATests"
 }
 
 case object BmarkTests extends TestType {
@@ -28,6 +31,7 @@ case object BmarkTests extends TestType {
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
   val maxcycles = 1500000L
+  val namePrefix = "BmarkTests"
 }
 
 case object LargeBmarkTests extends TestType {
@@ -36,4 +40,5 @@ case object LargeBmarkTests extends TestType {
     "towers.riscv-large", "vvadd.riscv-large"
   )
   val maxcycles = 5000000L
+  val namePrefix = "LargeBmarkTests"
 }
