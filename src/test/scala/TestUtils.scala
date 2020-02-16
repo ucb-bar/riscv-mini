@@ -176,7 +176,7 @@ trait TestUtils {
     I(Funct3.ADD, 31, 0,  2),  // ADDI x31, x0,  1 # x31 <- 2
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 3
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x32, 1 # x31 <- 4
-    0.U,                       // excpetion
+    0.U,                       // exception
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 5
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 6
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
