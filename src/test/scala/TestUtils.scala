@@ -142,7 +142,7 @@ trait TestUtils {
   def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
     Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
   def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
+    Cat(imm(i)(20, 0), reg(rd), op)
   def J(rd: Int, i: Int) = 
     Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), Opcode.JAL)
   def JR(rd: Int, rs1: Int, i: Int) = 
