@@ -2,9 +2,11 @@ set -e
 # Install Verilator (http://www.veripool.org/projects/verilator/wiki/Installing)
 if [ ! -f $INSTALL_DIR/bin/verilator ]; then 
   mkdir -p $INSTALL_DIR
-  git clone --branch v4.016 --depth 1 http://git.veripool.org/git/verilator
+  git clone https://git.veripool.org/git/verilator
   unset VERILATOR_ROOT
   cd verilator
+  git pull
+  git checkout v3.922
   autoconf
   ./configure --prefix=$INSTALL_DIR
   make
