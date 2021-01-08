@@ -5,6 +5,7 @@ if [ ! -f $INSTALL_DIR/bin/verilator ]; then
   git clone https://git.veripool.org/git/verilator
   unset VERILATOR_ROOT
   cd verilator
+  git config pull.ff only
   git pull
   git checkout v3.922
   autoconf
