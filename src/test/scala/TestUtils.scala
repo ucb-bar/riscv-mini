@@ -17,6 +17,9 @@ object ExceptionTest extends DatapathTest {
   override def toString: String = "exception test"
 }
 // Define your own test
+object PipelineTest extends DatapathTest {
+  override def toString: String = "pipeline test"
+}
 
 trait TestUtils {
   implicit def boolToBoolean(x: Bool) = x.litValue() == 1
@@ -142,7 +145,7 @@ trait TestUtils {
   def B(funct3: UInt, rs1: Int, rs2: Int, i: Int) =
     Cat(imm(i)(12), imm(i)(10, 5), reg(rs2), reg(rs1), funct3, imm(i)(4, 1), imm(i)(11), Opcode.BRANCH)
   def U(op: UInt, rd: Int, i: Int) = 
-    Cat(imm(i), reg(rd), op)
+    Cat(imm(i)(20, 0), reg(rd), op)
   def J(rd: Int, i: Int) = 
     Cat(imm(i)(20), imm(i)(10, 1), imm(i)(11), imm(i)(19, 12), reg(rd), Opcode.JAL)
   def JR(rd: Int, rs1: Int, i: Int) = 
@@ -182,12 +185,27 @@ trait TestUtils {
     I(Funct3.ADD, 31, 31, 1),  // ADDI x31, x31, 1 # x31 <- 7
     fin
   )
+  val pipelineTest = List(
+    U(Opcode.LUI, 5, 12416),    // LUI   x5, 0x03080  # x5 <- 0x03080000
+    S(Funct3.SW, 5, 0, 20),     // SW    x5, x0, 20   # Mem[20] <- 0x03080000
+    fence,
+    L(Funct3.LW, 7, 0, 20),     // LW    x7, x0, 20   # x7 <- 0x03080000
+    U(Opcode.AUIPC, 6, 0),      // AUIPC x6, 0        # x6 <- pc
+    JR(30, 6, 16),              // JALR  x30, x6, 16  # skip 4 instrutions
+    I(Funct3.ADD, 7, 7, 48),    // ADD   x7, x7 48    # x7 <- x7 + 0x30, skiped
+    nop, nop, nop,
+    I(Funct3.ADD, 31, 7, 16),   // ADDI x31, x7, 16   # x31 <- 0x03080010
+    fin
+  )
   val tests = Map(
     BypassTest    -> bypassTest,
-    ExceptionTest -> exceptionTest)
+    ExceptionTest -> exceptionTest,
+    PipelineTest  -> pipelineTest
+  )
   val testResults = Map(
     BypassTest    -> 10,
-    ExceptionTest -> 4
+    ExceptionTest -> 4,
+    PipelineTest  -> 50855952
   )
 }
 
