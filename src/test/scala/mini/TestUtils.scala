@@ -5,9 +5,12 @@ package mini
 import chisel3._
 import chisel3.util._
 import chisel3.testers._
+
 import scala.reflect.ClassTag
-import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import Instructions._
+import org.scalatest.flatspec.AnyFlatSpec
+
 import scala.language.implicitConversions
 
 trait DatapathTest
@@ -214,7 +217,7 @@ object TestParams {
 abstract class IntegrationTests[T <: BasicTester : ClassTag](
     tester: (Iterator[String], Long) => T,
     testType: TestType,
-    N: Int = 6) extends org.scalatest.FlatSpec {
+    N: Int = 6) extends AnyFlatSpec {
   val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
   behavior of dutName
   import scala.concurrent.duration._

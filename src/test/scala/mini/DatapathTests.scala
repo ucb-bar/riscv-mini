@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class DatapathTester(datapath: => Datapath,
                      testType: DatapathTest)
@@ -67,7 +68,7 @@ class DatapathTester(datapath: => Datapath,
   }
 }
 
-class DatapathTests extends org.scalatest.FlatSpec {
+class DatapathTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
   Seq(BypassTest, ExceptionTest) foreach { test =>
     "Datapath" should s"pass $test" in {

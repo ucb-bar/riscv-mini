@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketchip.config.Parameters)
    extends BasicTester with TestUtils {
@@ -240,7 +241,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   }
 }
 
-class CSRTests extends org.scalatest.FlatSpec {
+class CSRTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
   "CSR" should "pass" in {
     assert(TesterDriver execute (() => new CSRTester(new CSR)))

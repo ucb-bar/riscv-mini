@@ -1,0 +1,28 @@
+name: riscv-mini Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scala: [ 2.12.13, 2.13.5 ]
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install Verilator
+      run: |
+        sudo apt-get install -y verilator
+        verilator --version
+
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+
+    - name: Unit Tests
+      run: sbt ++${{ matrix.scala }} test
+
+    - name: Integration Tests
+      run: make run-tests

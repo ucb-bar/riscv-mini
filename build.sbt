@@ -1,58 +1,33 @@
 // See LICENSE for license details.
 
-def scalacOptionsVersion(scalaVersion: String): Seq[String] = {
-  Seq() ++ {
-    // If we're building with Scala > 2.11, enable the compile option
-    //  switch to support our anonymous Bundle definitions:
-    //  https://github.com/scala/bug/issues/10047
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, scalaMajor: Long)) if scalaMajor < 12 => Seq()
-      case _ => Seq("-Xsource:2.11")
-    }
-  }
-}
-
-def javacOptionsVersion(scalaVersion: String): Seq[String] = {
-  Seq() ++ {
-    // Scala 2.12 requires Java 8. We continue to generate
-    //  Java 7 compatible code for Scala 2.11
-    //  for compatibility with old clients.
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, scalaMajor: Long)) if scalaMajor < 12 =>
-        Seq("-source", "1.7", "-target", "1.7")
-      case _ =>
-        Seq("-source", "1.8", "-target", "1.8")
-    }
-  }
-}
-
 // Provide a managed dependency on X if -DXVersion="" is supplied on the command line.
 val defaultVersions = Seq(
-  "chisel3" -> "3.3-SNAPSHOT",
-  "treadle" -> "1.2-SNAPSHOT"
+  "chisel3" -> "3.5.0",
+  "treadle" -> "1.5.0"
 )
 
 val commonSettings = Seq(
-  scalaVersion := "2.12.10",
-  crossScalaVersions := Seq("2.12.10", "2.11.12"),
+  scalaVersion := "2.12.13",
+  crossScalaVersions := Seq("2.12.13", "2.13.5"),
   libraryDependencies ++= defaultVersions.map { case (dep, ver) =>
     "edu.berkeley.cs" %% dep % sys.props.getOrElse(dep + "Version", ver) },
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.0.5"
+    "org.scalatest" %% "scalatest" % "3.2.9" % "test"
   ),
-  scalacOptions ++= scalacOptionsVersion(scalaVersion.value),
-  scalacOptions ++= Seq("-deprecation", "-feature", "-language:reflectiveCalls"),
-  javacOptions ++= javacOptionsVersion(scalaVersion.value),
-  resolvers ++= Seq(
-    Resolver.sonatypeRepo("snapshots"),
-    Resolver.sonatypeRepo("releases")
-  )
+  scalacOptions ++= Seq(
+    "-language:reflectiveCalls",
+    "-deprecation",
+    "-feature",
+    "-Xcheckinit",
+  ),
+  addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % defaultVersions.toMap.get("chisel3").get cross CrossVersion.full),
 )
 
 val miniSettings = commonSettings ++ Seq(
   name := "riscv-mini",
   version := "2.1-SNAPSHOT",
-  organization := "edu.berkeley.cs")
+  organization := "edu.berkeley.cs"
+)
 
 lazy val lib  = project settings commonSettings
 lazy val mini = project in file(".") settings miniSettings dependsOn lib

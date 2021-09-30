@@ -8,6 +8,7 @@ import chisel3.testers._
 import junctions._
 import freechips.rocketchip.config.Parameters
 import mini.TesterDriver.{TreadleBackend, VerilatorBackend}
+import org.scalatest.flatspec.AnyFlatSpec
 
 class GoldCacheIO(implicit val p: Parameters) extends Bundle {
   val req   = Flipped(Decoupled(new CacheReq))
@@ -313,7 +314,7 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   when(testDone) { stop(); stop() } // from VendingMachine example...
 }
 
-class CacheTests extends org.scalatest.FlatSpec {
+class CacheTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
 
   "Cache" should "pass with verilator" in {

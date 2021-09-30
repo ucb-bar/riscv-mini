@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   import Control._
@@ -38,7 +39,7 @@ class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Param
          cntr, dut.io.sel, dut.io.out, out)
 }
 
-class ImmGenTests extends org.scalatest.FlatSpec {
+class ImmGenTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
   "ImmGenWire" should "pass" in {
     assert(TesterDriver execute (() => new ImmGenTester(new ImmGenWire)))

@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class BrCondTester(br: => BrCond)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   import Control._
@@ -48,7 +49,7 @@ class BrCondTester(br: => BrCond)(implicit p: freechips.rocketchip.config.Parame
          cntr, dut.io.br_type, dut.io.rs1, dut.io.rs2, dut.io.taken, out)
 }
 
-class BrCondTests extends org.scalatest.FlatSpec {
+class BrCondTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
   "BrCondSimple" should "pass" in {
     assert(TesterDriver execute (() => new BrCondTester(new BrCondSimple)))

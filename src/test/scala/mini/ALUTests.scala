@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.testers._
 import chisel3.util._
-import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   import ALU._
@@ -51,7 +51,7 @@ class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters)
          cntr, dut.io.alu_op, dut.io.A, dut.io.B, dut.io.out, out._1, dut.io.sum, out._2) 
 }
 
-class ALUTests extends org.scalatest.FlatSpec {
+class ALUTests extends AnyFlatSpec {
   implicit val p = (new MiniConfig).toInstance
   "ALUSimple" should "pass" in {
     assert(TesterDriver execute (() => new ALUTester(new ALUSimple)))
