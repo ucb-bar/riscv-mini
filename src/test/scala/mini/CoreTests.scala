@@ -65,15 +65,15 @@ class CoreTester(core: => Core,
         printf("cycles: %d\n", cycle)
         assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
           "* tohost: %d *\n", dut.io.host.tohost)
-        stop(); stop()
+        stop()
       }
     }
   }
 }
 
-abstract class CoreTests(testType: TestType) extends IntegrationTests(
-  (loadmem, maxcycles) => new CoreTester(new Core, loadmem, maxcycles), testType)
-class CoreSimpleTests extends CoreTests(SimpleTests)
-class CoreISATests extends CoreTests(ISATests)
+//abstract class CoreTests(testType: TestType) extends IntegrationTests(
+//  (loadmem, maxcycles) => new CoreTester(new Core, loadmem, maxcycles), testType)
+//class CoreSimpleTests extends CoreTests(SimpleTests)
+//class CoreISATests extends CoreTests(ISATests)
 //TODO:  These are uncommented because they take a long time with Treadle.
 // class CoreBmarkTests extends CoreTests(BmarkTests)

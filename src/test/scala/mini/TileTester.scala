@@ -8,19 +8,6 @@ import chisel3.testers._
 import chisel3.util._
 import junctions._
 
-//trait HexUtils {
-//  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
-//  // Group 256 chunks together
-//  // because big vecs dramatically increase compile time... :(
-//  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
-//    assert(line.length % (chunk / 4) == 0)
-//    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
-//      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
-//        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
-//      }
-//    }
-//  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
-//}
 
 class TileTester(
     tile: => TileBase,
@@ -85,7 +72,7 @@ class TileTester(
     printf("cycles: %d\n", cycle)
     assert((dut.io.host.tohost >> 1.U) === 0.U,
       "* tohost: %d *\n", dut.io.host.tohost)
-    stop(); stop()
+    stop()
   }
  
   val chunk = Wire(UInt(nastiXDataBits.W))
@@ -164,14 +151,14 @@ object LatencyPipe {
   }
 }
 
-abstract class TileTests(testType: TestType) extends IntegrationTests(
-  (loadmem, maxcycles) => {
-    implicit val p = (new MiniConfig).toInstance
-    new TileTester(new Tile(p), loadmem, maxcycles)
-  }, testType
-)
-class TileSimpleTests extends TileTests(SimpleTests)
-class TileISATests extends TileTests(ISATests)
-class TileBmarkTests extends TileTests(BmarkTests)
+//abstract class TileTests(testType: TestType) extends IntegrationTests(
+//  (loadmem, maxcycles) => {
+//    implicit val p = (new MiniConfig).toInstance
+//    new TileTester(new Tile(p), loadmem, maxcycles)
+//  }, testType
+//)
+//class TileSimpleTests extends TileTests(SimpleTests)
+//class TileISATests extends TileTests(ISATests)
+//class TileBmarkTests extends TileTests(BmarkTests)
 // class TileLargeBmarkTests extends TileTests(LargeBmarkTests)
 

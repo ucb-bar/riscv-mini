@@ -4,11 +4,12 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import chisel3.testers._
+import chiseltest._
 
 import scala.reflect.ClassTag
 import scala.concurrent.{Await, ExecutionContext, Future}
 import Instructions._
+import chisel3.testers.{BasicTester, TesterDriver}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.language.implicitConversions
@@ -23,27 +24,27 @@ object ExceptionTest extends DatapathTest {
 // Define your own test
 
 trait TestUtils {
-  implicit def boolToBoolean(x: Bool) = x.litValue() == 1
+  implicit def boolToBoolean(x: Bool) = x.litValue == 1
   implicit def bitPatToUInt(b: BitPat) = BitPat.bitPatToUInt(b)
   implicit def uintToBitPat(u: UInt) = BitPat(u)
   implicit def bigIntToInt(x: BigInt) = x.toInt
   implicit def bigIntToBoolean(x: BigInt) = x != 0
   def toBigInt(x: Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
 
-  def rs1(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).toInt
-  def rs2(inst: UInt) = ((inst.litValue() >> 20) & 0x1f).toInt
-  def rd (inst: UInt) = ((inst.litValue() >> 7)  & 0x1f).toInt
-  def csr(inst: UInt) =  (inst.litValue() >> 20)
+  def rs1(inst: UInt) = ((inst.litValue >> 15) & 0x1f).toInt
+  def rs2(inst: UInt) = ((inst.litValue >> 20) & 0x1f).toInt
+  def rd (inst: UInt) = ((inst.litValue >> 7)  & 0x1f).toInt
+  def csr(inst: UInt) =  (inst.litValue >> 20)
   def reg(x: Int) = (x & ((1 << 5) - 1)).U(5.W)
   def imm(x: Int) = (x & ((1 << 20) - 1)).S(21.W)
   def Cat(l: Seq[Bits]): UInt = (l.tail foldLeft l.head.asUInt){(x, y) =>
-    assert(x.isLit() && y.isLit())
-    (x.litValue() << y.getWidth | y.litValue()).U((x.getWidth + y.getWidth).W)
+    assert(x.isLit && y.isLit)
+    (x.litValue << y.getWidth | y.litValue).U((x.getWidth + y.getWidth).W)
   }
   def Cat(x: Bits, l: Bits*): UInt = Cat(x :: l.toList)
   val fence = Cat(0.U(4.W), 0xf.U(4.W), 0xf.U(4.W), 0.U(13.W), Opcode.MEMORY)
   val nop   = Cat(0.U(12.W), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
-  val csrRegs = CSR.regs map (_.litValue())
+  val csrRegs = CSR.regs map (_.litValue)
   private val csrMap  = (csrRegs zip List(
     "cycle", "time", "instret", "cycleh", "timeh", "instreth",
     "cyclew", "timew", "instretw", "cyclehw", "timehw", "instrethw",
@@ -53,13 +54,13 @@ trait TestUtils {
   )).toMap
   def csrName(csr: BigInt) = csrMap getOrElse (csr, csr.toString(16))
 
-  private def inst_31(inst: UInt)    = ((inst.litValue() >> 31) & 0x1).U(1.W)
-  private def inst_30_25(inst: UInt) = ((inst.litValue() >> 25) & 0x3f).U(6.W)
-  private def inst_24_21(inst: UInt) = ((inst.litValue() >> 21) & 0xf).U(4.W)
-  private def inst_20(inst: UInt)    = ((inst.litValue() >> 20) & 0x1).U(1.W)
-  private def inst_19_12(inst: UInt) = ((inst.litValue() >> 12) & 0xff).U(8.W)
-  private def inst_11_8(inst: UInt)  = ((inst.litValue() >> 8)  & 0xf).U(4.W)
-  private def inst_7(inst: UInt)     = ((inst.litValue() >> 7)  & 0x1).U(1.W)
+  private def inst_31(inst: UInt)    = ((inst.litValue >> 31) & 0x1).U(1.W)
+  private def inst_30_25(inst: UInt) = ((inst.litValue >> 25) & 0x3f).U(6.W)
+  private def inst_24_21(inst: UInt) = ((inst.litValue >> 21) & 0xf).U(4.W)
+  private def inst_20(inst: UInt)    = ((inst.litValue >> 20) & 0x1).U(1.W)
+  private def inst_19_12(inst: UInt) = ((inst.litValue >> 12) & 0xff).U(8.W)
+  private def inst_11_8(inst: UInt)  = ((inst.litValue >> 8)  & 0xf).U(4.W)
+  private def inst_7(inst: UInt)     = ((inst.litValue >> 7)  & 0x1).U(1.W)
 
   def iimm(inst: UInt) = Cat(Cat(Seq.fill(21){inst_31(inst)}),
                              inst_30_25(inst), inst_24_21(inst), inst_20(inst))
@@ -71,7 +72,7 @@ trait TestUtils {
                              inst_20(inst), inst_19_12(inst), 0.U(12.W))
   def jimm(inst: UInt) = Cat(Cat(Seq.fill(12){inst_31(inst)}), inst_19_12(inst),
                              inst_20(inst), inst_30_25(inst), inst_24_21(inst), 0.U(1.W))
-  def zimm(inst: UInt) = ((inst.litValue() >> 15) & 0x1f).U
+  def zimm(inst: UInt) = ((inst.litValue >> 15) & 0x1f).U
 
   /* Define tests */
   val rnd = new scala.util.Random
@@ -214,22 +215,22 @@ object TestParams {
     (new MiniConfig).toInstance alterPartial { case Trace => false }
 }
 
-abstract class IntegrationTests[T <: BasicTester : ClassTag](
-    tester: (Iterator[String], Long) => T,
-    testType: TestType,
-    N: Int = 6) extends AnyFlatSpec {
-  val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-  behavior of dutName
-  import scala.concurrent.duration._
-  import ExecutionContext.Implicits.global
-
-  val results = testType.tests sliding (N, N) map { subtests =>
-    val subresults = subtests map { test =>
-      val stream = getClass.getResourceAsStream(s"/$test.hex")
-      val loadmem = io.Source.fromInputStream(stream).getLines
-      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), nameHint = Some(testType.namePrefix + test))))
-    }
-    Await.result(Future.sequence(subresults), Duration.Inf)
-  }
-  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
-}
+//abstract class IntegrationTests[T <: BasicTester : ClassTag](
+//    tester: (Iterator[String], Long) => T,
+//    testType: TestType,
+//    N: Int = 6) extends AnyFlatSpec {
+//  val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
+//  behavior of dutName
+//  import scala.concurrent.duration._
+//  import ExecutionContext.Implicits.global
+//
+//  val results = testType.tests sliding (N, N) map { subtests =>
+//    val subresults = subtests map { test =>
+//      val stream = getClass.getResourceAsStream(s"/$test.hex")
+//      val loadmem = io.Source.fromInputStream(stream).getLines
+//      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), nameHint = Some(testType.namePrefix + test))))
+//    }
+//    Await.result(Future.sequence(subresults), Duration.Inf)
+//  }
+//  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
+//}

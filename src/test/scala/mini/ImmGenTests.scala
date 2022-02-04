@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
@@ -21,7 +22,7 @@ class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Param
   val u = VecInit(insts map uimm)
   val j = VecInit(insts map jimm)
   val z = VecInit(insts map zimm)
-  val x = VecInit(insts map iimm map (x => (x.litValue() & -2).U))
+  val x = VecInit(insts map iimm map (x => (x.litValue & -2).U))
   val out = Mux(dut.io.sel === IMM_I, i(cntr),
             Mux(dut.io.sel === IMM_S, s(cntr),
             Mux(dut.io.sel === IMM_B, b(cntr),
@@ -33,18 +34,18 @@ class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Param
   dut.io.inst  := ctrl.io.inst
   dut.io.sel   := ctrl.io.imm_sel
 
-  when(done) { stop(); stop() } // from VendingMachine example...
+  when(done) { stop() }
   assert(dut.io.out === out)
   printf("Counter: %d, Type: 0x%x, Out: %x ?= %x\n",
          cntr, dut.io.sel, dut.io.out, out)
 }
 
-class ImmGenTests extends AnyFlatSpec {
+class ImmGenTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
   "ImmGenWire" should "pass" in {
-    assert(TesterDriver execute (() => new ImmGenTester(new ImmGenWire)))
+    test(new ImmGenTester(new ImmGenWire)).runUntilStop()
   }
   "ImmGenMux" should "pass" in {
-    assert(TesterDriver execute (() => new ImmGenTester(new ImmGenMux)))
+    test(new ImmGenTester(new ImmGenMux)).runUntilStop()
   }
 }

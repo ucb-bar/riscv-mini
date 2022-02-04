@@ -3,7 +3,7 @@
 // Provide a managed dependency on X if -DXVersion="" is supplied on the command line.
 val defaultVersions = Seq(
   "chisel3" -> "3.5.0",
-  "treadle" -> "1.5.0"
+  "treadle" -> "1.5.0",
 )
 
 val commonSettings = Seq(
@@ -11,7 +11,7 @@ val commonSettings = Seq(
   libraryDependencies ++= defaultVersions.map { case (dep, ver) =>
     "edu.berkeley.cs" %% dep % sys.props.getOrElse(dep + "Version", ver) },
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+    "edu.berkeley.cs" %% "chiseltest" % "0.5.0" % "test"
   ),
   scalacOptions ++= Seq(
     "-language:reflectiveCalls",

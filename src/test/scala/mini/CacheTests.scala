@@ -7,7 +7,7 @@ import chisel3.util._
 import chisel3.testers._
 import junctions._
 import freechips.rocketchip.config.Parameters
-import mini.TesterDriver.{TreadleBackend, VerilatorBackend}
+import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class GoldCacheIO(implicit val p: Parameters) extends Bundle {
@@ -311,17 +311,17 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
     }
   }
 
-  when(testDone) { stop(); stop() } // from VendingMachine example...
+  when(testDone) { stop() }
 }
 
-class CacheTests extends AnyFlatSpec {
+class CacheTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
 
   "Cache" should "pass with verilator" in {
-    assert(TesterDriver.execute(() => new CacheTester(new Cache), annotations = Seq(VerilatorBackend)))
+    test(new CacheTester(new Cache)).withAnnotations(Seq(VerilatorBackendAnnotation)).runUntilStop()
   }
 
   "Cache" should "pass with treadle" in {
-    assert(TesterDriver.execute(() => new CacheTester(new Cache), annotations = Seq(TreadleBackend)))
+    test(new CacheTester(new Cache)).runUntilStop()
   }
 }
