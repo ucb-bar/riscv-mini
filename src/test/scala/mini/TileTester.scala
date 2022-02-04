@@ -3,37 +3,32 @@
 package mini
 
 import chisel3._
-import chisel3.experimental.ExtModule
 import chisel3.testers._
 import chisel3.util._
+import chisel3.util.experimental.loadMemoryFromFileInline
+import chiseltest._
 import junctions._
+import org.scalatest.flatspec.AnyFlatSpec
 
 
 class TileTester(
     tile: => TileBase,
-    loadmem: Iterator[String],
-    maxcycles: Long,
+    benchmark: String,
     latency: Int = 8)
    (implicit val p: freechips.rocketchip.config.Parameters)
     extends BasicTester with CacheParams {
+  val filename = "src/test/resources/" + benchmark + ".64.hex" // we have 64 bits per memory entry
+
   val dut = Module(tile)
-  // Connect black box clock
-  dut match {
-    case bbox: ExtModule =>
-      bbox.clock := clock
-    case bbox: BlackBox =>
-      bbox.clock := clock
-    case _ =>
-  }
+
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = VecInit(Seq(false.B)) // TODO: loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse)))
   val _mem = Mem(1 << 20, UInt(nastiXDataBits.W))
-  val sInit :: sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(5)
-  val state = RegInit(sInit)
+  loadMemoryFromFileInline(_mem, filename)
+  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
+  val state = RegInit(sIdle)
   val cycle = RegInit(0.U(32.W))
-  val (cntr, done) = Counter(state === sInit, _hex.size * (1 << 8))
 
   val id = Reg(UInt(nastiXIdBits.W))
   val addr = Reg(UInt(nastiXAddrBits.W))
@@ -45,7 +40,7 @@ class TileTester(
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
 
-  dut.reset := reset.asBool || state === sInit
+  dut.reset := reset.asBool
   dut.io.nasti.aw.ready := state === sIdle
   dut.io.nasti.ar.ready := state === sIdle
   dut.io.nasti.w.ready  := state === sWrite
@@ -59,12 +54,10 @@ class TileTester(
   val isDone = WireInit(false.B)
   val setDone = WireInit(false.B)
 
-  when(state =/= sInit) {
-    cycle := cycle + 1.U
-    assert(cycle < maxcycles.U)
-    when(dut.io.host.tohost =/= 0.U) {
-      isDone := true.B
-    }
+
+  cycle := cycle + 1.U
+  when(dut.io.host.tohost =/= 0.U) {
+    isDone := true.B
   }
 
   setDone := isDone
@@ -74,16 +67,9 @@ class TileTester(
       "* tohost: %d *\n", dut.io.host.tohost)
     stop()
   }
- 
-  val chunk = Wire(UInt(nastiXDataBits.W))
-  chunk := _hex((cntr >> 8.U).asUInt) >> (cntr(7, 0) * nastiXDataBits.U)
+
 
   switch(state) {
-    is(sInit) {
-      _mem(cntr) := chunk
-      when(done) { state := sIdle }
-      if (p(Trace)) printf("LOAMEM[%x] <= %x\n", cntr * (nastiXDataBits / 8).U, chunk)
-    }
     is(sIdle) {
       when(dut.io.nasti.aw.valid) {
         assert((1.U << dut.io.nasti.aw.bits.size).asUInt === (nastiXDataBits / 8).U)
@@ -150,6 +136,16 @@ object LatencyPipe {
     pipe.io.out
   }
 }
+
+class TileSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
+  behavior of "Tile"
+
+  implicit val p = (new MiniConfig).toInstance
+  it should "execute a simple test" in {
+    test(new TileTester(new Tile(p), "rv32ui-p-simple")).runUntilStop(15000)
+  }
+}
+
 
 //abstract class TileTests(testType: TestType) extends IntegrationTests(
 //  (loadmem, maxcycles) => {

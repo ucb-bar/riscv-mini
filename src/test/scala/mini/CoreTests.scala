@@ -9,7 +9,7 @@ import chiseltest._
 import mini.TestParams.p
 import org.scalatest.flatspec.AnyFlatSpec
 
-class CoreTester(core: => Core, benchmark: String, maxcycles: Long)
+class CoreTester(core: => Core, benchmark: String)
                 (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester {
   val filename = "src/test/resources/" + benchmark + ".32.hex" // we have 32 bits per memory entry
 
@@ -48,7 +48,6 @@ class CoreTester(core: => Core, benchmark: String, maxcycles: Long)
     }
   }
   cycle := cycle + 1.U
-  assert(cycle < maxcycles.U)
   when(dut.io.host.tohost =/= 0.U) {
     printf("cycles: %d\n", cycle)
     assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
@@ -61,7 +60,7 @@ class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Core"
 
   it should "execute a simple test" in {
-    test(new CoreTester(new Core, "rv32ui-p-simple", 15000)).runUntilStop(15000)
+    test(new CoreTester(new Core, "rv32ui-p-simple")).runUntilStop(15000)
   }
 }
 
