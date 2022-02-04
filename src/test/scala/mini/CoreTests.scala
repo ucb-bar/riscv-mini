@@ -11,7 +11,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 class CoreTester(core: => Core, benchmark: String)
                 (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester {
-  val filename = "src/test/resources/" + benchmark + ".32.hex" // we have 32 bits per memory entry
+  val filename = "tests/32/" + benchmark // we have 32 bits per memory entry
 
   val xlen = p(XLEN)
   val dut = Module(core)
@@ -60,7 +60,7 @@ class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Core"
 
   it should "execute a simple test" in {
-    test(new CoreTester(new Core, "rv32ui-p-simple")).runUntilStop(15000)
+    test(new CoreTester(new Core, "rv32ui-p-simple.hex")).runUntilStop(15000)
   }
 }
 

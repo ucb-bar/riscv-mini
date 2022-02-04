@@ -17,7 +17,7 @@ class TileTester(
     latency: Int = 8)
    (implicit val p: freechips.rocketchip.config.Parameters)
     extends BasicTester with CacheParams {
-  val filename = "src/test/resources/" + benchmark + ".64.hex" // we have 64 bits per memory entry
+  val filename = "tests/64/" + benchmark // we have 64 bits per memory entry
 
   val dut = Module(tile)
 
@@ -142,7 +142,7 @@ class TileSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
 
   implicit val p = (new MiniConfig).toInstance
   it should "execute a simple test" in {
-    test(new TileTester(new Tile(p), "rv32ui-p-simple")).runUntilStop(15000)
+    test(new TileTester(new Tile(p), "rv32ui-p-simple.hex")).runUntilStop(15000)
   }
 }
 
