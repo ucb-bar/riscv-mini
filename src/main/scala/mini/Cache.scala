@@ -68,8 +68,8 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
 
   // Counters
   require(dataBeats > 0)
-  val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire(), dataBeats)
-  val (write_count, write_wrap_out) = Counter(io.nasti.w.fire(), dataBeats)
+  val (read_count,  read_wrap_out)  = Counter(io.nasti.r.fire, dataBeats)
+  val (write_count, write_wrap_out) = Counter(io.nasti.w.fire, dataBeats)
 
   val is_idle   = state === s_IDLE
   val is_read   = state === s_READ_CACHE
@@ -131,7 +131,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   io.nasti.ar.valid := false.B
   // read data
   io.nasti.r.ready := state === s_REFILL
-  when(io.nasti.r.fire()) { refill_buf(read_count) := io.nasti.r.bits.data }
+  when(io.nasti.r.fire) { refill_buf(read_count) := io.nasti.r.bits.data }
 
   // write addr
   io.nasti.aw.bits := NastiWriteAddressChannel(
@@ -163,9 +163,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
       }.otherwise {
         io.nasti.aw.valid := is_dirty 
         io.nasti.ar.valid := !is_dirty
-        when(io.nasti.aw.fire()) {
+        when(io.nasti.aw.fire) {
           state := s_WRITE_BACK
-        }.elsewhen(io.nasti.ar.fire()) {
+        }.elsewhen(io.nasti.ar.fire) {
           state := s_REFILL
         }
       }
@@ -176,9 +176,9 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
       }.otherwise {
         io.nasti.aw.valid := is_dirty
         io.nasti.ar.valid := !is_dirty
-        when(io.nasti.aw.fire()) {
+        when(io.nasti.aw.fire) {
           state := s_WRITE_BACK
-        }.elsewhen(io.nasti.ar.fire()) {
+        }.elsewhen(io.nasti.ar.fire) {
           state := s_REFILL
         }
       }
@@ -191,13 +191,13 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     }
     is(s_WRITE_ACK) {
       io.nasti.b.ready := true.B
-      when(io.nasti.b.fire()) {
+      when(io.nasti.b.fire) {
         state := s_REFILL_READY
       }
     }
     is(s_REFILL_READY) {
       io.nasti.ar.valid := true.B
-      when(io.nasti.ar.fire()) {
+      when(io.nasti.ar.fire) {
         state := s_REFILL
       }
     }

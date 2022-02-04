@@ -34,7 +34,7 @@ lazy val mini = project in file(".") settings miniSettings dependsOn lib
 
 publishMavenStyle := true
 
-publishArtifact in Test := false
+Test / publishArtifact := false
 pomIncludeRepository := { x => false }
 
 pomExtra := (

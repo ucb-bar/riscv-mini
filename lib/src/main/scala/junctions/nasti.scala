@@ -231,8 +231,6 @@ object NastiWriteResponseChannel {
 class NastiArbiterIO(arbN: Int)(implicit p: Parameters) extends Bundle {
   val master = Vec(arbN, new NastiIO).flip
   val slave = new NastiIO
-  override def cloneType =
-    new NastiArbiterIO(arbN).asInstanceOf[this.type]
 }
 
 /** Arbitrate among arbN masters requesting to a single slave */
@@ -251,12 +249,12 @@ class NastiArbiter(val arbN: Int)(implicit p: Parameters) extends NastiModule {
     val w_chosen = Reg(UInt(width = arbIdBits))
     val w_done = Reg(init = Bool(true))
 
-    when (aw_arb.io.out.fire()) {
+    when (aw_arb.io.out.fire) {
       w_chosen := aw_arb.io.chosen
       w_done := Bool(false)
     }
 
-    when (io.slave.w.fire() && io.slave.w.bits.last) {
+    when (io.slave.w.fire && io.slave.w.bits.last) {
       w_done := Bool(true)
     }
 
