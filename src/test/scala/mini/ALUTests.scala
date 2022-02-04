@@ -5,7 +5,8 @@ package mini
 import chisel3._
 import chisel3.testers._
 import chisel3.util._
-import mini._
+import chiseltest._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
   import ALU._
@@ -44,19 +45,19 @@ class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters)
   dut.io.A := VecInit(rs1 map (_.U))(cntr)
   dut.io.B := VecInit(rs2 map (_.U))(cntr)
 
-  when(done) { stop(); stop() } // from VendingMachine example...
+  when(done) { stop() }
   assert(dut.io.out === out._1)
   assert(dut.io.sum === out._2)
   printf("Counter: %d, OP: 0x%x, A: 0x%x, B: 0x%x, OUT: 0x%x ?= 0x%x, SUM: 0x%x ?= 0x%x\n",
          cntr, dut.io.alu_op, dut.io.A, dut.io.B, dut.io.out, out._1, dut.io.sum, out._2) 
 }
 
-class ALUTests extends org.scalatest.FlatSpec {
+class ALUTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
   "ALUSimple" should "pass" in {
-    assert(TesterDriver execute (() => new ALUTester(new ALUSimple)))
+    test(new ALUTester(new ALUSimple)).runUntilStop()
   }
   "ALUArea" should "pass" in {
-    assert(TesterDriver execute (() => new ALUTester(new ALUArea)))
+    test(new ALUTester(new ALUArea)).runUntilStop()
   }
 }

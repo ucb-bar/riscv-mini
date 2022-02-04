@@ -2,19 +2,14 @@
 
 package mini
 
-trait TestType {
+
+trait TestConfig {
   def tests: List[String]
-  def maxcycles: Long
+  def maxcycles: Int
   def namePrefix: String
 }
 
-case object SimpleTests extends TestType {
-  val tests = List("rv32ui-p-simple")
-  val maxcycles = 15000L
-  val namePrefix = "SimpleTests"
-}
-
-case object ISATests extends TestType {
+case object ISATests extends TestConfig {
   val tests = (List("simple", "add", "addi", "auipc", "and", "andi", // TODO: "fence_i",
     "sb", "sh", "sw", "lb", "lbu", "lh", "lhu", "lui", "lw",
     "beq", "bge", "bgeu", "blt", "bltu", "bne", "j", "jal", "jalr",
@@ -22,23 +17,23 @@ case object ISATests extends TestType {
   ) map (t => s"rv32ui-p-${t}")) ++ (List(
     "sbreak", "scall", "illegal", "ma_fetch", "ma_addr", "csr" //, TODO: "timer"
   ) map (t => s"rv32mi-p-${t}"))
-  val maxcycles = 15000L
+  val maxcycles = 15000
   val namePrefix = "ISATests"
 }
 
-case object BmarkTests extends TestType {
+case object BmarkTests extends TestConfig {
   val tests = List(
     "median.riscv", "multiply.riscv", "qsort.riscv", "towers.riscv", "vvadd.riscv"
   )
-  val maxcycles = 1500000L
+  val maxcycles = 1500000
   val namePrefix = "BmarkTests"
 }
 
-case object LargeBmarkTests extends TestType {
+case object LargeBmarkTests extends TestConfig {
   val tests = List(
     "median.riscv-large", "multiply.riscv-large", "qsort.riscv-large",
     "towers.riscv-large", "vvadd.riscv-large"
   )
-  val maxcycles = 5000000L
+  val maxcycles = 5000000
   val namePrefix = "LargeBmarkTests"
 }

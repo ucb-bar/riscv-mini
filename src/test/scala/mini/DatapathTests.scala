@@ -6,6 +6,8 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import chiseltest._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class DatapathTester(datapath: => Datapath,
                      testType: DatapathTest)
@@ -61,17 +63,17 @@ class DatapathTester(datapath: => Datapath,
       when(dut.io.host.tohost =/= 0.U) {
         assert(dut.io.host.tohost === testResults(testType).U,
                s"* tohost: %d != ${testResults(testType)} *", dut.io.host.tohost)
-        stop(); stop()
+        stop()
       }
     }
   }
 }
 
-class DatapathTests extends org.scalatest.FlatSpec {
+class DatapathTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
-  Seq(BypassTest, ExceptionTest) foreach { test =>
-    "Datapath" should s"pass $test" in {
-      assert(TesterDriver execute (() => new DatapathTester(new Datapath, test)))
+  Seq(BypassTest, ExceptionTest) foreach { tst =>
+    "Datapath" should s"pass $tst" in {
+      test(new DatapathTester(new Datapath, tst)).runUntilStop()
     }
   }
 }

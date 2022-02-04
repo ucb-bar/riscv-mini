@@ -1,0 +1,59 @@
+name: riscv-mini Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Scala Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+    - name: Scala Unit Tests
+      run: sbt "testOnly -- -l IntegrationTest"
+
+  integration-tests:
+    name: Scala Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+    - name: Scala Integration Tests
+      run: sbt "testOnly -- -n IntegrationTest"
+
+  make-integration-tests:
+    name: Makefile based Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+    - name: Makefile Integration Tests
+      run: make run-tests
+
+  all_tests_passed:
+    name: "all tests passed"
+    needs: [test, integration-tests, make-integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Success!

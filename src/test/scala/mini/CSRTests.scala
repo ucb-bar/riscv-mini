@@ -6,6 +6,8 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import mini._
+import chiseltest._
+import org.scalatest.flatspec.AnyFlatSpec
 
 class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketchip.config.Parameters)
    extends BasicTester with TestUtils {
@@ -15,31 +17,31 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   val xlen = p(XLEN)
 
   override val insts = 
-    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue(), csr.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRC, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, rand_rs1.litValue()))) ++
-    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue(), csr.litValue()))) ++ List[UInt](
+    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRW, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRS, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRC, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRWI, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRSI, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => SYS(Funct3.CSRRCI, 0, csr, rand_rs1.litValue))) ++
+    (CSR.regs map (csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue))) ++ List[UInt](
     // system insts
     Instructions.ECALL,  SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     Instructions.EBREAK, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     Instructions.ERET,   SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     // illegal addr
-    J(rand_rd.litValue(), rnd.nextInt), SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    JR(rand_rd.litValue(), rand_rs1.litValue(), rnd.nextInt), 
+    J(rand_rd.litValue, rnd.nextInt()), SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
+    JR(rand_rd.litValue, rand_rs1.litValue, rnd.nextInt()),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LW, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
+    L(Funct3.LW, rand_rd.litValue, rand_rs1.litValue, rand_rs2.litValue),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LH, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()), 
+    L(Funct3.LH, rand_rd.litValue, rand_rs1.litValue, rand_rs2.litValue), 
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    L(Funct3.LHU, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
+    L(Funct3.LHU, rand_rd.litValue, rand_rs1.litValue, rand_rs2.litValue),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    S(Funct3.SW, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()), 
+    S(Funct3.SW, rand_rd.litValue, rand_rs1.litValue, rand_rs2.litValue), 
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
-    S(Funct3.SH, rand_rd.litValue(), rand_rs1.litValue(), rand_rs2.litValue()),
+    S(Funct3.SH, rand_rd.litValue, rand_rs1.litValue, rand_rs2.litValue),
     SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
     // illegal inst
     rand_inst, SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
@@ -53,10 +55,10 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   val pc   = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
   val addr = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
   val data = Seq.fill(insts.size)(rnd.nextInt()) map toBigInt
-  val regs = (CSR.regs map (_.litValue()) map { addr => addr -> RegInit(
-    if (addr == CSR.mcpuid.litValue()) (BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')).U(xlen.W)
-    else if (addr == CSR.mstatus.litValue()) (CSR.PRV_M.litValue() << 4 | CSR.PRV_M.litValue() << 1).U(xlen.W)
-    else if (addr == CSR.mtvec.litValue()) Const.PC_EVEC.U(xlen.W) else 0.U(xlen.W)
+  val regs = (CSR.regs map (_.litValue) map { addr => addr -> RegInit(
+    if (addr == CSR.mcpuid.litValue) (BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')).U(xlen.W)
+    else if (addr == CSR.mstatus.litValue) (CSR.PRV_M.litValue << 4 | CSR.PRV_M.litValue << 1).U(xlen.W)
+    else if (addr == CSR.mtvec.litValue) Const.PC_EVEC.U(xlen.W) else 0.U(xlen.W)
   )}).toMap
 
   ctrl.io.inst    := VecInit(insts)(cntr)
@@ -78,8 +80,8 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   val _csr_addr  = insts map csr
   val _rs1_addr  = insts map rs1
   val _csr_ro    = _csr_addr map (x => ((((x >> 11) & 0x1) > 0x0) && (((x >> 10) & 0x1) > 0x0)) || 
-    x == CSR.mtvec.litValue() || x == CSR.mtdeleg.litValue())
-  val _csr_valid = _csr_addr map (x => CSR.regs exists (_.litValue() == x))
+    x == CSR.mtvec.litValue || x == CSR.mtdeleg.litValue)
+  val _csr_valid = _csr_addr map (x => CSR.regs exists (_.litValue == x))
   // should be <= prv in runtime
   val _prv_level = _csr_addr map (x => (x >> 8) & 0x3)
   // should consider prv in runtime
@@ -102,10 +104,10 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   csr_ro    := VecInit(_csr_ro map (_.B))(cntr)
   csr_valid := VecInit(_csr_valid map (_.B))(cntr)
   val wen  = dut.io.cmd === CSR.W || dut.io.cmd(1) && rs1_addr =/= 0.U
-  val prv1 = (regs(CSR.mstatus.litValue()) >> 4.U).asUInt & 0x3.U
-  val ie1  = (regs(CSR.mstatus.litValue()) >> 3.U).asUInt & 0x1.U
-  val prv  = (regs(CSR.mstatus.litValue()) >> 1.U).asUInt & 0x3.U
-  val ie   =  regs(CSR.mstatus.litValue()) & 0x1.U
+  val prv1 = (regs(CSR.mstatus.litValue) >> 4.U).asUInt & 0x3.U
+  val ie1  = (regs(CSR.mstatus.litValue) >> 3.U).asUInt & 0x1.U
+  val prv  = (regs(CSR.mstatus.litValue) >> 1.U).asUInt & 0x3.U
+  val ie   =  regs(CSR.mstatus.litValue) & 0x1.U
   val prv_inst  = dut.io.cmd === CSR.P
   val prv_valid = VecInit(_prv_level map (_.U))(cntr) <= prv
   val iaddr_invalid = VecInit(_iaddr_invalid map (_.B))(cntr) && dut.io.pc_check
@@ -132,93 +134,93 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   ))
 
   // compute state
-  regs(CSR.time.litValue())   := regs(CSR.time.litValue())   + 1.U
-  regs(CSR.timew.litValue())  := regs(CSR.timew.litValue())  + 1.U
-  regs(CSR.mtime.litValue())  := regs(CSR.mtime.litValue())  + 1.U
-  regs(CSR.cycle.litValue())  := regs(CSR.cycle.litValue())  + 1.U
-  regs(CSR.cyclew.litValue()) := regs(CSR.cyclew.litValue()) + 1.U
-  when(regs(CSR.time.litValue()).andR) {
-    regs(CSR.mtime.litValue()) := regs(CSR.mtime.litValue()) + 1.U
-    regs(CSR.timeh.litValue()) := regs(CSR.timeh.litValue()) + 1.U
-    regs(CSR.timehw.litValue()) := regs(CSR.timehw.litValue()) + 1.U
+  regs(CSR.time.litValue)   := regs(CSR.time.litValue)   + 1.U
+  regs(CSR.timew.litValue)  := regs(CSR.timew.litValue)  + 1.U
+  regs(CSR.mtime.litValue)  := regs(CSR.mtime.litValue)  + 1.U
+  regs(CSR.cycle.litValue)  := regs(CSR.cycle.litValue)  + 1.U
+  regs(CSR.cyclew.litValue) := regs(CSR.cyclew.litValue) + 1.U
+  when(regs(CSR.time.litValue).andR) {
+    regs(CSR.mtime.litValue) := regs(CSR.mtime.litValue) + 1.U
+    regs(CSR.timeh.litValue) := regs(CSR.timeh.litValue) + 1.U
+    regs(CSR.timehw.litValue) := regs(CSR.timehw.litValue) + 1.U
   }
-  when(regs(CSR.cycle.litValue()).andR) {
-    regs(CSR.cycleh.litValue()) := regs(CSR.cycleh.litValue()) + 1.U
-    regs(CSR.cyclehw.litValue()) := regs(CSR.cyclehw.litValue()) + 1.U
+  when(regs(CSR.cycle.litValue).andR) {
+    regs(CSR.cycleh.litValue) := regs(CSR.cycleh.litValue) + 1.U
+    regs(CSR.cyclehw.litValue) := regs(CSR.cyclehw.litValue) + 1.U
   }
   when(instret) {
-    regs(CSR.instret.litValue()) := regs(CSR.instret.litValue()) + 1.U
-    regs(CSR.instretw.litValue()) := regs(CSR.instret.litValue()) + 1.U
-    when(regs(CSR.instret.litValue()).andR) {
-      regs(CSR.instreth.litValue()) := regs(CSR.instreth.litValue()) + 1.U
-      regs(CSR.instrethw.litValue()) := regs(CSR.instrethw.litValue()) + 1.U
+    regs(CSR.instret.litValue) := regs(CSR.instret.litValue) + 1.U
+    regs(CSR.instretw.litValue) := regs(CSR.instret.litValue) + 1.U
+    when(regs(CSR.instret.litValue).andR) {
+      regs(CSR.instreth.litValue) := regs(CSR.instreth.litValue) + 1.U
+      regs(CSR.instrethw.litValue) := regs(CSR.instrethw.litValue) + 1.U
     }
   }
 
   when(exception) {
-    regs(CSR.mepc.litValue()) := (dut.io.pc >> 2.U) << 2.U
-    regs(CSR.mcause.litValue()) :=
+    regs(CSR.mepc.litValue) := (dut.io.pc >> 2.U) << 2.U
+    regs(CSR.mcause.litValue) :=
       Mux(iaddr_invalid, Cause.InstAddrMisaligned,
       Mux(laddr_invalid, Cause.LoadAddrMisaligned,
       Mux(saddr_invalid, Cause.StoreAddrMisaligned,
       Mux(prv_inst && VecInit(is_ecall)(cntr), Cause.Ecall + prv,
       Mux(prv_inst && VecInit(is_ebreak)(cntr), Cause.Breakpoint, Cause.IllegalInst)))))
-    regs(CSR.mstatus.litValue()) := (prv << 4.U).asUInt | (ie << 3.U).asUInt | (CSR.PRV_M << 1.U).asUInt | 0.U
+    regs(CSR.mstatus.litValue) := (prv << 4.U).asUInt | (ie << 3.U).asUInt | (CSR.PRV_M << 1.U).asUInt | 0.U
     when(iaddr_invalid || laddr_invalid || saddr_invalid) {
-      regs(CSR.mbadaddr.litValue()) := dut.io.addr
+      regs(CSR.mbadaddr.litValue) := dut.io.addr
     }
   }.elsewhen(is_eret) {
-    regs(CSR.mstatus.litValue()) := (CSR.PRV_U << 4.U).asUInt | (1.U << 3.U).asUInt | (prv1 << 1.U).asUInt | ie1
+    regs(CSR.mstatus.litValue) := (CSR.PRV_U << 4.U).asUInt | (1.U << 3.U).asUInt | (prv1 << 1.U).asUInt | ie1
   }.elsewhen(wen) {
     when(csr_addr === CSR.mstatus) {
-      regs(CSR.mstatus.litValue()) := wdata(5, 0)
+      regs(CSR.mstatus.litValue) := wdata(5, 0)
     }.elsewhen(csr_addr === CSR.mip) {
-      regs(CSR.mip.litValue()) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
+      regs(CSR.mip.litValue) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
     }.elsewhen(csr_addr === CSR.mie) {
-      regs(CSR.mie.litValue()) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
+      regs(CSR.mie.litValue) := (wdata(7) << 7.U).asUInt | (wdata(3) << 3.U).asUInt
     }.elsewhen(csr_addr === CSR.mepc) {
-      regs(CSR.mepc.litValue()) := (wdata >> 2.U) << 2.U
+      regs(CSR.mepc.litValue) := (wdata >> 2.U) << 2.U
     }.elsewhen(csr_addr === CSR.mcause) {
-      regs(CSR.mcause.litValue()) := wdata & ((BigInt(1) << 31) | 0xf).U
+      regs(CSR.mcause.litValue) := wdata & ((BigInt(1) << 31) | 0xf).U
     }.elsewhen(csr_addr === CSR.timew || csr_addr === CSR.mtime) {
-      regs(CSR.time.litValue()) := wdata
-      regs(CSR.timew.litValue()) := wdata
-      regs(CSR.mtime.litValue()) := wdata
+      regs(CSR.time.litValue) := wdata
+      regs(CSR.timew.litValue) := wdata
+      regs(CSR.mtime.litValue) := wdata
     }.elsewhen(csr_addr === CSR.timehw || csr_addr === CSR.mtimeh) {
-      regs(CSR.timeh.litValue()) := wdata
-      regs(CSR.timehw.litValue()) := wdata
-      regs(CSR.mtimeh.litValue()) := wdata
+      regs(CSR.timeh.litValue) := wdata
+      regs(CSR.timehw.litValue) := wdata
+      regs(CSR.mtimeh.litValue) := wdata
     }.elsewhen(csr_addr === CSR.cyclew) {
-      regs(CSR.cycle.litValue()) := wdata
-      regs(CSR.cyclew.litValue()) := wdata
+      regs(CSR.cycle.litValue) := wdata
+      regs(CSR.cyclew.litValue) := wdata
     }.elsewhen(csr_addr === CSR.cyclehw) {
-      regs(CSR.cycleh.litValue()) := wdata
-      regs(CSR.cyclehw.litValue()) := wdata
+      regs(CSR.cycleh.litValue) := wdata
+      regs(CSR.cyclehw.litValue) := wdata
     }.elsewhen(csr_addr === CSR.instretw) {
-      regs(CSR.instret.litValue()) := wdata
-      regs(CSR.instretw.litValue()) := wdata
+      regs(CSR.instret.litValue) := wdata
+      regs(CSR.instretw.litValue) := wdata
     }.elsewhen(csr_addr === CSR.instrethw) {
-      regs(CSR.instreth.litValue()) := wdata
-      regs(CSR.instrethw.litValue()) := wdata
+      regs(CSR.instreth.litValue) := wdata
+      regs(CSR.instrethw.litValue) := wdata
     }.elsewhen(csr_addr === CSR.mtimecmp) {
-      regs(CSR.mtimecmp.litValue()) := wdata
+      regs(CSR.mtimecmp.litValue) := wdata
     }.elsewhen(csr_addr === CSR.mscratch) {
-      regs(CSR.mscratch.litValue()) := wdata
+      regs(CSR.mscratch.litValue) := wdata
     }.elsewhen(csr_addr === CSR.mbadaddr) {
-      regs(CSR.mbadaddr.litValue()) := wdata
+      regs(CSR.mbadaddr.litValue) := wdata
     }.elsewhen(csr_addr === CSR.mtohost) {
-      regs(CSR.mtohost.litValue()) := wdata
+      regs(CSR.mtohost.litValue) := wdata
     }.elsewhen(csr_addr === CSR.mfromhost) {
-      regs(CSR.mfromhost.litValue()) := wdata
+      regs(CSR.mfromhost.litValue) := wdata
     }
   }
 
   val epc = Wire(UInt())
   val evec = Wire(UInt())
-  epc := regs(CSR.mepc.litValue())
-  evec := regs(CSR.mtvec.litValue()) + (prv << 6.U).asUInt
+  epc := regs(CSR.mepc.litValue)
+  evec := regs(CSR.mtvec.litValue) + (prv << 6.U).asUInt
 
-  when(done) { stop(); stop() } // from VendingMachine example...
+  when(done) { stop() }
   when(cntr.orR) {
     assert(dut.io.out  === rdata)
     assert(dut.io.epc  === epc)
@@ -240,9 +242,9 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: freechips.rocketc
   }
 }
 
-class CSRTests extends org.scalatest.FlatSpec {
+class CSRTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
   "CSR" should "pass" in {
-    assert(TesterDriver execute (() => new CSRTester(new CSR)))
+    test(new CSRTester(new CSR)).runUntilStop()
   }
 }

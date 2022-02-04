@@ -31,10 +31,10 @@ $(base_dir)/VTile: $(gen_dir)/Tile.v $(src_dir)/cc/top.cc $(src_dir)/cc/mm.cc $(
 verilator: $(base_dir)/VTile
 
 # isa tests + benchmarks with verilator
-test_hex_files = $(wildcard $(base_dir)/src/test/resources/*.hex)
+test_hex_files = $(wildcard $(base_dir)/tests/*.hex)
 test_out_files = $(foreach f,$(test_hex_files),$(patsubst %.hex,%.out,$(out_dir)/$(notdir $f)))
 
-$(test_out_files): $(out_dir)/%.out: $(base_dir)/VTile $(base_dir)/src/test/resources/%.hex
+$(test_out_files): $(out_dir)/%.out: $(base_dir)/VTile $(base_dir)/tests/%.hex
 	mkdir -p $(out_dir)
 	$^ $(patsubst %.out,%.vcd,$@) 2> $@
 
@@ -50,9 +50,9 @@ $(custom_bmark_out): $(base_dir)/VTile $(custom_bmark_hex)
 	mkdir -p $(out_dir)
 	$^ $(patsubst %.out,%.vcd,$@) 2> $@
 
-run-custom-bmark: $(custom_bmark_out) 
-	
-# unit tests + integration tests 
+run-custom-bmark: $(custom_bmark_out)
+
+# unit tests + integration tests
 test:
 	$(SBT) $(SBT_FLAGS) test
 

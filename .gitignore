@@ -11,3 +11,21 @@ VTile
 dump.vcd*
 DVEfiles
 riscv-tools-priv1.7
+
+# Scala IDEs
+.project
+.classpath
+.settings
+.idea
+*.iml
+/*.bsp/
+
+# Visual Studio Code
+.bloop/
+.metals/
+.vscode/
+
+# Synopsys Verdi
+novas_dump.log
+ucli.key
+

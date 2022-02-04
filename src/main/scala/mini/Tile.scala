@@ -59,31 +59,31 @@ class MemArbiter(implicit p: Parameters) extends Module {
 
   switch(state) {
     is(s_IDLE) {
-      when(io.dcache.aw.fire()) {
+      when(io.dcache.aw.fire) {
         state := s_DCACHE_WRITE
-      }.elsewhen(io.dcache.ar.fire()) {
+      }.elsewhen(io.dcache.ar.fire) {
         state := s_DCACHE_READ
-      }.elsewhen(io.icache.ar.fire()) {
+      }.elsewhen(io.icache.ar.fire) {
         state := s_ICACHE_READ
       }
     }
     is(s_ICACHE_READ) {
-      when(io.nasti.r.fire() && io.nasti.r.bits.last) {
+      when(io.nasti.r.fire && io.nasti.r.bits.last) {
         state := s_IDLE
       }
     }
     is(s_DCACHE_READ) {
-      when(io.nasti.r.fire() && io.nasti.r.bits.last) {
+      when(io.nasti.r.fire && io.nasti.r.bits.last) {
         state := s_IDLE
       }
     }
     is(s_DCACHE_WRITE) {
-      when(io.dcache.w.fire() && io.dcache.w.bits.last) {
+      when(io.dcache.w.fire && io.dcache.w.bits.last) {
         state := s_DCACHE_ACK
       }
     }
     is(s_DCACHE_ACK) {
-      when(io.nasti.b.fire()) {
+      when(io.nasti.b.fire) {
         state := s_IDLE
       }
     }
