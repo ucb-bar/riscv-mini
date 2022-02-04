@@ -4,26 +4,26 @@ package mini
 
 import chisel3._
 import chisel3.testers._
-import chisel3.util._
+import chisel3.util.experimental.loadMemoryFromFileInline
+import chiseltest._
 import mini.TestParams.p
-import mini._
+import org.scalatest.flatspec.AnyFlatSpec
 
-class CoreTester(core: => Core,
-                 loadmem: Iterator[String],
-                 maxcycles: Long)
-                (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with HexUtils {
+class CoreTester(core: => Core, benchmark: String, maxcycles: Long)
+                (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester {
+  val filename = "src/test/resources/" + benchmark + ".32.hex" // we have 32 bits per memory entry
+
   val xlen = p(XLEN)
   val dut = Module(core)
   dut.io.host.fromhost.bits := DontCare
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = VecInit(loadMem(loadmem, xlen) map (x => Cat(x.reverse))) 
   val imem = Mem(1 << 20, UInt(xlen.W))
+  loadMemoryFromFileInline(imem, filename)
   val dmem = Mem(1 << 20, UInt(xlen.W))
-  val sInit :: sRun :: Nil = Enum(2)
-  val state = RegInit(sInit)
+  loadMemoryFromFileInline(dmem, filename)
+
   val cycle = RegInit(0.U(32.W))
-  val (cntr, done) = Counter(state === sInit, _hex.size * (1 << 8))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
   val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
   val write = ((0 until (xlen / 8)) foldLeft 0.U(xlen.W)) { (write, i) =>
@@ -31,43 +31,37 @@ class CoreTester(core: => Core,
       ((Mux((dut.io.dcache.req.valid && dut.io.dcache.req.bits.mask(i)).asBool,
         dut.io.dcache.req.bits.data, dmem(daddr))(8 * (i + 1) - 1, 8 * i)) << (8 * i).U).asUInt
   }
-  dut.reset := state === sInit
-  dut.io.icache.resp.valid := state === sRun
-  dut.io.dcache.resp.valid := state === sRun
+  dut.io.icache.resp.valid := !reset.asBool
+  dut.io.dcache.resp.valid := !reset.asBool
   dut.io.icache.resp.bits.data := RegNext(imem(iaddr))
   dut.io.dcache.resp.bits.data := RegNext(dmem(daddr))
- 
-  val chunk = Wire(UInt(xlen.W))
-  chunk := _hex((cntr >> 8.U).asUInt) >> (cntr(7, 0) * xlen.U)
 
-  switch(state) {
-    is(sInit) {
-      imem(cntr) := chunk
-      dmem(cntr) := chunk
-      when(done) { state := sRun }
-      if (p(Trace)) printf("LOAMEM[%x] <= %x\n", cntr * (xlen / 8).U, chunk)
+  when(dut.io.icache.req.valid) {
+    if (p(Trace)) printf("INST[%x] => %x\n", iaddr * (xlen / 8).U, imem(iaddr))
+  }
+  when(dut.io.dcache.req.valid) {
+    when(dut.io.dcache.req.bits.mask.orR) {
+      dmem(daddr) := write
+      if (p(Trace)) printf("MEM[%x] <= %x\n", daddr * (xlen / 8).U, write)
+    }.otherwise {
+      if (p(Trace)) printf("MEM[%x] => %x\n", daddr * (xlen / 8).U, dmem(daddr))
     }
-    is(sRun) {
-      when(dut.io.icache.req.valid) {
-        if (p(Trace)) printf("INST[%x] => %x\n", iaddr * (xlen / 8).U, imem(iaddr))
-      }
-      when(dut.io.dcache.req.valid) {
-        when(dut.io.dcache.req.bits.mask.orR) {
-          dmem(daddr) := write
-          if (p(Trace)) printf("MEM[%x] <= %x\n", daddr * (xlen / 8).U, write)
-        }.otherwise {
-          if (p(Trace)) printf("MEM[%x] => %x\n", daddr * (xlen / 8).U, dmem(daddr))
-        }
-      }
-      cycle := cycle + 1.U
-      assert(cycle < maxcycles.U)
-      when(dut.io.host.tohost =/= 0.U) {
-        printf("cycles: %d\n", cycle)
-        assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
-          "* tohost: %d *\n", dut.io.host.tohost)
-        stop()
-      }
-    }
+  }
+  cycle := cycle + 1.U
+  assert(cycle < maxcycles.U)
+  when(dut.io.host.tohost =/= 0.U) {
+    printf("cycles: %d\n", cycle)
+    assert((dut.io.host.tohost >> 1.U).asUInt === 0.U,
+      "* tohost: %d *\n", dut.io.host.tohost)
+    stop()
+  }
+}
+
+class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
+  behavior of "Core"
+
+  it should "execute a simple test" in {
+    test(new CoreTester(new Core, "rv32ui-p-simple", 15000)).runUntilStop(15000)
   }
 }
 

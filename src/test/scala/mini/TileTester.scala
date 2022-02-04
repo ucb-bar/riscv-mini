@@ -15,7 +15,7 @@ class TileTester(
     maxcycles: Long,
     latency: Int = 8)
    (implicit val p: freechips.rocketchip.config.Parameters)
-    extends BasicTester with HexUtils with CacheParams {
+    extends BasicTester with CacheParams {
   val dut = Module(tile)
   // Connect black box clock
   dut match {
@@ -28,7 +28,7 @@ class TileTester(
   dut.io.host.fromhost.bits := 0.U
   dut.io.host.fromhost.valid := false.B
 
-  val _hex = VecInit(loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse)))
+  val _hex = VecInit(Seq(false.B)) // TODO: loadMem(loadmem, nastiXDataBits) map (x => Cat(x.reverse)))
   val _mem = Mem(1 << 20, UInt(nastiXDataBits.W))
   val sInit :: sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(5)
   val state = RegInit(sInit)

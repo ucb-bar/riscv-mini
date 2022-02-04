@@ -4,13 +4,8 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import chiseltest._
-
-import scala.reflect.ClassTag
-import scala.concurrent.{Await, ExecutionContext, Future}
 import Instructions._
-import chisel3.testers.{BasicTester, TesterDriver}
-import org.scalatest.flatspec.AnyFlatSpec
+
 
 import scala.language.implicitConversions
 
@@ -196,41 +191,6 @@ trait TestUtils {
   )
 }
 
-trait HexUtils {
-  def parseNibble(hex: Int) = if (hex >= 'a') hex - 'a' + 10 else hex - '0'
-  // Group 256 chunks together
-  // because big vecs dramatically increase compile time... :(
-  def loadMem(lines: Iterator[String], chunk: Int) = ((lines flatMap { line =>
-    assert(line.length % (chunk / 4) == 0)
-    ((line.length - (chunk / 4)) to 0 by -(chunk / 4)) map { i =>
-      ((0 until (chunk / 4)) foldLeft BigInt(0)){ (inst, j) =>
-        inst | (BigInt(parseNibble(line(i + j))) << (4 * ((chunk / 4) - (j + 1))))
-      }
-    }
-  }) map (_.U(chunk.W)) sliding (1 << 8, 1 << 8)).toSeq
-}
-
 object TestParams {
-  implicit val p = 
-    (new MiniConfig).toInstance alterPartial { case Trace => false }
+  implicit val p = (new MiniConfig).toInstance alterPartial { case Trace => false }
 }
-
-//abstract class IntegrationTests[T <: BasicTester : ClassTag](
-//    tester: (Iterator[String], Long) => T,
-//    testType: TestType,
-//    N: Int = 6) extends AnyFlatSpec {
-//  val dutName = implicitly[ClassTag[T]].runtimeClass.getSimpleName
-//  behavior of dutName
-//  import scala.concurrent.duration._
-//  import ExecutionContext.Implicits.global
-//
-//  val results = testType.tests sliding (N, N) map { subtests =>
-//    val subresults = subtests map { test =>
-//      val stream = getClass.getResourceAsStream(s"/$test.hex")
-//      val loadmem = io.Source.fromInputStream(stream).getLines
-//      Future(test -> (TesterDriver.execute(() => tester(loadmem, testType.maxcycles), nameHint = Some(testType.namePrefix + test))))
-//    }
-//    Await.result(Future.sequence(subresults), Duration.Inf)
-//  }
-//  results.flatten foreach { case (name, pass) => it should s"pass $name" in { assert(pass) } }
-//}
