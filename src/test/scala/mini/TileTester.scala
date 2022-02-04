@@ -150,7 +150,7 @@ abstract class TileTests(cfg: TestConfig, useVerilator: Boolean = false) extends
   val opts = if(useVerilator) Seq(VerilatorBackendAnnotation) else Seq()
   implicit val p = (new MiniConfig).toInstance
   cfg.tests.foreach { name =>
-    it should s"execute $name" in {
+    it should s"execute $name" taggedAs IntegrationTest in {
       test(new TileTester(new Tile(p), name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
     }
   }

@@ -67,7 +67,7 @@ abstract class CoreTests(cfg: TestConfig, useVerilator: Boolean = false) extends
   behavior of "Core"
   val opts = if(useVerilator) Seq(VerilatorBackendAnnotation) else Seq()
   cfg.tests.foreach { name =>
-    it should s"execute $name" in {
+    it should s"execute $name" taggedAs IntegrationTest in {
       test(new CoreTester(new Core, name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
     }
   }

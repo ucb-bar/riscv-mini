@@ -7,19 +7,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-
     - name: Install Tabby OSS Cad Suite (from YosysHQ)
       uses: YosysHQ/setup-oss-cad-suite@v1
       with:
         osscadsuite-version: '2022-02-02'
-
     - name: Setup Scala
       uses: olafurpg/setup-scala@v11
       with:
         java-version: openjdk@1.11
+    - name: Scala Unit Tests
+      run: sbt "testOnly -- -l IntegrationTest"
 
-    - name: Unit Tests
-      run: sbt test
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+    - name: Scala Integration Tests
+      run: sbt "testOnly -- -n IntegrationTest"
 
-    - name: Integration Tests
+  make-integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
+    - name: Setup Scala
+      uses: olafurpg/setup-scala@v11
+      with:
+        java-version: openjdk@1.11
+    - name: Makefile Integration Tests
       run: make run-tests
+
+  all_tests_passed:
+    name: "all tests passed"
+    needs: [test, integration-tests, make-integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo Success!
