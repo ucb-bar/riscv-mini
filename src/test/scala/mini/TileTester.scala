@@ -17,7 +17,7 @@ class TileTester(
     latency: Int = 8)
    (implicit val p: freechips.rocketchip.config.Parameters)
     extends BasicTester with CacheParams {
-  val filename = "tests/64/" + benchmark // we have 64 bits per memory entry
+  val filename = "tests/64/" + benchmark + ".hex" // we have 64 bits per memory entry
 
   val dut = Module(tile)
 
@@ -139,22 +139,24 @@ object LatencyPipe {
 
 class TileSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Tile"
-
   implicit val p = (new MiniConfig).toInstance
   it should "execute a simple test" in {
-    test(new TileTester(new Tile(p), "rv32ui-p-simple.hex")).runUntilStop(15000)
+    test(new TileTester(new Tile(p), "rv32ui-p-simple")).runUntilStop(15000)
   }
 }
 
+abstract class TileTests(cfg: TestConfig, useVerilator: Boolean = false) extends AnyFlatSpec with ChiselScalatestTester {
+  behavior of "Tile"
+  val opts = if(useVerilator) Seq(VerilatorBackendAnnotation) else Seq()
+  implicit val p = (new MiniConfig).toInstance
+  cfg.tests.foreach { name =>
+    it should s"execute $name" in {
+      test(new TileTester(new Tile(p), name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
+    }
+  }
+}
 
-//abstract class TileTests(testType: TestType) extends IntegrationTests(
-//  (loadmem, maxcycles) => {
-//    implicit val p = (new MiniConfig).toInstance
-//    new TileTester(new Tile(p), loadmem, maxcycles)
-//  }, testType
-//)
-//class TileSimpleTests extends TileTests(SimpleTests)
-//class TileISATests extends TileTests(ISATests)
-//class TileBmarkTests extends TileTests(BmarkTests)
-// class TileLargeBmarkTests extends TileTests(LargeBmarkTests)
+class TileISATests extends TileTests(ISATests)
+class TileBmarkTests extends TileTests(BmarkTests, true)
+class TileLargeBmarkTests extends TileTests(LargeBmarkTests, true)
 

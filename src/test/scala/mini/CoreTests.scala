@@ -11,7 +11,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 
 class CoreTester(core: => Core, benchmark: String)
                 (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester {
-  val filename = "tests/32/" + benchmark // we have 32 bits per memory entry
+  val filename = "tests/32/" + benchmark + ".hex" // we have 32 bits per memory entry
 
   val xlen = p(XLEN)
   val dut = Module(core)
@@ -58,15 +58,20 @@ class CoreTester(core: => Core, benchmark: String)
 
 class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "Core"
-
   it should "execute a simple test" in {
-    test(new CoreTester(new Core, "rv32ui-p-simple.hex")).runUntilStop(15000)
+    test(new CoreTester(new Core, "rv32ui-p-simple")).runUntilStop(15000)
   }
 }
 
-//abstract class CoreTests(testType: TestType) extends IntegrationTests(
-//  (loadmem, maxcycles) => new CoreTester(new Core, loadmem, maxcycles), testType)
-//class CoreSimpleTests extends CoreTests(SimpleTests)
-//class CoreISATests extends CoreTests(ISATests)
-//TODO:  These are uncommented because they take a long time with Treadle.
-// class CoreBmarkTests extends CoreTests(BmarkTests)
+abstract class CoreTests(cfg: TestConfig, useVerilator: Boolean = false) extends AnyFlatSpec with ChiselScalatestTester {
+  behavior of "Core"
+  val opts = if(useVerilator) Seq(VerilatorBackendAnnotation) else Seq()
+  cfg.tests.foreach { name =>
+    it should s"execute $name" in {
+      test(new CoreTester(new Core, name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
+    }
+  }
+}
+
+class CoreISATests extends CoreTests(ISATests)
+class CoreBmarkTests extends CoreTests(BmarkTests)
