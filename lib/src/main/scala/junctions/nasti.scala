@@ -36,7 +36,7 @@ trait HasNastiParameters {
   val nastiXRegionBits = 4
   val nastiXRespBits = 2
 
-  def bytesToXSize(bytes: UInt) = MuxLookup(bytes, UInt("b111"), Array(
+  def bytesToXSize(bytes: UInt) = MuxLookup(bytes, UInt("b111"), Seq(
     UInt(1) -> UInt(0),
     UInt(2) -> UInt(1),
     UInt(4) -> UInt(2),
