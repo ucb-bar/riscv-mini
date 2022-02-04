@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test:
+    name: Scala Unit Tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -19,6 +20,7 @@ jobs:
       run: sbt "testOnly -- -l IntegrationTest"
 
   integration-tests:
+    name: Scala Integration Tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -34,6 +36,7 @@ jobs:
       run: sbt "testOnly -- -n IntegrationTest"
 
   make-integration-tests:
+    name: Makefile based Integration Tests
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
