@@ -7,8 +7,7 @@ val defaultVersions = Seq(
 )
 
 val commonSettings = Seq(
-  scalaVersion := "2.12.13",
-  crossScalaVersions := Seq("2.12.13", "2.13.5"),
+  scalaVersion := "2.13.7",
   libraryDependencies ++= defaultVersions.map { case (dep, ver) =>
     "edu.berkeley.cs" %% dep % sys.props.getOrElse(dep + "Version", ver) },
   libraryDependencies ++= Seq(
