@@ -8,10 +8,10 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Install Verilator
-      run: |
-        sudo apt-get install -y verilator
-        verilator --version
+    - name: Install Tabby OSS Cad Suite (from YosysHQ)
+      uses: YosysHQ/setup-oss-cad-suite@v1
+      with:
+        osscadsuite-version: '2022-02-02'
 
     - name: Setup Scala
       uses: olafurpg/setup-scala@v11
