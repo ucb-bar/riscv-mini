@@ -5,13 +5,10 @@ package mini
 import chisel3._
 import chisel3.testers._
 import chisel3.util._
-import mini._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class ImmGenTester(imm: => ImmGen)(implicit p: freechips.rocketchip.config.Parameters)
-    extends BasicTester
-    with TestUtils {
+class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicTester with TestUtils {
   import Control._
   val dut = Module(imm)
   val ctrl = Module(new Control)

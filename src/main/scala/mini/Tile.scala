@@ -5,7 +5,7 @@ package mini
 import chisel3._
 import chisel3.experimental.BaseModule
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
+import config.Parameters
 import junctions._
 
 class MemArbiterIO(implicit val p: Parameters) extends Bundle {

@@ -15,7 +15,7 @@ class TileTester(
   benchmark: String,
   latency:   Int = 8
 )(
-  implicit val p: freechips.rocketchip.config.Parameters)
+  implicit val p: config.Parameters)
     extends BasicTester
     with CacheParams {
   val filename = "tests/64/" + benchmark + ".hex" // we have 64 bits per memory entry

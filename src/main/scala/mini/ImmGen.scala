@@ -4,7 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
+import config.Parameters
 import mini.Control._
 
 class ImmGenIO(implicit p: Parameters) extends CoreBundle()(p) {
