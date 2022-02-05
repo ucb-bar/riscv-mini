@@ -3,7 +3,7 @@
 package mini
 
 import chisel3.Module
-import freechips.rocketchip.config.{Config, Parameters}
+import config.{Config, Parameters}
 import junctions._
 
 class MiniConfig

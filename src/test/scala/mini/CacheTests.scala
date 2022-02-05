@@ -6,7 +6,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.testers._
 import junctions._
-import freechips.rocketchip.config.Parameters
+import config.Parameters
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -117,9 +117,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   }
 }
 
-class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.Parameters)
-    extends BasicTester
-    with CacheParams {
+class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends BasicTester with CacheParams {
   /* Target Design */
   val dut = Module(cache)
   val dut_mem = Wire(new NastiIO)

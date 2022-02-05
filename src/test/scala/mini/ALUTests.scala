@@ -8,7 +8,7 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class ALUTester(alu: => ALU)(implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
+class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester with TestUtils {
   import ALU._
   val dut = Module(alu)
   val ctrl = Module(new Control)

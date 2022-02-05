@@ -1,6 +1,6 @@
 // See LICENSE.SiFive for license details.
 
-package freechips.rocketchip.config
+package config
 
 abstract class Field[T] private (val default: Option[T]) {
   def this() = this(None)

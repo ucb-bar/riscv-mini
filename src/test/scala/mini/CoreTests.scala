@@ -9,8 +9,7 @@ import chiseltest._
 import mini.TestParams.p
 import org.scalatest.flatspec.AnyFlatSpec
 
-class CoreTester(core: => Core, benchmark: String)(implicit p: freechips.rocketchip.config.Parameters)
-    extends BasicTester {
+class CoreTester(core: => Core, benchmark: String)(implicit p: config.Parameters) extends BasicTester {
   val filename = "tests/32/" + benchmark + ".hex" // we have 32 bits per memory entry
 
   val xlen = p(XLEN)

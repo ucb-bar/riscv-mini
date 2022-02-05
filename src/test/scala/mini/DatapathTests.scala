@@ -5,11 +5,10 @@ package mini
 import chisel3._
 import chisel3.testers._
 import chisel3.util._
-import mini._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class DatapathTester(datapath: => Datapath, testType: DatapathTest)(implicit p: freechips.rocketchip.config.Parameters)
+class DatapathTester(datapath: => Datapath, testType: DatapathTest)(implicit p: config.Parameters)
     extends BasicTester
     with TestUtils {
   val dut = Module(datapath)
