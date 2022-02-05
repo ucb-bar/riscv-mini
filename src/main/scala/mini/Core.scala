@@ -21,7 +21,7 @@ abstract class CoreBundle(implicit val p: Parameters) extends Bundle with CorePa
 
 class HostIO(implicit p: Parameters) extends CoreBundle()(p) {
   val fromhost = Flipped(Valid(UInt(xlen.W)))
-  val tohost   = Output(UInt(xlen.W))
+  val tohost = Output(UInt(xlen.W))
 }
 
 class CoreIO(implicit p: Parameters) extends CoreBundle()(p) {
@@ -32,8 +32,8 @@ class CoreIO(implicit p: Parameters) extends CoreBundle()(p) {
 
 class Core(implicit val p: Parameters) extends Module with CoreParams {
   val io = IO(new CoreIO)
-  val dpath = Module(new Datapath) 
-  val ctrl  = Module(new Control)
+  val dpath = Module(new Datapath)
+  val ctrl = Module(new Control)
 
   io.host <> dpath.io.host
   dpath.io.icache <> io.icache

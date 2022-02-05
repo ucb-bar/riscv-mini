@@ -5,14 +5,14 @@ package mini
 import chisel3._
 import freechips.rocketchip.config.Parameters
 
-class RegFileIO(implicit p: Parameters)  extends CoreBundle()(p) {
+class RegFileIO(implicit p: Parameters) extends CoreBundle()(p) {
   val raddr1 = Input(UInt(5.W))
   val raddr2 = Input(UInt(5.W))
   val rdata1 = Output(UInt(xlen.W))
   val rdata2 = Output(UInt(xlen.W))
-  val wen    = Input(Bool())
-  val waddr  = Input(UInt(5.W))
-  val wdata  = Input(UInt(xlen.W))
+  val wen = Input(Bool())
+  val waddr = Input(UInt(5.W))
+  val wdata = Input(UInt(xlen.W))
 }
 
 class RegFile(implicit val p: Parameters) extends Module with CoreParams {

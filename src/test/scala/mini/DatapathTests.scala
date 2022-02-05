@@ -9,9 +9,9 @@ import mini._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class DatapathTester(datapath: => Datapath,
-                     testType: DatapathTest)
-                    (implicit p: freechips.rocketchip.config.Parameters) extends BasicTester with TestUtils {
+class DatapathTester(datapath: => Datapath, testType: DatapathTest)(implicit p: freechips.rocketchip.config.Parameters)
+    extends BasicTester
+    with TestUtils {
   val dut = Module(datapath)
   val ctrl = Module(new Control)
   val xlen = p(XLEN)
@@ -29,8 +29,9 @@ class DatapathTester(datapath: => Datapath,
   val mem = Mem(1 << 20, UInt(xlen.W))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
   val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
-  val write = ((0 until (xlen / 8)) foldLeft 0.U){ (data, i) => data |
-    (Mux(dut.io.dcache.req.bits.mask(i), dut.io.dcache.req.bits.data, mem(daddr)) & (BigInt(0xff) << (8 * i)).U)
+  val write = ((0 until (xlen / 8)).foldLeft(0.U)) { (data, i) =>
+    data |
+      (Mux(dut.io.dcache.req.bits.mask(i), dut.io.dcache.req.bits.data, mem(daddr)) & (BigInt(0xff) << (8 * i)).U)
   }
   dut.reset := state === sInit
   dut.io.icache.resp.bits.data := RegNext(mem(iaddr))
@@ -40,7 +41,7 @@ class DatapathTester(datapath: => Datapath,
 
   switch(state) {
     is(sInit) {
-      (0 until Const.PC_START by 4) foreach { addr =>
+      (0 until Const.PC_START by 4).foreach { addr =>
         mem((addr / 4).U) := (if (addr == Const.PC_EVEC + (3 << 6)) fin else nop)
       }
       mem((Const.PC_START / (xlen / 8)).U + cntr) := VecInit(insts)(cntr)
@@ -61,8 +62,11 @@ class DatapathTester(datapath: => Datapath,
       timeout := timeout + 1.U
       assert(timeout < 100.U)
       when(dut.io.host.tohost =/= 0.U) {
-        assert(dut.io.host.tohost === testResults(testType).U,
-               s"* tohost: %d != ${testResults(testType)} *", dut.io.host.tohost)
+        assert(
+          dut.io.host.tohost === testResults(testType).U,
+          s"* tohost: %d != ${testResults(testType)} *",
+          dut.io.host.tohost
+        )
         stop()
       }
     }
@@ -71,7 +75,7 @@ class DatapathTester(datapath: => Datapath,
 
 class DatapathTests extends AnyFlatSpec with ChiselScalatestTester {
   implicit val p = (new MiniConfig).toInstance
-  Seq(BypassTest, ExceptionTest) foreach { tst =>
+  Seq(BypassTest, ExceptionTest).foreach { tst =>
     "Datapath" should s"pass $tst" in {
       test(new DatapathTester(new Datapath, tst)).runUntilStop()
     }

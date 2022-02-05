@@ -11,35 +11,35 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class GoldCacheIO(implicit val p: Parameters) extends Bundle {
-  val req   = Flipped(Decoupled(new CacheReq))
-  val resp  = Decoupled(new CacheResp)
+  val req = Flipped(Decoupled(new CacheReq))
+  val resp = Decoupled(new CacheResp)
   val nasti = new NastiIO
 }
 
 class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
-  val io   = IO(new GoldCacheIO)
+  val io = IO(new GoldCacheIO)
   val size = log2Ceil(nastiXDataBits / 8).U
-  val len  = (dataBeats - 1).U
+  val len = (dataBeats - 1).U
 
   val dataMemory = Mem(nSets, UInt(bBits.W))
   val tags = Mem(nSets, UInt(tlen.W))
-  val v    = Mem(nSets, Bool())
-  val d    = Mem(nSets, Bool())
+  val v = Mem(nSets, Bool())
+  val d = Mem(nSets, Bool())
 
   val req = io.req.bits
   val tag = (req.addr >> (blen + slen).U).asUInt
   val idx = req.addr(blen + slen - 1, blen)
   val off = req.addr(blen - 1, 0)
 
-  val readData  = dataMemory(idx)
+  val readData = dataMemory(idx)
   val writeData = ((0 until bBytes).foldLeft(0.U) { (write, i) =>
     write | {
-      val condition    =  ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U) (0)
-      val trueClause   = ((((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt) << (8 * BigInt(i)).U).asUInt
-      val falseClause  = readData & (BigInt(0xff) << (8 * i)).U
+      val condition = ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U)(0)
+      val trueClause = ((((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt) << (8 * BigInt(i)).U).asUInt
+      val falseClause = readData & (BigInt(0xff) << (8 * i)).U
       Mux(condition, trueClause, falseClause)
     }
-  }) (bBits - 1, 0)
+  })(bBits - 1, 0)
 
   val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
   val state = RegInit(sIdle)
@@ -63,13 +63,19 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
       when(io.req.valid && io.resp.ready) {
         when(v(idx) && (tags(idx) === tag)) {
           when(req.mask.orR) {
-            d(idx)    := true.B
+            d(idx) := true.B
             dataMemory(idx) := writeData
-            printf("[cache] data[%x] <= writeData %x, readData %x, off: %x, req: %x, mask: %b\n",
-                   idx, writeData, readData, off, io.req.bits.data, io.req.bits.mask)
+            printf(
+              "[cache] data[%x] <= writeData %x, readData %x, off: %x, req: %x, mask: %b\n",
+              idx,
+              writeData,
+              readData,
+              off,
+              io.req.bits.data,
+              io.req.bits.mask
+            )
           }.otherwise {
-            printf("[cache] data[%x] => %x, off: %x, resp: %x\n",
-                   idx, readData, off, io.resp.bits.data)
+            printf("[cache] data[%x] => %x, off: %x, resp: %x\n", idx, readData, off, io.resp.bits.data)
           }
           io.req.ready := true.B
           io.resp.valid := true.B
@@ -111,7 +117,9 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   }
 }
 
-class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.Parameters) extends BasicTester with CacheParams {
+class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.Parameters)
+    extends BasicTester
+    with CacheParams {
   /* Target Design */
   val dut = Module(cache)
   val dut_mem = Wire(new NastiIO)
@@ -134,8 +142,8 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   gold.io.nasti.b <> Queue(gold_mem.b, 32)
   gold.io.nasti.r <> Queue(gold_mem.r, 32)
 
-  val size  = log2Ceil(nastiXDataBits / 8).U
-  val len   = (dataBeats - 1).U
+  val size = log2Ceil(nastiXDataBits / 8).U
+  val len = (dataBeats - 1).U
 
   /* Main Memory */
   val mem = Mem(1 << 20, UInt(nastiXDataBits.W))
@@ -144,55 +152,99 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   val (wCnt, wDone) = Counter(memState === sMemWrite && dut_mem.w.valid && gold_mem.w.valid, dataBeats)
   val (rCnt, rDone) = Counter(memState === sMemRead && dut_mem.r.ready && gold_mem.r.ready, dataBeats)
 
-  dut_mem.ar.ready  := false.B
-  dut_mem.aw.ready  := false.B
-  dut_mem.w.ready   := false.B
-  dut_mem.b.valid   := memState === sMemWrAck
-  dut_mem.b.bits    := NastiWriteResponseChannel(0.U)
-  dut_mem.r.valid   := memState === sMemRead
-  dut_mem.r.bits    := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size).asUInt + rCnt), rDone)
+  dut_mem.ar.ready := false.B
+  dut_mem.aw.ready := false.B
+  dut_mem.w.ready := false.B
+  dut_mem.b.valid := memState === sMemWrAck
+  dut_mem.b.bits := NastiWriteResponseChannel(0.U)
+  dut_mem.r.valid := memState === sMemRead
+  dut_mem.r.bits := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size).asUInt + rCnt), rDone)
   gold_mem.ar.ready := dut_mem.ar.ready
   gold_mem.aw.ready := dut_mem.aw.ready
-  gold_mem.w.ready  := dut_mem.w.ready
-  gold_mem.b.valid  := dut_mem.b.valid
-  gold_mem.b.bits   := dut_mem.b.bits
-  gold_mem.r.valid  := dut_mem.r.valid
-  gold_mem.r.bits   := dut_mem.r.bits
+  gold_mem.w.ready := dut_mem.w.ready
+  gold_mem.b.valid := dut_mem.b.valid
+  gold_mem.b.bits := dut_mem.b.bits
+  gold_mem.r.valid := dut_mem.r.valid
+  gold_mem.r.bits := dut_mem.r.bits
 
   switch(memState) {
     is(sMemIdle) {
       when(gold_mem.aw.valid && dut_mem.aw.valid) {
-        assert(dut_mem.aw.bits.id === gold_mem.aw.bits.id,
-          "* dut.io.nasti.aw.bits.id => %x != %x *\n", dut_mem.aw.bits.id, gold_mem.aw.bits.id)
-        assert(gold_mem.aw.bits.addr === dut_mem.aw.bits.addr,
-          "* dut.io.nasti.aw.bits.addr => %x != %x *\n", dut_mem.aw.bits.addr, gold_mem.aw.bits.addr)
-        assert(gold_mem.aw.bits.size === dut_mem.aw.bits.size,
-          "* dut.io.nasti.aw.bits.size => %x != %x *\n", dut_mem.aw.bits.size, gold_mem.aw.bits.size)
-        assert(gold_mem.aw.bits.len  === dut_mem.aw.bits.len,
-          "* dut.io.nasti.aw.bits.len => %x != %x *\n", dut_mem.aw.bits.len, gold_mem.aw.bits.len)
+        assert(
+          dut_mem.aw.bits.id === gold_mem.aw.bits.id,
+          "* dut.io.nasti.aw.bits.id => %x != %x *\n",
+          dut_mem.aw.bits.id,
+          gold_mem.aw.bits.id
+        )
+        assert(
+          gold_mem.aw.bits.addr === dut_mem.aw.bits.addr,
+          "* dut.io.nasti.aw.bits.addr => %x != %x *\n",
+          dut_mem.aw.bits.addr,
+          gold_mem.aw.bits.addr
+        )
+        assert(
+          gold_mem.aw.bits.size === dut_mem.aw.bits.size,
+          "* dut.io.nasti.aw.bits.size => %x != %x *\n",
+          dut_mem.aw.bits.size,
+          gold_mem.aw.bits.size
+        )
+        assert(
+          gold_mem.aw.bits.len === dut_mem.aw.bits.len,
+          "* dut.io.nasti.aw.bits.len => %x != %x *\n",
+          dut_mem.aw.bits.len,
+          gold_mem.aw.bits.len
+        )
         memState := sMemWrite
       }.elsewhen(gold_mem.ar.valid && dut_mem.ar.valid) {
-        assert(dut_mem.ar.bits.id === gold_mem.ar.bits.id,
-          "* dut.io.nasti.ar.bits.id => %x != %x *\n", dut_mem.ar.bits.id, gold_mem.ar.bits.id)
-        assert(gold_mem.ar.bits.addr === dut_mem.ar.bits.addr,
-          "* dut.io.nasti.ar.bits.addr => %x != %x *\n", dut_mem.ar.bits.addr, gold_mem.ar.bits.addr)
-        assert(gold_mem.ar.bits.size === dut_mem.ar.bits.size,
-          "* dut.io.nasti.ar.bits.size => %x != %x *\n", dut_mem.ar.bits.size, gold_mem.ar.bits.size)
-        assert(gold_mem.ar.bits.len  === dut_mem.ar.bits.len,
-          "* dut.io.nasti.ar.bits.len => %x != %x *\nn", dut_mem.ar.bits.len, gold_mem.ar.bits.len)
+        assert(
+          dut_mem.ar.bits.id === gold_mem.ar.bits.id,
+          "* dut.io.nasti.ar.bits.id => %x != %x *\n",
+          dut_mem.ar.bits.id,
+          gold_mem.ar.bits.id
+        )
+        assert(
+          gold_mem.ar.bits.addr === dut_mem.ar.bits.addr,
+          "* dut.io.nasti.ar.bits.addr => %x != %x *\n",
+          dut_mem.ar.bits.addr,
+          gold_mem.ar.bits.addr
+        )
+        assert(
+          gold_mem.ar.bits.size === dut_mem.ar.bits.size,
+          "* dut.io.nasti.ar.bits.size => %x != %x *\n",
+          dut_mem.ar.bits.size,
+          gold_mem.ar.bits.size
+        )
+        assert(
+          gold_mem.ar.bits.len === dut_mem.ar.bits.len,
+          "* dut.io.nasti.ar.bits.len => %x != %x *\nn",
+          dut_mem.ar.bits.len,
+          gold_mem.ar.bits.len
+        )
         memState := sMemRead
       }
     }
     is(sMemWrite) {
       assert(dut_mem.aw.bits.size === size)
-      assert(dut_mem.aw.bits.len  === len)
+      assert(dut_mem.aw.bits.len === len)
       when(gold_mem.w.valid && dut_mem.w.valid) {
-        assert(dut_mem.w.bits.data === gold_mem.w.bits.data,
-          "* dut.io.nasti.w.bits.data => %x != %x *\n", dut_mem.w.bits.data, gold_mem.w.bits.data)
-        assert(dut_mem.w.bits.strb === gold_mem.w.bits.strb,
-          "* dut.io.nasti.w.bits.strb => %x != %x *\n", dut_mem.w.bits.strb, gold_mem.w.bits.strb)
-        assert(dut_mem.w.bits.last === gold_mem.w.bits.last,
-          "* dut.io.nasti.w.bits.last => %x != %x *\n", dut_mem.w.bits.last, gold_mem.w.bits.last)
+        assert(
+          dut_mem.w.bits.data === gold_mem.w.bits.data,
+          "* dut.io.nasti.w.bits.data => %x != %x *\n",
+          dut_mem.w.bits.data,
+          gold_mem.w.bits.data
+        )
+        assert(
+          dut_mem.w.bits.strb === gold_mem.w.bits.strb,
+          "* dut.io.nasti.w.bits.strb => %x != %x *\n",
+          dut_mem.w.bits.strb,
+          gold_mem.w.bits.strb
+        )
+        assert(
+          dut_mem.w.bits.last === gold_mem.w.bits.last,
+          "* dut.io.nasti.w.bits.last => %x != %x *\n",
+          dut_mem.w.bits.last,
+          gold_mem.w.bits.last
+        )
         assert(dut_mem.w.bits.strb === ((1 << (nastiXDataBits / 8)) - 1).U) // TODO: release it?
         mem((dut_mem.aw.bits.addr >> size).asUInt + wCnt) := dut_mem.w.bits.data
         printf("[write] mem[%x] <= %x\n", (dut_mem.aw.bits.addr >> size).asUInt + wCnt, dut_mem.w.bits.data)
@@ -227,8 +279,9 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   def rand_tag = rnd.nextInt(1 << tlen).U(tlen.W)
   def rand_idx = rnd.nextInt(1 << slen).U(slen.W)
   def rand_off = (rnd.nextInt(1 << blen) & -4).U(blen.W)
-  def rand_data = (((0 until (nastiXDataBits / 8)) foldLeft BigInt(0))((r, i) =>
-    r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))).U(nastiXDataBits.W)
+  def rand_data = (
+    ((0 until (nastiXDataBits / 8)).foldLeft(BigInt(0)))((r, i) => r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))
+  ).U(nastiXDataBits.W)
   def rand_mask = (rnd.nextInt((1 << (xlen / 8)) - 1) + 1).U((xlen / 8).W)
   def test(tag: UInt, idx: UInt, off: UInt, mask: UInt = 0.U((xlen / 8).W)) =
     Cat(mask, Cat(Seq.fill(bBits / nastiXDataBits)(rand_data)), tag, idx, off)
@@ -243,7 +296,7 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
     off <- 0 until dataBeats
   } yield Cat(tag, idx, off.U)
   val initData = Seq.fill(initAddr.size)(rand_data)
-  val testVec  = Seq(
+  val testVec = Seq(
     test(tags(0), idxs(0), offs(0)), // #0: read miss
     test(tags(0), idxs(0), offs(1)), // #1: read hit
     test(tags(1), idxs(0), offs(0)), // #2: read miss
@@ -267,18 +320,18 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
   val (initCnt, initDone) = Counter(state === sInit, initAddr.size)
   val (testCnt, testDone) = Counter(state === sDone, testVec.size)
   val mask = (VecInit(testVec)(testCnt) >> (blen + slen + tlen + bBits)).asUInt
-  val data = (VecInit(testVec)(testCnt) >> (blen + slen + tlen))(bBits-1, 0)
-  val tag  = (VecInit(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
-  val idx  = (VecInit(testVec)(testCnt) >> blen.U)(slen - 1, 0)
-  val off  = (VecInit(testVec)(testCnt))(blen - 1, 0)
-  dut.io.cpu.req.bits.addr  := Cat(tag, idx, off)
-  dut.io.cpu.req.bits.data  := data
-  dut.io.cpu.req.bits.mask  := mask
-  dut.io.cpu.req.valid      := state === sWait
-  dut.io.cpu.abort          := DontCare
-  gold_req.bits             := dut.io.cpu.req.bits
-  gold_req.valid            := state === sStart
-  gold_resp.ready           := state === sDone
+  val data = (VecInit(testVec)(testCnt) >> (blen + slen + tlen))(bBits - 1, 0)
+  val tag = (VecInit(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
+  val idx = (VecInit(testVec)(testCnt) >> blen.U)(slen - 1, 0)
+  val off = (VecInit(testVec)(testCnt))(blen - 1, 0)
+  dut.io.cpu.req.bits.addr := Cat(tag, idx, off)
+  dut.io.cpu.req.bits.data := data
+  dut.io.cpu.req.bits.mask := mask
+  dut.io.cpu.req.valid := state === sWait
+  dut.io.cpu.abort := DontCare
+  gold_req.bits := dut.io.cpu.req.bits
+  gold_req.valid := state === sStart
+  gold_resp.ready := state === sDone
 
   switch(state) {
     is(sInit) {
@@ -299,9 +352,12 @@ class CacheTester(cache: => Cache)(implicit val p: freechips.rocketchip.config.P
       assert(timeout < 100.U)
       when(dut.io.cpu.resp.valid && gold_resp.valid) {
         when(!mask.orR) {
-          assert(dut.io.cpu.resp.bits.data === gold_resp.bits.data,
+          assert(
+            dut.io.cpu.resp.bits.data === gold_resp.bits.data,
             "* dut.io.cpu.resp.bits.data => %x ?= %x *\n",
-            dut.io.cpu.resp.bits.data, gold_resp.bits.data)
+            dut.io.cpu.resp.bits.data,
+            gold_resp.bits.data
+          )
         }
         state := sDone
       }

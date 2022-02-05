@@ -11,7 +11,7 @@ import junctions._
 class MemArbiterIO(implicit val p: Parameters) extends Bundle {
   val icache = Flipped(new NastiIO)
   val dcache = Flipped(new NastiIO)
-  val nasti  = new NastiIO
+  val nasti = new NastiIO
 }
 
 class MemArbiter(implicit p: Parameters) extends Module {
@@ -26,8 +26,8 @@ class MemArbiter(implicit p: Parameters) extends Module {
   io.dcache.aw.ready := io.nasti.aw.ready && state === s_IDLE
   io.icache.aw := DontCare
 
-  // Write Data 
-  io.nasti.w.bits  := io.dcache.w.bits
+  // Write Data
+  io.nasti.w.bits := io.dcache.w.bits
   io.nasti.w.valid := io.dcache.w.valid && state === s_DCACHE_WRITE
   io.dcache.w.ready := io.nasti.w.ready && state === s_DCACHE_WRITE
   io.icache.w := DontCare
@@ -40,22 +40,23 @@ class MemArbiter(implicit p: Parameters) extends Module {
 
   // Read Address
   io.nasti.ar.bits := NastiReadAddressChannel(
-    Mux(io.dcache.ar.valid, io.dcache.ar.bits.id,   io.icache.ar.bits.id),
+    Mux(io.dcache.ar.valid, io.dcache.ar.bits.id, io.icache.ar.bits.id),
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.addr, io.icache.ar.bits.addr),
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.size, io.icache.ar.bits.size),
-    Mux(io.dcache.ar.valid, io.dcache.ar.bits.len,  io.icache.ar.bits.len))
-  io.nasti.ar.valid := (io.icache.ar.valid || io.dcache.ar.valid) && 
+    Mux(io.dcache.ar.valid, io.dcache.ar.bits.len, io.icache.ar.bits.len)
+  )
+  io.nasti.ar.valid := (io.icache.ar.valid || io.dcache.ar.valid) &&
     !io.nasti.aw.valid && state === s_IDLE
   io.dcache.ar.ready := io.nasti.ar.ready && !io.nasti.aw.valid && state === s_IDLE
   io.icache.ar.ready := io.dcache.ar.ready && !io.dcache.ar.valid
 
   // Read Data
-  io.icache.r.bits  := io.nasti.r.bits
-  io.dcache.r.bits  := io.nasti.r.bits
+  io.icache.r.bits := io.nasti.r.bits
+  io.dcache.r.bits := io.nasti.r.bits
   io.icache.r.valid := io.nasti.r.valid && state === s_ICACHE_READ
   io.dcache.r.valid := io.nasti.r.valid && state === s_DCACHE_READ
-  io.nasti.r.ready := io.icache.r.ready && state === s_ICACHE_READ || 
-                      io.dcache.r.ready && state === s_DCACHE_READ
+  io.nasti.r.ready := io.icache.r.ready && state === s_ICACHE_READ ||
+    io.dcache.r.ready && state === s_DCACHE_READ
 
   switch(state) {
     is(s_IDLE) {
@@ -91,23 +92,23 @@ class MemArbiter(implicit p: Parameters) extends Module {
 }
 
 class TileIO(implicit val p: Parameters) extends Bundle {
-  val host  = new HostIO
+  val host = new HostIO
   val nasti = new NastiIO
 }
 
 trait TileBase extends BaseModule {
-  def io: TileIO
+  def io:    TileIO
   def clock: Clock
   def reset: Reset
 }
 
 class Tile(tileParams: Parameters) extends Module with TileBase {
   implicit val p = tileParams
-  val io     = IO(new TileIO)
-  val core   = Module(new Core)
+  val io = IO(new TileIO)
+  val core = Module(new Core)
   val icache = Module(new Cache)
   val dcache = Module(new Cache)
-  val arb    = Module(new MemArbiter)
+  val arb = Module(new MemArbiter)
 
   io.host <> core.io.host
   core.io.icache <> icache.io.cpu

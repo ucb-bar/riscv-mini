@@ -10,9 +10,11 @@ object Main extends App {
 
   val targetDirectory = args.head
 
-  new chisel3.stage.ChiselStage().execute(args, Seq(
-    ChiselGeneratorAnnotation(() => new Tile(params)),
-    TargetDirAnnotation(targetDirectory)
-  ))
+  new chisel3.stage.ChiselStage().execute(
+    args,
+    Seq(
+      ChiselGeneratorAnnotation(() => new Tile(params)),
+      TargetDirAnnotation(targetDirectory)
+    )
+  )
 }
-
