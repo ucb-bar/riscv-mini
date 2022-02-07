@@ -6,14 +6,13 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chiseltest._
-import mini.TestParams.p
 import org.scalatest.flatspec.AnyFlatSpec
 
-class CoreTester(core: => Core, benchmark: String)(implicit p: config.Parameters) extends BasicTester {
+class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) extends BasicTester {
   val filename = "tests/32/" + benchmark + ".hex" // we have 32 bits per memory entry
 
-  val xlen = p(XLEN)
   val dut = Module(core)
+  val xlen = dut.conf.xlen
   dut.io.host.fromhost.bits := DontCare
   dut.io.host.fromhost.valid := false.B
 
@@ -39,14 +38,14 @@ class CoreTester(core: => Core, benchmark: String)(implicit p: config.Parameters
   dut.io.dcache.resp.bits.data := RegNext(dmem(daddr))
 
   when(dut.io.icache.req.valid) {
-    if (p(Trace)) printf("INST[%x] => %x\n", iaddr * (xlen / 8).U, imem(iaddr))
+    if (trace) printf("INST[%x] => %x\n", iaddr * (xlen / 8).U, imem(iaddr))
   }
   when(dut.io.dcache.req.valid) {
     when(dut.io.dcache.req.bits.mask.orR) {
       dmem(daddr) := write
-      if (p(Trace)) printf("MEM[%x] <= %x\n", daddr * (xlen / 8).U, write)
+      if (trace) printf("MEM[%x] <= %x\n", daddr * (xlen / 8).U, write)
     }.otherwise {
-      if (p(Trace)) printf("MEM[%x] => %x\n", daddr * (xlen / 8).U, dmem(daddr))
+      if (trace) printf("MEM[%x] => %x\n", daddr * (xlen / 8).U, dmem(daddr))
     }
   }
   cycle := cycle + 1.U
@@ -57,10 +56,14 @@ class CoreTester(core: => Core, benchmark: String)(implicit p: config.Parameters
   }
 }
 
+object DefaultCoreConfig {
+  def apply() = MiniConfig().core
+}
+
 class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior.of("Core")
   it should "execute a simple test" in {
-    test(new CoreTester(new Core, "rv32ui-p-simple")).runUntilStop(15000)
+    test(new CoreTester(new Core(DefaultCoreConfig()), "rv32ui-p-simple")).runUntilStop(15000)
   }
 }
 
@@ -71,7 +74,7 @@ abstract class CoreTests(cfg: TestConfig, useVerilator: Boolean = false)
   val opts = if (useVerilator) Seq(VerilatorBackendAnnotation) else Seq()
   cfg.tests.foreach { name =>
     it should s"execute $name" taggedAs IntegrationTest in {
-      test(new CoreTester(new Core, name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
+      test(new CoreTester(new Core(DefaultCoreConfig()), name)).withAnnotations(opts).runUntilStop(cfg.maxcycles)
     }
   }
 }

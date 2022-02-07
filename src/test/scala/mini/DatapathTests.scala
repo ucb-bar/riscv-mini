@@ -8,12 +8,10 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class DatapathTester(datapath: => Datapath, testType: DatapathTest)(implicit p: config.Parameters)
-    extends BasicTester
-    with TestUtils {
+class DatapathTester(datapath: => Datapath, testType: DatapathTest) extends BasicTester with TestUtils {
   val dut = Module(datapath)
   val ctrl = Module(new Control)
-  val xlen = p(XLEN)
+  val xlen = dut.conf.xlen
 
   dut.io.ctrl <> ctrl.io
   dut.io.host.fromhost.bits := DontCare
@@ -73,10 +71,10 @@ class DatapathTester(datapath: => Datapath, testType: DatapathTest)(implicit p: 
 }
 
 class DatapathTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
+  val p = MiniConfig()
   Seq(BypassTest, ExceptionTest).foreach { tst =>
     "Datapath" should s"pass $tst" in {
-      test(new DatapathTester(new Datapath, tst)).runUntilStop()
+      test(new DatapathTester(new Datapath(p.core), tst)).runUntilStop()
     }
   }
 }

@@ -3,19 +3,17 @@
 package mini
 
 import chisel3._
-import chisel3.experimental.BaseModule
 import chisel3.util._
-import config.Parameters
 import junctions._
 
-class MemArbiterIO(implicit val p: Parameters) extends Bundle {
-  val icache = Flipped(new NastiIO)
-  val dcache = Flipped(new NastiIO)
-  val nasti = new NastiIO
+class MemArbiterIO(params: NastiBundleParameters) extends Bundle {
+  val icache = Flipped(new NastiBundle(params))
+  val dcache = Flipped(new NastiBundle(params))
+  val nasti = new NastiBundle(params)
 }
 
-class MemArbiter(implicit p: Parameters) extends Module {
-  val io = IO(new MemArbiterIO)
+class MemArbiter(params: NastiBundleParameters) extends Module {
+  val io = IO(new MemArbiterIO(params))
 
   val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(5)
   val state = RegInit(s_IDLE)
@@ -39,7 +37,7 @@ class MemArbiter(implicit p: Parameters) extends Module {
   io.icache.b := DontCare
 
   // Read Address
-  io.nasti.ar.bits := NastiReadAddressChannel(
+  io.nasti.ar.bits := NastiAddressBundle(params)(
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.id, io.icache.ar.bits.id),
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.addr, io.icache.ar.bits.addr),
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.size, io.icache.ar.bits.size),
@@ -91,24 +89,22 @@ class MemArbiter(implicit p: Parameters) extends Module {
   }
 }
 
-class TileIO(implicit val p: Parameters) extends Bundle {
-  val host = new HostIO
-  val nasti = new NastiIO
+class TileIO(xlen: Int, nastiParams: NastiBundleParameters) extends Bundle {
+  val host = new HostIO(xlen)
+  val nasti = new NastiBundle(nastiParams)
 }
 
-trait TileBase extends BaseModule {
-  def io:    TileIO
-  def clock: Clock
-  def reset: Reset
+object Tile {
+  def apply(config: Config): Tile = new Tile(config.core, config.nasti, config.cache)
 }
 
-class Tile(tileParams: Parameters) extends Module with TileBase {
-  implicit val p = tileParams
-  val io = IO(new TileIO)
-  val core = Module(new Core)
-  val icache = Module(new Cache)
-  val dcache = Module(new Cache)
-  val arb = Module(new MemArbiter)
+class Tile(val coreParams: CoreConfig, val nastiParams: NastiBundleParameters, val cacheParams: CacheConfig)
+    extends Module {
+  val io = IO(new TileIO(coreParams.xlen, nastiParams))
+  val core = Module(new Core(coreParams))
+  val icache = Module(new Cache(cacheParams, nastiParams, coreParams.xlen))
+  val dcache = Module(new Cache(cacheParams, nastiParams, coreParams.xlen))
+  val arb = Module(new MemArbiter(nastiParams))
 
   io.host <> core.io.host
   core.io.icache <> icache.io.cpu

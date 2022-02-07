@@ -5,6 +5,7 @@ package mini
 import chisel3._
 import chisel3.util._
 import Instructions._
+import junctions.NastiBundleParameters
 
 import scala.language.implicitConversions
 
@@ -227,5 +228,5 @@ trait TestUtils {
 }
 
 object TestParams {
-  implicit val p = (new MiniConfig).toInstance.alterPartial { case Trace => false }
+  val Nasti = NastiBundleParameters(addrBits = 32, dataBits = 64, idBits = 5)
 }

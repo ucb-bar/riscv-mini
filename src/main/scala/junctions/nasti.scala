@@ -3,252 +3,162 @@
 
 package junctions
 import chisel3._
-import scala.math.max
-import scala.collection.mutable.ArraySeq
-import config._
-import util._
-
-case object NastiKey extends Field[NastiParameters]
-
-case class NastiParameters(dataBits: Int, addrBits: Int, idBits: Int)
-
-trait HasNastiParameters {
-  implicit val p: Parameters
-  val nastiExternal = p(NastiKey)
-  val nastiXDataBits = nastiExternal.dataBits
-  val nastiWStrobeBits = nastiXDataBits / 8
-  val nastiXAddrBits = nastiExternal.addrBits
-  val nastiWIdBits = nastiExternal.idBits
-  val nastiRIdBits = nastiExternal.idBits
-  val nastiXIdBits = max(nastiWIdBits, nastiRIdBits)
-  val nastiXUserBits = 1
-  val nastiAWUserBits = nastiXUserBits
-  val nastiWUserBits = nastiXUserBits
-  val nastiBUserBits = nastiXUserBits
-  val nastiARUserBits = nastiXUserBits
-  val nastiRUserBits = nastiXUserBits
-  val nastiXLenBits = 8
-  val nastiXSizeBits = 3
-  val nastiXBurstBits = 2
-  val nastiXCacheBits = 4
-  val nastiXProtBits = 3
-  val nastiXQosBits = 4
-  val nastiXRegionBits = 4
-  val nastiXRespBits = 2
-
-  def bytesToXSize(bytes: UInt) = MuxLookup(
-    bytes,
-    "b111".U,
-    Seq(
-      1.U -> 0.U,
-      2.U -> 1.U,
-      4.U -> 2.U,
-      8.U -> 3.U,
-      16.U -> 4.U,
-      32.U -> 5.U,
-      64.U -> 6.U,
-      128.U -> 7.U
-    )
-  )
-}
-
-abstract class NastiModule(implicit val p: Parameters) extends Module with HasNastiParameters
-abstract class NastiBundle(implicit val p: Parameters) extends Bundle with HasNastiParameters
-
-abstract class NastiChannel(implicit p: Parameters) extends NastiBundle()(p)
-abstract class NastiMasterToSlaveChannel(implicit p: Parameters) extends NastiChannel()(p)
-abstract class NastiSlaveToMasterChannel(implicit p: Parameters) extends NastiChannel()(p)
-
-trait HasNastiMetadata extends HasNastiParameters {
-  val addr = UInt(nastiXAddrBits.W)
-  val len = UInt(nastiXLenBits.W)
-  val size = UInt(nastiXSizeBits.W)
-  val burst = UInt(nastiXBurstBits.W)
-  val lock = Bool()
-  val cache = UInt(nastiXCacheBits.W)
-  val prot = UInt(nastiXProtBits.W)
-  val qos = UInt(nastiXQosBits.W)
-  val region = UInt(nastiXRegionBits.W)
-}
-
-trait HasNastiData extends HasNastiParameters {
-  val data = UInt(nastiXDataBits.W)
-  val last = Bool()
-}
-
-class NastiReadIO(implicit val p: Parameters) extends Bundle {
-  val ar = Decoupled(new NastiReadAddressChannel)
-  val r = Flipped(Decoupled(new NastiReadDataChannel))
-}
-
-class NastiWriteIO(implicit val p: Parameters) extends Bundle {
-  val aw = Decoupled(new NastiWriteAddressChannel)
-  val w = Decoupled(new NastiWriteDataChannel)
-  val b = Flipped(Decoupled(new NastiWriteResponseChannel))
-}
-
-class NastiIO(implicit val p: Parameters) extends Bundle {
-  val aw = Decoupled(new NastiWriteAddressChannel)
-  val w = Decoupled(new NastiWriteDataChannel)
-  val b = Flipped(Decoupled(new NastiWriteResponseChannel))
-  val ar = Decoupled(new NastiReadAddressChannel)
-  val r = Flipped(Decoupled(new NastiReadDataChannel))
-}
-
-class NastiAddressChannel(implicit p: Parameters) extends NastiMasterToSlaveChannel()(p) with HasNastiMetadata
-
-class NastiResponseChannel(implicit p: Parameters) extends NastiSlaveToMasterChannel()(p) {
-  val resp = UInt(nastiXRespBits.W)
-}
-
-class NastiWriteAddressChannel(implicit p: Parameters) extends NastiAddressChannel()(p) {
-  val id = UInt(nastiWIdBits.W)
-  val user = UInt(nastiAWUserBits.W)
-}
-
-class NastiWriteDataChannel(implicit p: Parameters) extends NastiMasterToSlaveChannel()(p) with HasNastiData {
-  val id = UInt(nastiWIdBits.W)
-  val strb = UInt(nastiWStrobeBits.W)
-  val user = UInt(nastiWUserBits.W)
-}
-
-class NastiWriteResponseChannel(implicit p: Parameters) extends NastiResponseChannel()(p) {
-  val id = UInt(nastiWIdBits.W)
-  val user = UInt(nastiBUserBits.W)
-}
-
-class NastiReadAddressChannel(implicit p: Parameters) extends NastiAddressChannel()(p) {
-  val id = UInt(nastiRIdBits.W)
-  val user = UInt(nastiARUserBits.W)
-}
-
-class NastiReadDataChannel(implicit p: Parameters) extends NastiResponseChannel()(p) with HasNastiData {
-  val id = UInt(nastiRIdBits.W)
-  val user = UInt(nastiRUserBits.W)
-}
+import chisel3.util._
 
 object NastiConstants {
-  def BURST_FIXED = "b00".U
-  def BURST_INCR = "b01".U
-  def BURST_WRAP = "b10".U
+  // These are all fixed by the standard:
+  val LenBits = 8
+  val SizeBits = 3
+  val BurstBits = 2
+  val LockBits = 1
+  val CacheBits = 4
+  val ProtBits = 3
+  val QosBits = 4
+  val RespBits = 2
 
-  def RESP_OKAY = "b00".U
-  def RESP_EXOKAY = "b01".U
-  def RESP_SLVERR = "b10".U
-  def RESP_DECERR = "b11".U
+  def CacheReadAllocate = 8.U(CacheBits.W)
+  def CacheWriteAllocate = 4.U(CacheBits.W)
+  def CacheModifiable = 2.U(CacheBits.W)
+  def CacheBufferable = 1.U(CacheBits.W)
 
-  def CACHE_DEVICE_NOBUF = "b0000".U
-  def CACHE_DEVICE_BUF = "b0001".U
-  def CACHE_NORMAL_NOCACHE_NOBUF = "b0010".U
-  def CACHE_NORMAL_NOCACHE_BUF = "b0011".U
+  def ProtPrivileged = 1.U(ProtBits.W)
+  def ProtInsecure = 2.U(ProtBits.W)
+  def ProtInstruction = 4.U(ProtBits.W)
 
-  def AXPROT(instruction: Bool, nonsecure: Bool, privileged: Bool): UInt =
-    Cat(instruction, nonsecure, privileged)
+  def BurstFixed = 0.U(BurstBits.W)
+  def BurstIncr = 1.U(BurstBits.W)
+  def BurstWrap = 2.U(BurstBits.W)
 
-  def AXPROT(instruction: Boolean, nonsecure: Boolean, privileged: Boolean): UInt =
-    AXPROT(instruction.B, nonsecure.B, privileged.B)
+  def RespOkay = 0.U(RespBits.W)
+  def RespExOkay = 1.U(RespBits.W)
+  def RespSlvErr = 2.U(RespBits.W)
+  def RespDevErr = 3.U(RespBits.W)
 }
 
-import NastiConstants._
+case class NastiBundleParameters(
+  addrBits: Int,
+  dataBits: Int,
+  idBits:   Int) {
+  require(dataBits >= 8, s"AXI4 data bits must be >= 8 (got $dataBits)")
+  require(addrBits >= 1, s"AXI4 addr bits must be >= 1 (got $addrBits)")
+  require(idBits >= 1, s"AXI4 id bits must be >= 1 (got $idBits)")
+  require(isPow2(dataBits), s"AXI4 data bits must be pow2 (got $dataBits)")
+}
 
-object NastiWriteAddressChannel {
-  def apply(id: UInt, addr: UInt, size: UInt, len: UInt = 0.U, burst: UInt = BURST_INCR)(implicit p: Parameters) = {
-    val aw = Wire(new NastiWriteAddressChannel)
+/** aka the AW/AR channel */
+class NastiAddressBundle(params: NastiBundleParameters) extends Bundle {
+  val id = UInt(params.idBits.W)
+  val addr = UInt(params.addrBits.W)
+  val len = UInt(NastiConstants.LenBits.W) // number of beats - 1
+  val size = UInt(NastiConstants.SizeBits.W) // bytes in beat = 2^size
+  val burst = UInt(NastiConstants.BurstBits.W)
+  val lock = UInt(NastiConstants.LockBits.W)
+  val cache = UInt(NastiConstants.CacheBits.W)
+  val prot = UInt(NastiConstants.ProtBits.W)
+  val qos = UInt(NastiConstants.QosBits.W) // 0=no QoS, bigger = higher priority
+}
+
+object NastiAddressBundle {
+  def apply(params: NastiBundleParameters)(id: UInt, addr: UInt, size: UInt, len: UInt = 0.U): NastiAddressBundle = {
+    val aw = Wire(new NastiAddressBundle(params))
     aw.id := id
     aw.addr := addr
     aw.len := len
     aw.size := size
-    aw.burst := burst
+    aw.burst := NastiConstants.BurstIncr
     aw.lock := false.B
-    aw.cache := CACHE_DEVICE_NOBUF
-    aw.prot := AXPROT(false, false, false)
-    aw.qos := "b0000".U
-    aw.region := "b0000".U
-    aw.user := 0.U
+    aw.cache := 0.U
+    aw.prot := 0.U
+    aw.qos := 0.U
     aw
   }
 }
 
-object NastiReadAddressChannel {
-  def apply(id: UInt, addr: UInt, size: UInt, len: UInt = 0.U, burst: UInt = BURST_INCR)(implicit p: Parameters) = {
-    val ar = Wire(new NastiReadAddressChannel)
-    ar.id := id
-    ar.addr := addr
-    ar.len := len
-    ar.size := size
-    ar.burst := burst
-    ar.lock := false.B
-    ar.cache := CACHE_DEVICE_NOBUF
-    ar.prot := AXPROT(false, false, false)
-    ar.qos := 0.U
-    ar.region := 0.U
-    ar.user := 0.U
-    ar
-  }
+/** aka the W-channel */
+class NastiWriteDataBundle(params: NastiBundleParameters) extends Bundle {
+  // id removed
+  val data = UInt(params.dataBits.W)
+  val strb = UInt((params.dataBits / 8).W)
+  val last = Bool()
 }
 
-object NastiWriteDataChannel {
+object NastiWriteDataBundle {
   def apply(
-    data: UInt,
-    strb: Option[UInt] = None,
-    last: Bool = true.B,
-    id:   UInt = 0.U
-  )(
-    implicit p: Parameters
-  ): NastiWriteDataChannel = {
-    val w = Wire(new NastiWriteDataChannel)
-    w.strb := strb.getOrElse(Fill(w.nastiWStrobeBits, 1.U))
+    params: NastiBundleParameters
+  )(data:   UInt,
+    strb:   Option[UInt] = None,
+    last:   Bool = true.B
+  ): NastiWriteDataBundle = {
+    val w = Wire(new NastiWriteDataBundle(params))
+    w.strb := strb.getOrElse(Fill(params.dataBits / 8, 1.U))
     w.data := data
     w.last := last
-    w.id := id
-    w.user := 0.U
     w
   }
 }
 
-object NastiReadDataChannel {
+/** aka the R-channel */
+class NastiReadDataBundle(params: NastiBundleParameters) extends Bundle {
+  val id = UInt(params.idBits.W)
+  val data = UInt(params.dataBits.W)
+  val resp = UInt(NastiConstants.RespBits.W)
+  val last = Bool()
+}
+
+object NastiReadDataBundle {
   def apply(
-    id:   UInt,
-    data: UInt,
-    last: Bool = true.B,
-    resp: UInt = 0.U
-  )(
-    implicit p: Parameters
-  ) = {
-    val r = Wire(new NastiReadDataChannel)
+    params: NastiBundleParameters
+  )(id:     UInt,
+    data:   UInt,
+    last:   Bool = true.B,
+    resp:   UInt = 0.U
+  ): NastiReadDataBundle = {
+    val r = Wire(new NastiReadDataBundle(params))
     r.id := id
     r.data := data
     r.last := last
     r.resp := resp
-    r.user := 0.U
     r
   }
 }
 
-object NastiWriteResponseChannel {
-  def apply(id: UInt, resp: UInt = 0.U)(implicit p: Parameters) = {
-    val b = Wire(new NastiWriteResponseChannel)
+/** aka the B-channel */
+class NastiWriteResponseBundle(params: NastiBundleParameters) extends Bundle {
+  val id = UInt(params.idBits.W)
+  val resp = UInt(NastiConstants.RespBits.W)
+}
+
+object NastiWriteResponseBundle {
+  def apply(params: NastiBundleParameters)(id: UInt, resp: UInt = 0.U): NastiWriteResponseBundle = {
+    val b = Wire(new NastiWriteResponseBundle(params))
     b.id := id
     b.resp := resp
-    b.user := 0.U
     b
   }
 }
 
-class NastiArbiterIO(arbN: Int)(implicit p: Parameters) extends Bundle {
-  val master = Flipped(Vec(arbN, new NastiIO))
-  val slave = new NastiIO
+class NastiBundle(params: NastiBundleParameters) extends Bundle {
+  val aw = Decoupled(new NastiAddressBundle(params))
+  val w = Decoupled(new NastiWriteDataBundle(params))
+  val b = Flipped(Decoupled(new NastiWriteResponseBundle(params)))
+  val ar = Decoupled(new NastiAddressBundle(params))
+  val r = Flipped(Decoupled(new NastiReadDataBundle(params)))
+}
+
+class NastiArbiterIO(params: NastiBundleParameters, arbN: Int) extends Bundle {
+  val master = Flipped(Vec(arbN, new NastiBundle(params)))
+  val slave = new NastiBundle(params)
 }
 
 /** Arbitrate among arbN masters requesting to a single slave */
-class NastiArbiter(val arbN: Int)(implicit p: Parameters) extends NastiModule {
-  val io = new NastiArbiterIO(arbN)
+class NastiArbiter(params: NastiBundleParameters, val arbN: Int) extends Module {
+  val io = new NastiArbiterIO(params, arbN)
 
   if (arbN > 1) {
     val arbIdBits = log2Up(arbN)
 
-    val ar_arb = Module(new RRArbiter(new NastiReadAddressChannel, arbN))
-    val aw_arb = Module(new RRArbiter(new NastiWriteAddressChannel, arbN))
+    val ar_arb = Module(new RRArbiter(new NastiAddressBundle(params), arbN))
+    val aw_arb = Module(new RRArbiter(new NastiAddressBundle(params), arbN))
 
     val slave_r_arb_id = io.slave.r.bits.id(arbIdBits - 1, 0)
     val slave_b_arb_id = io.slave.b.bits.id(arbIdBits - 1, 0)
@@ -275,10 +185,7 @@ class NastiArbiter(val arbN: Int)(implicit p: Parameters) extends NastiModule {
       val m_w = io.master(i).w
 
       a_ar <> m_ar
-      a_ar.bits.id := Cat(m_ar.bits.id, i.U(arbIdBits.W))
-
       a_aw <> m_aw
-      a_aw.bits.id := Cat(m_aw.bits.id, i.U(arbIdBits.W))
 
       m_r.valid := io.slave.r.valid && slave_r_arb_id === i.U
       m_r.bits := io.slave.r.bits

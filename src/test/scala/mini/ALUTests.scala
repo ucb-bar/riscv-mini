@@ -8,11 +8,11 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester with TestUtils {
-  import ALU._
+class AluTester(alu: => Alu) extends BasicTester with TestUtils {
+  import Alu._
   val dut = Module(alu)
   val ctrl = Module(new Control)
-  val xlen = p(XLEN)
+  val xlen = dut.width
 
   val (cntr, done) = Counter(true.B, insts.size)
   val rs1 = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
@@ -90,11 +90,10 @@ class ALUTester(alu: => ALU)(implicit p: config.Parameters) extends BasicTester 
 }
 
 class ALUTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
   "ALUSimple" should "pass" in {
-    test(new ALUTester(new ALUSimple)).runUntilStop()
+    test(new AluTester(new AluSimple(32))).runUntilStop()
   }
   "ALUArea" should "pass" in {
-    test(new ALUTester(new ALUArea)).runUntilStop()
+    test(new AluTester(new AluArea(32))).runUntilStop()
   }
 }

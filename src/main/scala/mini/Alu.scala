@@ -4,9 +4,8 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import config.Parameters
 
-object ALU {
+object Alu {
   val ALU_ADD = 0.U(4.W)
   val ALU_SUB = 1.U(4.W)
   val ALU_AND = 2.U(4.W)
@@ -22,26 +21,24 @@ object ALU {
   val ALU_XXX = 15.U(4.W)
 }
 
-class ALUIo(implicit p: Parameters) extends CoreBundle()(p) {
-  val A = Input(UInt(xlen.W))
-  val B = Input(UInt(xlen.W))
+class AluIO(width: Int) extends Bundle {
+  val A = Input(UInt(width.W))
+  val B = Input(UInt(width.W))
   val alu_op = Input(UInt(4.W))
-  val out = Output(UInt(xlen.W))
-  val sum = Output(UInt(xlen.W))
+  val out = Output(UInt(width.W))
+  val sum = Output(UInt(width.W))
 }
 
-import mini.ALU._
+import mini.Alu._
 
-abstract class ALU(implicit val p: Parameters) extends Module with CoreParams {
-  val io = IO(new ALUIo)
-  def logALUOp(op: Int): Unit = {
-    when(io.alu_op === op.U) {
-      printf("A == %d, B == %d, opcode == %d\n", io.A, io.B, io.alu_op)
-    }
-  }
+trait Alu extends Module {
+  def width: Int
+  val io: AluIO
 }
 
-class ALUSimple(implicit p: Parameters) extends ALU()(p) {
+class AluSimple(val width: Int) extends Alu {
+  val io = IO(new AluIO(width))
+
   val shamt = io.B(4, 0).asUInt
 
   io.out := MuxLookup(
@@ -65,12 +62,14 @@ class ALUSimple(implicit p: Parameters) extends ALU()(p) {
   io.sum := io.A + Mux(io.alu_op(0), -io.B, io.B)
 }
 
-class ALUArea(implicit p: Parameters) extends ALU()(p) {
+class AluArea(val width: Int) extends Alu {
+  val io = IO(new AluIO(width))
   val sum = io.A + Mux(io.alu_op(0), -io.B, io.B)
-  val cmp = Mux(io.A(xlen - 1) === io.B(xlen - 1), sum(xlen - 1), Mux(io.alu_op(1), io.B(xlen - 1), io.A(xlen - 1)))
+  val cmp =
+    Mux(io.A(width - 1) === io.B(width - 1), sum(width - 1), Mux(io.alu_op(1), io.B(width - 1), io.A(width - 1)))
   val shamt = io.B(4, 0).asUInt
   val shin = Mux(io.alu_op(3), io.A, Reverse(io.A))
-  val shiftr = (Cat(io.alu_op(0) && shin(xlen - 1), shin).asSInt >> shamt)(xlen - 1, 0)
+  val shiftr = (Cat(io.alu_op(0) && shin(width - 1), shin).asSInt >> shamt)(width - 1, 0)
   val shiftl = Reverse(shiftr)
 
   val out =
