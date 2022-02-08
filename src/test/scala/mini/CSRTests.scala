@@ -8,11 +8,11 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class CSRTester(c: => CSR, trace: Boolean = false) extends BasicTester with TestUtils {
   import Control._
   val dut = Module(c)
   val ctrl = Module(new Control)
-  val xlen = p(XLEN)
+  val xlen = dut.xlen
 
   override val insts =
     (CSR.regs.map(csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue))) ++
@@ -291,8 +291,7 @@ class CSRTester(c: => CSR, trace: Boolean = false)(implicit p: config.Parameters
 }
 
 class CSRTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
   "CSR" should "pass" in {
-    test(new CSRTester(new CSR)).runUntilStop()
+    test(new CSRTester(new CSR(xlen = 32))).runUntilStop()
   }
 }

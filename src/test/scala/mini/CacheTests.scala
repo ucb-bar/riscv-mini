@@ -6,19 +6,30 @@ import chisel3._
 import chisel3.util._
 import chisel3.testers._
 import junctions._
-import config.Parameters
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class GoldCacheIO(implicit val p: Parameters) extends Bundle {
-  val req = Flipped(Decoupled(new CacheReq))
-  val resp = Decoupled(new CacheResp)
-  val nasti = new NastiIO
+class GoldCacheIO(p: CacheConfig, nastiParams: NastiBundleParameters, xlen: Int) extends Bundle {
+  val req = Flipped(Decoupled(new CacheReq(xlen, xlen)))
+  val resp = Decoupled(new CacheResp(xlen))
+  val nasti = new NastiBundle(nastiParams)
 }
 
-class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
-  val io = IO(new GoldCacheIO)
-  val size = log2Ceil(nastiXDataBits / 8).U
+class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends Module {
+  // local parameters
+  val nSets = p.nSets
+  val bBytes = p.blockBytes
+  val bBits = bBytes << 3
+  val blen = log2Ceil(bBytes)
+  val slen = log2Ceil(nSets)
+  val tlen = xlen - (slen + blen)
+  val nWords = bBits / xlen
+  val wBytes = xlen / 8
+  val byteOffsetBits = log2Ceil(wBytes)
+  val dataBeats = bBits / nasti.dataBits
+
+  val io = IO(new GoldCacheIO(p, nasti, xlen))
+  val size = log2Ceil(nasti.dataBits / 8).U
   val len = (dataBeats - 1).U
 
   val dataMemory = Mem(nSets, UInt(bBits.W))
@@ -49,11 +60,11 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   io.resp.bits.data := readData >> ((off / 4.U) * xlen.U)
   io.resp.valid := false.B
   io.req.ready := false.B
-  io.nasti.ar.bits := NastiReadAddressChannel(0.U, ((req.addr >> blen.U).asUInt << blen.U).asUInt, size, len)
+  io.nasti.ar.bits := NastiAddressBundle(nasti)(0.U, ((req.addr >> blen.U).asUInt << blen.U).asUInt, size, len)
   io.nasti.ar.valid := false.B
-  io.nasti.aw.bits := NastiWriteAddressChannel(0.U, (Cat(tags(idx), idx) << blen.U).asUInt, size, len)
+  io.nasti.aw.bits := NastiAddressBundle(nasti)(0.U, (Cat(tags(idx), idx) << blen.U).asUInt, size, len)
   io.nasti.aw.valid := false.B
-  io.nasti.w.bits := NastiWriteDataChannel((readData >> (wCnt * nastiXDataBits.U)).asUInt, None, wDone)
+  io.nasti.w.bits := NastiWriteDataBundle(nasti)((readData >> (wCnt * nasti.dataBits.U)).asUInt, None, wDone)
   io.nasti.w.valid := state === sWrite
   io.nasti.b.ready := state === sWrAck
   io.nasti.r.ready := state === sRead
@@ -105,7 +116,7 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
     }
     is(sRead) {
       when(io.nasti.r.valid) {
-        dataMemory(idx) := readData | ((io.nasti.r.bits.data << (rCnt * nastiXDataBits.U)).asUInt)
+        dataMemory(idx) := readData | ((io.nasti.r.bits.data << (rCnt * nasti.dataBits.U)).asUInt)
       }
       when(rDone) {
         assert(io.nasti.r.bits.last)
@@ -117,10 +128,24 @@ class GoldCache(implicit val p: Parameters) extends Module with CacheParams {
   }
 }
 
-class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends BasicTester with CacheParams {
+class CacheTester(cache: => Cache) extends BasicTester {
   /* Target Design */
   val dut = Module(cache)
-  val dut_mem = Wire(new NastiIO)
+  // extract parameters from dut
+  val p = dut.p
+  val xlen = dut.xlen
+  val nasti = dut.nasti
+  val nSets = p.nSets
+  val bBytes = p.blockBytes
+  val bBits = bBytes << 3
+  val blen = log2Ceil(bBytes)
+  val slen = log2Ceil(nSets)
+  val tlen = xlen - (slen + blen)
+  val nWords = bBits / xlen
+  val wBytes = xlen / 8
+  val byteOffsetBits = log2Ceil(wBytes)
+  val dataBeats = bBits / nasti.dataBits
+  val dut_mem = Wire(new NastiBundle(nasti))
   dut_mem.ar <> Queue(dut.io.nasti.ar, 32)
   dut_mem.aw <> Queue(dut.io.nasti.aw, 32)
   dut_mem.w <> Queue(dut.io.nasti.w, 32)
@@ -128,10 +153,10 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
   dut.io.nasti.r <> Queue(dut_mem.r, 32)
 
   /* Gold Model */
-  val gold = Module(new GoldCache)
+  val gold = Module(new GoldCache(p, nasti, xlen))
   val gold_req = WireInit(gold.io.req)
   val gold_resp = WireInit(gold.io.resp)
-  val gold_mem = Wire(new NastiIO)
+  val gold_mem = Wire(new NastiBundle(nasti))
   gold.io.req <> Queue(gold_req, 32)
   gold_resp <> Queue(gold.io.resp, 32)
   gold_mem.ar <> Queue(gold.io.nasti.ar, 32)
@@ -140,11 +165,11 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
   gold.io.nasti.b <> Queue(gold_mem.b, 32)
   gold.io.nasti.r <> Queue(gold_mem.r, 32)
 
-  val size = log2Ceil(nastiXDataBits / 8).U
+  val size = log2Ceil(nasti.dataBits / 8).U
   val len = (dataBeats - 1).U
 
   /* Main Memory */
-  val mem = Mem(1 << 20, UInt(nastiXDataBits.W))
+  val mem = Mem(1 << 20, UInt(nasti.dataBits.W))
   val sMemIdle :: sMemWrite :: sMemWrAck :: sMemRead :: Nil = Enum(4)
   val memState = RegInit(sMemIdle)
   val (wCnt, wDone) = Counter(memState === sMemWrite && dut_mem.w.valid && gold_mem.w.valid, dataBeats)
@@ -154,9 +179,9 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
   dut_mem.aw.ready := false.B
   dut_mem.w.ready := false.B
   dut_mem.b.valid := memState === sMemWrAck
-  dut_mem.b.bits := NastiWriteResponseChannel(0.U)
+  dut_mem.b.bits := NastiWriteResponseBundle(nasti)(0.U)
   dut_mem.r.valid := memState === sMemRead
-  dut_mem.r.bits := NastiReadDataChannel(0.U, mem((gold_mem.ar.bits.addr >> size).asUInt + rCnt), rDone)
+  dut_mem.r.bits := NastiReadDataBundle(nasti)(0.U, mem((gold_mem.ar.bits.addr >> size).asUInt + rCnt), rDone)
   gold_mem.ar.ready := dut_mem.ar.ready
   gold_mem.aw.ready := dut_mem.aw.ready
   gold_mem.w.ready := dut_mem.w.ready
@@ -243,7 +268,7 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
           dut_mem.w.bits.last,
           gold_mem.w.bits.last
         )
-        assert(dut_mem.w.bits.strb === ((1 << (nastiXDataBits / 8)) - 1).U) // TODO: release it?
+        assert(dut_mem.w.bits.strb === ((1 << (nasti.dataBits / 8)) - 1).U) // TODO: release it?
         mem((dut_mem.aw.bits.addr >> size).asUInt + wCnt) := dut_mem.w.bits.data
         printf("[write] mem[%x] <= %x\n", (dut_mem.aw.bits.addr >> size).asUInt + wCnt, dut_mem.w.bits.data)
         dut_mem.w.ready := true.B
@@ -278,11 +303,11 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
   def rand_idx = rnd.nextInt(1 << slen).U(slen.W)
   def rand_off = (rnd.nextInt(1 << blen) & -4).U(blen.W)
   def rand_data = (
-    ((0 until (nastiXDataBits / 8)).foldLeft(BigInt(0)))((r, i) => r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))
-  ).U(nastiXDataBits.W)
+    ((0 until (nasti.dataBits / 8)).foldLeft(BigInt(0)))((r, i) => r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))
+  ).U(nasti.dataBits.W)
   def rand_mask = (rnd.nextInt((1 << (xlen / 8)) - 1) + 1).U((xlen / 8).W)
   def test(tag: UInt, idx: UInt, off: UInt, mask: UInt = 0.U((xlen / 8).W)) =
-    Cat(mask, Cat(Seq.fill(bBits / nastiXDataBits)(rand_data)), tag, idx, off)
+    Cat(mask, Cat(Seq.fill(bBits / nasti.dataBits)(rand_data)), tag, idx, off)
 
   val tags = Vector.fill(3)(rand_tag)
   val idxs = Vector.fill(2)(rand_idx)
@@ -369,13 +394,15 @@ class CacheTester(cache: => Cache)(implicit val p: config.Parameters) extends Ba
 }
 
 class CacheTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
+  val p = MiniConfig()
 
   "Cache" should "pass with verilator" in {
-    test(new CacheTester(new Cache)).withAnnotations(Seq(VerilatorBackendAnnotation)).runUntilStop()
+    test(new CacheTester(new Cache(p.cache, p.nasti, p.core.xlen)))
+      .withAnnotations(Seq(VerilatorBackendAnnotation))
+      .runUntilStop()
   }
 
   "Cache" should "pass with treadle" in {
-    test(new CacheTester(new Cache)).runUntilStop()
+    test(new CacheTester(new Cache(p.cache, p.nasti, p.core.xlen))).runUntilStop()
   }
 }

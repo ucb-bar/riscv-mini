@@ -3,21 +3,21 @@
 package mini
 
 import chisel3._
-import config.Parameters
 import mini.Control._
 
-class BrCondIO(implicit p: Parameters) extends CoreBundle()(p) {
+class BrCondIO(xlen: Int) extends Bundle {
   val rs1 = Input(UInt(xlen.W))
   val rs2 = Input(UInt(xlen.W))
   val br_type = Input(UInt(3.W))
   val taken = Output(Bool())
 }
 
-abstract class BrCond(implicit p: Parameters) extends Module {
-  val io = IO(new BrCondIO)
+trait BrCond extends Module {
+  val io: BrCondIO
 }
 
-class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {
+class BrCondSimple(xlen: Int) extends BrCond {
+  val io = IO(new BrCondIO(xlen))
   val eq = io.rs1 === io.rs2
   val neq = !eq
   val lt = io.rs1.asSInt < io.rs2.asSInt
@@ -33,7 +33,8 @@ class BrCondSimple(implicit p: Parameters) extends BrCond()(p) {
       ((io.br_type === BR_GEU) && geu)
 }
 
-class BrCondArea(implicit val p: Parameters) extends BrCond()(p) with CoreParams {
+class BrCondArea(xlen: Int) extends BrCond {
+  val io = IO(new BrCondIO(xlen))
   val diff = io.rs1 - io.rs2
   val neq = diff.orR
   val eq = !neq

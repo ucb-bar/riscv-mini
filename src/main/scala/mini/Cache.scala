@@ -5,37 +5,38 @@ package mini
 import chisel3._
 import chisel3.util._
 import junctions._
-import config.{Field, Parameters}
 
-case object NWays extends Field[Int]
-case object NSets extends Field[Int]
-case object CacheBlockBytes extends Field[Int]
-
-class CacheReq(implicit p: Parameters) extends CoreBundle()(p) {
-  val addr = UInt(xlen.W)
-  val data = UInt(xlen.W)
-  val mask = UInt((xlen / 8).W)
+class CacheReq(addrWidth: Int, dataWidth: Int) extends Bundle {
+  val addr = UInt(addrWidth.W)
+  val data = UInt(dataWidth.W)
+  val mask = UInt((dataWidth / 8).W)
 }
 
-class CacheResp(implicit p: Parameters) extends CoreBundle()(p) {
-  val data = UInt(xlen.W)
+class CacheResp(dataWidth: Int) extends Bundle {
+  val data = UInt(dataWidth.W)
 }
 
-class CacheIO(implicit val p: Parameters) extends Bundle {
+class CacheIO(addrWidth: Int, dataWidth: Int) extends Bundle {
   val abort = Input(Bool())
-  val req = Flipped(Valid(new CacheReq))
-  val resp = Valid(new CacheResp)
+  val req = Flipped(Valid(new CacheReq(addrWidth, dataWidth)))
+  val resp = Valid(new CacheResp(dataWidth))
 }
 
-class CacheModuleIO(implicit val p: Parameters) extends Bundle {
-  val cpu = new CacheIO
-  val nasti = new NastiIO
+class CacheModuleIO(nastiParams: NastiBundleParameters, addrWidth: Int, dataWidth: Int) extends Bundle {
+  val cpu = new CacheIO(addrWidth, dataWidth)
+  val nasti = new NastiBundle(nastiParams)
 }
 
-trait CacheParams extends CoreParams with HasNastiParameters {
-  val nWays = p(NWays) // Not used...
-  val nSets = p(NSets)
-  val bBytes = p(CacheBlockBytes)
+case class CacheConfig(nWays: Int, nSets: Int, blockBytes: Int)
+
+class MetaData(tagLength: Int) extends Bundle {
+  val tag = UInt(tagLength.W)
+}
+
+class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int) extends Module {
+  // local parameters
+  val nSets = p.nSets
+  val bBytes = p.blockBytes
   val bBits = bBytes << 3
   val blen = log2Ceil(bBytes)
   val slen = log2Ceil(nSets)
@@ -43,15 +44,10 @@ trait CacheParams extends CoreParams with HasNastiParameters {
   val nWords = bBits / xlen
   val wBytes = xlen / 8
   val byteOffsetBits = log2Ceil(wBytes)
-  val dataBeats = bBits / nastiXDataBits
-}
+  val dataBeats = bBits / nasti.dataBits
 
-class MetaData(implicit val p: Parameters) extends Bundle with CacheParams {
-  val tag = UInt(tlen.W)
-}
+  val io = IO(new CacheModuleIO(nasti, addrWidth = xlen, dataWidth = xlen))
 
-class Cache(implicit val p: Parameters) extends Module with CacheParams {
-  val io = IO(new CacheModuleIO)
   // cache states
   val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
     s_REFILL_READY :: s_REFILL :: Nil) = Enum(7)
@@ -59,7 +55,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   // memory
   val v = RegInit(0.U(nSets.W))
   val d = RegInit(0.U(nSets.W))
-  val metaMem = SyncReadMem(nSets, new MetaData)
+  val metaMem = SyncReadMem(nSets, new MetaData(tlen))
   val dataMem = Seq.fill(nWords)(SyncReadMem(nSets, Vec(wBytes, UInt(8.W))))
 
   val addr_reg = Reg(chiselTypeOf(io.cpu.req.bits.addr))
@@ -91,7 +87,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
   val rmeta = metaMem.read(idx, ren)
   val rdata = Cat((dataMem.map(_.read(idx, ren).asUInt)).reverse)
   val rdata_buf = RegEnable(rdata, ren_reg)
-  val refill_buf = Reg(Vec(dataBeats, UInt(nastiXDataBits.W)))
+  val refill_buf = Reg(Vec(dataBeats, UInt(nasti.dataBits.W)))
   val read = Mux(is_alloc_reg, refill_buf.asUInt, Mux(ren_reg, rdata, rdata_buf))
 
   hit := v(idx_reg) && rmeta.tag === tag_reg
@@ -106,7 +102,7 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     cpu_mask := io.cpu.req.bits.mask
   }
 
-  val wmeta = Wire(new MetaData)
+  val wmeta = Wire(new MetaData(tlen))
   wmeta.tag := tag_reg
 
   val wmask = Mux(!is_alloc, (cpu_mask << Cat(off_reg, 0.U(byteOffsetBits.W))).zext, (-1).S)
@@ -130,28 +126,30 @@ class Cache(implicit val p: Parameters) extends Module with CacheParams {
     }
   }
 
-  io.nasti.ar.bits := NastiReadAddressChannel(
+  io.nasti.ar.bits := NastiAddressBundle(nasti)(
     0.U,
     (Cat(tag_reg, idx_reg) << blen.U).asUInt,
-    log2Up(nastiXDataBits / 8).U,
+    log2Up(nasti.dataBits / 8).U,
     (dataBeats - 1).U
   )
   io.nasti.ar.valid := false.B
   // read data
   io.nasti.r.ready := state === s_REFILL
-  when(io.nasti.r.fire) { refill_buf(read_count) := io.nasti.r.bits.data }
+  when(io.nasti.r.fire) {
+    refill_buf(read_count) := io.nasti.r.bits.data
+  }
 
   // write addr
-  io.nasti.aw.bits := NastiWriteAddressChannel(
+  io.nasti.aw.bits := NastiAddressBundle(nasti)(
     0.U,
     (Cat(rmeta.tag, idx_reg) << blen.U).asUInt,
-    log2Up(nastiXDataBits / 8).U,
+    log2Up(nasti.dataBits / 8).U,
     (dataBeats - 1).U
   )
   io.nasti.aw.valid := false.B
   // write data
-  io.nasti.w.bits := NastiWriteDataChannel(
-    VecInit.tabulate(dataBeats)(i => read((i + 1) * nastiXDataBits - 1, i * nastiXDataBits))(write_count),
+  io.nasti.w.bits := NastiWriteDataBundle(nasti)(
+    VecInit.tabulate(dataBeats)(i => read((i + 1) * nasti.dataBits - 1, i * nasti.dataBits))(write_count),
     None,
     write_wrap_out
   )

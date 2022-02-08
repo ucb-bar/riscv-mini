@@ -3,9 +3,8 @@
 package mini
 
 import chisel3._
-import config.Parameters
 
-class RegFileIO(implicit p: Parameters) extends CoreBundle()(p) {
+class RegFileIO(xlen: Int) extends Bundle {
   val raddr1 = Input(UInt(5.W))
   val raddr2 = Input(UInt(5.W))
   val rdata1 = Output(UInt(xlen.W))
@@ -15,8 +14,8 @@ class RegFileIO(implicit p: Parameters) extends CoreBundle()(p) {
   val wdata = Input(UInt(xlen.W))
 }
 
-class RegFile(implicit val p: Parameters) extends Module with CoreParams {
-  val io = IO(new RegFileIO)
+class RegFile(xlen: Int) extends Module {
+  val io = IO(new RegFileIO(xlen))
   val regs = Mem(32, UInt(xlen.W))
   io.rdata1 := Mux(io.raddr1.orR, regs(io.raddr1), 0.U)
   io.rdata2 := Mux(io.raddr2.orR, regs(io.raddr2), 0.U)

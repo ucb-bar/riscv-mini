@@ -8,11 +8,10 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class ImmGenTester(imm: => ImmGen) extends BasicTester with TestUtils {
   import Control._
   val dut = Module(imm)
   val ctrl = Module(new Control)
-  val xlen = p(XLEN)
 
   val (cntr, done) = Counter(true.B, insts.size)
   val i = VecInit(insts.map(iimm))
@@ -50,11 +49,10 @@ class ImmGenTester(imm: => ImmGen)(implicit p: config.Parameters) extends BasicT
 }
 
 class ImmGenTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
   "ImmGenWire" should "pass" in {
-    test(new ImmGenTester(new ImmGenWire)).runUntilStop()
+    test(new ImmGenTester(new ImmGenWire(32))).runUntilStop()
   }
   "ImmGenMux" should "pass" in {
-    test(new ImmGenTester(new ImmGenMux)).runUntilStop()
+    test(new ImmGenTester(new ImmGenMux(32))).runUntilStop()
   }
 }

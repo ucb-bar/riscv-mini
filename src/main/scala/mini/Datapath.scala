@@ -4,27 +4,26 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import config.Parameters
 
 object Const {
   val PC_START = 0x200
   val PC_EVEC = 0x100
 }
 
-class DatapathIO(implicit p: Parameters) extends CoreBundle()(p) {
-  val host = new HostIO
-  val icache = Flipped(new CacheIO)
-  val dcache = Flipped(new CacheIO)
+class DatapathIO(xlen: Int) extends Bundle {
+  val host = new HostIO(xlen)
+  val icache = Flipped(new CacheIO(xlen, xlen))
+  val dcache = Flipped(new CacheIO(xlen, xlen))
   val ctrl = Flipped(new ControlSignals)
 }
 
-class Datapath(implicit val p: Parameters) extends Module with CoreParams {
-  val io = IO(new DatapathIO)
-  val csr = Module(new CSR)
-  val regFile = Module(new RegFile)
-  val alu = p(BuildALU)(p)
-  val immGen = p(BuildImmGen)(p)
-  val brCond = p(BuildBrCond)(p)
+class Datapath(val conf: CoreConfig) extends Module {
+  val io = IO(new DatapathIO(conf.xlen))
+  val csr = Module(new CSR(conf.xlen))
+  val regFile = Module(new RegFile(conf.xlen))
+  val alu = Module(conf.makeAlu(conf.xlen))
+  val immGen = Module(conf.makeImmGen(conf.xlen))
+  val brCond = Module(conf.makeBrCond(conf.xlen))
 
   import Control._
 
@@ -54,7 +53,7 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
     */
   val started = RegNext(reset.asBool)
   val stall = !io.icache.resp.valid || !io.dcache.resp.valid
-  val pc = RegInit(Const.PC_START.U(xlen.W) - 4.U(xlen.W))
+  val pc = RegInit(Const.PC_START.U(conf.xlen.W) - 4.U(conf.xlen.W))
   val npc = Mux(
     stall,
     pc,
@@ -192,13 +191,14 @@ class Datapath(implicit val p: Parameters) extends Module with CoreParams {
   // Abort store when there's an excpetion
   io.dcache.abort := csr.io.expt
 
-  if (p(Trace)) {
-    printf(
-      "PC: %x, INST: %x, REG[%d] <- %x\n",
-      ew_pc,
-      ew_inst,
-      Mux(regFile.io.wen, wb_rd_addr, 0.U),
-      Mux(regFile.io.wen, regFile.io.wdata, 0.U)
-    )
-  }
+  // TODO: re-enable through AOP
+//  if (p(Trace)) {
+//    printf(
+//      "PC: %x, INST: %x, REG[%d] <- %x\n",
+//      ew_pc,
+//      ew_inst,
+//      Mux(regFile.io.wen, wb_rd_addr, 0.U),
+//      Mux(regFile.io.wen, regFile.io.wdata, 0.U)
+//    )
+//  }
 }

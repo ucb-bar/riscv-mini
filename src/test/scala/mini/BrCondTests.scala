@@ -8,11 +8,10 @@ import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTester with TestUtils {
+class BrCondTester(br: => BrCond) extends BasicTester with TestUtils {
   import Control._
   val dut = Module(br)
   val ctrl = Module(new Control)
-  val xlen = p(XLEN)
 
   override val insts = Seq
     .fill(10)(
@@ -73,11 +72,10 @@ class BrCondTester(br: => BrCond)(implicit p: config.Parameters) extends BasicTe
 }
 
 class BrCondTests extends AnyFlatSpec with ChiselScalatestTester {
-  implicit val p = (new MiniConfig).toInstance
   "BrCondSimple" should "pass" in {
-    test(new BrCondTester(new BrCondSimple)).runUntilStop()
+    test(new BrCondTester(new BrCondSimple(32))).runUntilStop()
   }
   "BrCondArea" should "pass" in {
-    test(new BrCondTester(new BrCondArea)).runUntilStop()
+    test(new BrCondTester(new BrCondArea(32))).runUntilStop()
   }
 }

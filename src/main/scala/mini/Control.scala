@@ -3,8 +3,7 @@
 package mini
 
 import chisel3._
-import chisel3.util.ListLookup
-import config.Parameters
+import chisel3.util._
 
 object Control {
   val Y = true.B
@@ -64,7 +63,7 @@ object Control {
   val WB_PC4 = 2.U(2.W)
   val WB_CSR = 3.U(2.W)
 
-  import ALU._
+  import Alu._
   import Instructions._
 
   val default =
@@ -125,8 +124,8 @@ object Control {
   )
 }
 
-class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst = Input(UInt(xlen.W))
+class ControlSignals extends Bundle {
+  val inst = Input(UInt(32.W))
   val pc_sel = Output(UInt(2.W))
   val inst_kill = Output(Bool())
   val A_sel = Output(UInt(1.W))
@@ -142,7 +141,7 @@ class ControlSignals(implicit p: Parameters) extends CoreBundle()(p) {
   val illegal = Output(Bool())
 }
 
-class Control(implicit p: Parameters) extends Module {
+class Control extends Module {
   val io = IO(new ControlSignals)
   val ctrlSignals = ListLookup(io.inst, Control.default, Control.map)
 

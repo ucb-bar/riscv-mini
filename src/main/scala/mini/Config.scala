@@ -2,22 +2,30 @@
 
 package mini
 
-import chisel3.Module
-import config.{Config, Parameters}
-import junctions._
+import junctions.NastiBundleParameters
 
-class MiniConfig
-    extends Config((site, here, up) => {
-      // Core
-      case XLEN        => 32
-      case Trace       => false
-      case BuildALU    => (p: Parameters) => Module(new ALUArea()(p))
-      case BuildImmGen => (p: Parameters) => Module(new ImmGenWire()(p))
-      case BuildBrCond => (p: Parameters) => Module(new BrCondArea()(p))
-      // Cache
-      case NWays           => 1 // TODO: set-associative
-      case NSets           => 256
-      case CacheBlockBytes => 4 * (here(XLEN) >> 3) // 4 x 32 bits = 16B
-      // NastiIO
-      case NastiKey => new NastiParameters(idBits = 5, dataBits = 64, addrBits = here(XLEN))
-    })
+case class Config(core: CoreConfig, cache: CacheConfig, nasti: NastiBundleParameters)
+
+object MiniConfig {
+  def apply(): Config = {
+    val xlen = 32
+    Config(
+      core = CoreConfig(
+        xlen = xlen,
+        makeAlu = new AluArea(_),
+        makeBrCond = new BrCondArea(_),
+        makeImmGen = new ImmGenWire(_)
+      ),
+      cache = CacheConfig(
+        nWays = 1,
+        nSets = 256,
+        blockBytes = 4 * (xlen / 8) // 4 * 32 bits = 16B
+      ),
+      nasti = NastiBundleParameters(
+        addrBits = 32,
+        dataBits = 64,
+        idBits = 5
+      )
+    )
+  }
+}

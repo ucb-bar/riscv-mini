@@ -4,7 +4,6 @@ package mini
 
 import chisel3._
 import chisel3.util._
-import config.Parameters
 
 object CSR {
   val N = 0.U(3.W)
@@ -99,7 +98,7 @@ object Cause {
   val Ecall = 0x8.U
 }
 
-class CSRIO(implicit p: Parameters) extends CoreBundle()(p) {
+class CSRIO(xlen: Int) extends Bundle {
   val stall = Input(Bool())
   val cmd = Input(UInt(3.W))
   val in = Input(UInt(xlen.W))
@@ -116,11 +115,11 @@ class CSRIO(implicit p: Parameters) extends CoreBundle()(p) {
   val evec = Output(UInt(xlen.W))
   val epc = Output(UInt(xlen.W))
   // HTIF
-  val host = new HostIO
+  val host = new HostIO(xlen)
 }
 
-class CSR(implicit val p: Parameters) extends Module with CoreParams {
-  val io = IO(new CSRIO)
+class CSR(val xlen: Int) extends Module {
+  val io = IO(new CSRIO(xlen))
 
   val csr_addr = io.inst(31, 20)
   val rs1_addr = io.inst(19, 15)
