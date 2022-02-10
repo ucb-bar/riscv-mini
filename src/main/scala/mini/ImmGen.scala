@@ -13,10 +13,11 @@ class ImmGenIO(xlen: Int) extends Bundle {
 }
 
 trait ImmGen extends Module {
+  def xlen: Int
   val io: ImmGenIO
 }
 
-class ImmGenWire(xlen: Int) extends ImmGen {
+class ImmGenWire(val xlen: Int) extends ImmGen {
   val io = IO(new ImmGenIO(xlen))
   val Iimm = io.inst(31, 20).asSInt
   val Simm = Cat(io.inst(31, 25), io.inst(11, 7)).asSInt
@@ -32,7 +33,7 @@ class ImmGenWire(xlen: Int) extends ImmGen {
   ).asUInt
 }
 
-class ImmGenMux(xlen: Int) extends ImmGen {
+class ImmGenMux(val xlen: Int) extends ImmGen {
   val io = IO(new ImmGenIO(xlen))
   val sign = Mux(io.sel === IMM_Z, 0.S, io.inst(31).asSInt)
   val b30_20 = Mux(io.sel === IMM_U, io.inst(30, 20).asSInt, sign)

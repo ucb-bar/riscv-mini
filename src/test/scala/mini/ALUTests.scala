@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.testers._
 import chisel3.util._
 import chiseltest._
+import chiseltest.formal._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class AluTester(alu: => Alu) extends BasicTester with TestUtils {
@@ -89,11 +90,30 @@ class AluTester(alu: => Alu) extends BasicTester with TestUtils {
   )
 }
 
-class ALUTests extends AnyFlatSpec with ChiselScalatestTester {
+class ALUTests extends AnyFlatSpec with ChiselScalatestTester with Formal {
   "ALUSimple" should "pass" in {
     test(new AluTester(new AluSimple(32))).runUntilStop()
   }
-  "ALUArea" should "pass" in {
+  "AluArea" should "pass" in {
     test(new AluTester(new AluArea(32))).runUntilStop()
   }
+  "AluArea" should "be equivalent to AluSimple" in {
+    // since there is no state (registers/memory) in the ALU, a single cycle check is enough to prove equivalence
+    verify(new AluEquivalenceCheck(new AluArea(32)), Seq(BoundedCheck(1)))
+  }
+}
+
+class AluEquivalenceCheck(other: => Alu) extends Module {
+  val dut = Module(other)
+  val ref = Module(new AluSimple(dut.width))
+
+  // arbitrary inputs
+  val io = IO(chiselTypeOf(dut.io))
+
+  // connect the same inputs to both modules (the outputs will be overwritten to always connect to the reference)
+  dut.io <> io; ref.io <> io
+
+  // check to ensure that outputs are the same
+  assert(ref.io.out === dut.io.out, "out: expected: %d, actual: %d", ref.io.out, dut.io.out)
+  assert(ref.io.sum === dut.io.sum, "sum: %d, actual: %d", ref.io.sum, dut.io.sum)
 }
