@@ -87,11 +87,11 @@ class AluArea(val width: Int) extends Alu {
             shiftl,
             Mux(
               io.alu_op === ALU_AND,
-              (io.A & io.B),
+              io.A & io.B,
               Mux(
                 io.alu_op === ALU_OR,
-                (io.A | io.B),
-                Mux(io.alu_op === ALU_XOR, (io.A ^ io.B), Mux(io.alu_op === ALU_COPY_A, io.A, io.B))
+                io.A | io.B,
+                Mux(io.alu_op === ALU_XOR, io.A ^ io.B, Mux(io.alu_op === ALU_COPY_A, io.A, io.B))
               )
             )
           )

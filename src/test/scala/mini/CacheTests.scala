@@ -3,6 +3,7 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.util._
 import chisel3.testers._
 import junctions._
@@ -13,6 +14,10 @@ class GoldCacheIO(p: CacheConfig, nastiParams: NastiBundleParameters, xlen: Int)
   val req = Flipped(Decoupled(new CacheReq(xlen, xlen)))
   val resp = Decoupled(new CacheResp(xlen))
   val nasti = new NastiBundle(nastiParams)
+}
+
+object GoldCacheState extends ChiselEnum {
+  val sIdle, sWrite, sWriteAck, sRead = Value
 }
 
 class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends Module {
@@ -43,16 +48,16 @@ class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends
   val off = req.addr(blen - 1, 0)
 
   val readData = dataMemory(idx)
-  val writeData = ((0 until bBytes).foldLeft(0.U) { (write, i) =>
+  val writeData = (0 until bBytes).foldLeft(0.U) { (write, i) =>
     write | {
       val condition = ((off / 4.U) === (i / 4).U) && (req.mask >> (i & 0x3).U)(0)
-      val trueClause = ((((req.data >> ((8 * (i & 0x3)).U)).asUInt & 0xff.U).asUInt) << (8 * BigInt(i)).U).asUInt
+      val trueClause = (((req.data >> (8 * (i & 0x3)).U).asUInt & 0xff.U).asUInt << (8 * BigInt(i)).U).asUInt
       val falseClause = readData & (BigInt(0xff) << (8 * i)).U
       Mux(condition, trueClause, falseClause)
     }
-  })(bBits - 1, 0)
+  }(bBits - 1, 0)
 
-  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
+  import GoldCacheState._
   val state = RegInit(sIdle)
   val (wCnt, wDone) = Counter(state === sWrite, dataBeats)
   val (rCnt, rDone) = Counter(state === sRead && io.nasti.r.valid, dataBeats)
@@ -66,7 +71,7 @@ class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends
   io.nasti.aw.valid := false.B
   io.nasti.w.bits := NastiWriteDataBundle(nasti)((readData >> (wCnt * nasti.dataBits.U)).asUInt, None, wDone)
   io.nasti.w.valid := state === sWrite
-  io.nasti.b.ready := state === sWrAck
+  io.nasti.b.ready := state === sWriteAck
   io.nasti.r.ready := state === sRead
 
   switch(state) {
@@ -104,10 +109,10 @@ class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends
     }
     is(sWrite) {
       when(wDone) {
-        state := sWrAck
+        state := sWriteAck
       }
     }
-    is(sWrAck) {
+    is(sWriteAck) {
       when(io.nasti.b.valid) {
         dataMemory(idx) := 0.U
         io.nasti.ar.valid := true.B
@@ -116,7 +121,7 @@ class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends
     }
     is(sRead) {
       when(io.nasti.r.valid) {
-        dataMemory(idx) := readData | ((io.nasti.r.bits.data << (rCnt * nasti.dataBits.U)).asUInt)
+        dataMemory(idx) := readData | (io.nasti.r.bits.data << (rCnt * nasti.dataBits.U)).asUInt
       }
       when(rDone) {
         assert(io.nasti.r.bits.last)
@@ -126,6 +131,14 @@ class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends
       }
     }
   }
+}
+
+object CacheTesterState extends ChiselEnum {
+  val sInit, sStart, sWait, sDone = Value
+}
+
+object CacheTesterMemState extends ChiselEnum {
+  val sMemIdle, sMemWrite, sMemWrAck, sMemRead = Value
 }
 
 class CacheTester(cache: => Cache) extends BasicTester {
@@ -170,7 +183,7 @@ class CacheTester(cache: => Cache) extends BasicTester {
 
   /* Main Memory */
   val mem = Mem(1 << 20, UInt(nasti.dataBits.W))
-  val sMemIdle :: sMemWrite :: sMemWrAck :: sMemRead :: Nil = Enum(4)
+  import CacheTesterMemState._
   val memState = RegInit(sMemIdle)
   val (wCnt, wDone) = Counter(memState === sMemWrite && dut_mem.w.valid && gold_mem.w.valid, dataBeats)
   val (rCnt, rDone) = Counter(memState === sMemRead && dut_mem.r.ready && gold_mem.r.ready, dataBeats)
@@ -302,9 +315,9 @@ class CacheTester(cache: => Cache) extends BasicTester {
   def rand_tag = rnd.nextInt(1 << tlen).U(tlen.W)
   def rand_idx = rnd.nextInt(1 << slen).U(slen.W)
   def rand_off = (rnd.nextInt(1 << blen) & -4).U(blen.W)
-  def rand_data = (
-    ((0 until (nasti.dataBits / 8)).foldLeft(BigInt(0)))((r, i) => r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))
-  ).U(nasti.dataBits.W)
+  def rand_data = (0 until (nasti.dataBits / 8))
+    .foldLeft(BigInt(0))((r, i) => r | (BigInt(rnd.nextInt(0xff + 1)) << (8 * i)))
+    .U(nasti.dataBits.W)
   def rand_mask = (rnd.nextInt((1 << (xlen / 8)) - 1) + 1).U((xlen / 8).W)
   def test(tag: UInt, idx: UInt, off: UInt, mask: UInt = 0.U((xlen / 8).W)) =
     Cat(mask, Cat(Seq.fill(bBits / nasti.dataBits)(rand_data)), tag, idx, off)
@@ -337,7 +350,7 @@ class CacheTester(cache: => Cache) extends BasicTester {
     test(tags(2), idxs(1), offs(5)) // #14: read hit
   )
 
-  val sInit :: sStart :: sWait :: sDone :: Nil = Enum(4)
+  import CacheTesterState._
   val state = RegInit(sInit)
   val timeout = Reg(UInt(32.W))
   val (initCnt, initDone) = Counter(state === sInit, initAddr.size)
@@ -346,7 +359,7 @@ class CacheTester(cache: => Cache) extends BasicTester {
   val data = (VecInit(testVec)(testCnt) >> (blen + slen + tlen))(bBits - 1, 0)
   val tag = (VecInit(testVec)(testCnt) >> (blen + slen).U)(tlen - 1, 0)
   val idx = (VecInit(testVec)(testCnt) >> blen.U)(slen - 1, 0)
-  val off = (VecInit(testVec)(testCnt))(blen - 1, 0)
+  val off = VecInit(testVec)(testCnt)(blen - 1, 0)
   dut.io.cpu.req.bits.addr := Cat(tag, idx, off)
   dut.io.cpu.req.bits.data := data
   dut.io.cpu.req.bits.mask := mask

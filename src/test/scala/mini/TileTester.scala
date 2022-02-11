@@ -3,12 +3,17 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.testers._
 import chisel3.util._
 import chisel3.util.experimental.loadMemoryFromFileInline
 import chiseltest._
 import junctions._
 import org.scalatest.flatspec.AnyFlatSpec
+
+object TileTesterState extends ChiselEnum {
+  val sIdle, sWrite, sWrAck, sRead = Value
+}
 
 class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Boolean = false) extends BasicTester {
   val filename = "tests/64/" + benchmark + ".hex" // we have 64 bits per memory entry
@@ -22,7 +27,7 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
 
   val _mem = Mem(1 << 20, UInt(nasti.dataBits.W))
   loadMemoryFromFileInline(_mem, filename)
-  val sIdle :: sWrite :: sWrAck :: sRead :: Nil = Enum(4)
+  import TileTesterState._
   val state = RegInit(sIdle)
   val cycle = RegInit(0.U(32.W))
 
@@ -30,12 +35,12 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
   val addr = Reg(UInt(nasti.addrBits.W))
   val len = Reg(UInt(NastiConstants.LenBits.W))
   val off = Reg(UInt(NastiConstants.LenBits.W))
-  val write = ((0 until (nasti.dataBits / 8)).foldLeft(0.U(nasti.dataBits.W))) { (write, i) =>
+  val write = (0 until (nasti.dataBits / 8)).foldLeft(0.U(nasti.dataBits.W)) { (write, i) =>
     write |
-      ((Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(
+      (Mux(dut.io.nasti.w.bits.strb(i), dut.io.nasti.w.bits.data, _mem(addr))(
         8 * (i + 1) - 1,
         8 * i
-      )) << (8 * i).U).asUInt
+      ) << (8 * i).U).asUInt
   }
   val bpipe = WireInit(dut.io.nasti.b)
   val rpipe = WireInit(dut.io.nasti.r)
@@ -121,7 +126,7 @@ class LatencyPipeIO[T <: Data](val gen: T) extends Bundle {
 class LatencyPipe[T <: Data](gen: T, latency: Int) extends Module {
   val io = IO(new LatencyPipeIO(chiselTypeOf(gen)))
   io := DontCare
-  io.out <> ((0 until latency).foldLeft(io.in))((in, i) => Queue(in, 1, pipe = true))
+  io.out <> (0 until latency).foldLeft(io.in)((in, i) => Queue(in, 1, pipe = true))
 }
 
 object LatencyPipe {

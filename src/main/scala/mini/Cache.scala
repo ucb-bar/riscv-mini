@@ -3,6 +3,7 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.util._
 import junctions._
 
@@ -33,6 +34,10 @@ class MetaData(tagLength: Int) extends Bundle {
   val tag = UInt(tagLength.W)
 }
 
+object CacheState extends ChiselEnum {
+  val sIdle, sReadCache, sWriteCache, sWriteBack, sWriteAck, sRefillReady, sRefill = Value
+}
+
 class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int) extends Module {
   // local parameters
   val nSets = p.nSets
@@ -49,9 +54,8 @@ class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int)
   val io = IO(new CacheModuleIO(nasti, addrWidth = xlen, dataWidth = xlen))
 
   // cache states
-  val (s_IDLE :: s_READ_CACHE :: s_WRITE_CACHE :: s_WRITE_BACK :: s_WRITE_ACK ::
-    s_REFILL_READY :: s_REFILL :: Nil) = Enum(7)
-  val state = RegInit(s_IDLE)
+  import CacheState._
+  val state = RegInit(sIdle)
   // memory
   val v = RegInit(0.U(nSets.W))
   val d = RegInit(0.U(nSets.W))
@@ -67,10 +71,10 @@ class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int)
   val (read_count, read_wrap_out) = Counter(io.nasti.r.fire, dataBeats)
   val (write_count, write_wrap_out) = Counter(io.nasti.w.fire, dataBeats)
 
-  val is_idle = state === s_IDLE
-  val is_read = state === s_READ_CACHE
-  val is_write = state === s_WRITE_CACHE
-  val is_alloc = state === s_REFILL && read_wrap_out
+  val is_idle = state === sIdle
+  val is_read = state === sReadCache
+  val is_write = state === sWriteCache
+  val is_alloc = state === sRefill && read_wrap_out
   val is_alloc_reg = RegNext(is_alloc)
 
   val hit = Wire(Bool())
@@ -134,7 +138,7 @@ class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int)
   )
   io.nasti.ar.valid := false.B
   // read data
-  io.nasti.r.ready := state === s_REFILL
+  io.nasti.r.ready := state === sRefill
   when(io.nasti.r.fire) {
     refill_buf(read_count) := io.nasti.r.bits.data
   }
@@ -160,62 +164,62 @@ class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int)
   // Cache FSM
   val is_dirty = v(idx_reg) && d(idx_reg)
   switch(state) {
-    is(s_IDLE) {
+    is(sIdle) {
       when(io.cpu.req.valid) {
-        state := Mux(io.cpu.req.bits.mask.orR, s_WRITE_CACHE, s_READ_CACHE)
+        state := Mux(io.cpu.req.bits.mask.orR, sWriteCache, sReadCache)
       }
     }
-    is(s_READ_CACHE) {
+    is(sReadCache) {
       when(hit) {
         when(io.cpu.req.valid) {
-          state := Mux(io.cpu.req.bits.mask.orR, s_WRITE_CACHE, s_READ_CACHE)
+          state := Mux(io.cpu.req.bits.mask.orR, sWriteCache, sReadCache)
         }.otherwise {
-          state := s_IDLE
+          state := sIdle
         }
       }.otherwise {
         io.nasti.aw.valid := is_dirty
         io.nasti.ar.valid := !is_dirty
         when(io.nasti.aw.fire) {
-          state := s_WRITE_BACK
+          state := sWriteBack
         }.elsewhen(io.nasti.ar.fire) {
-          state := s_REFILL
+          state := sRefill
         }
       }
     }
-    is(s_WRITE_CACHE) {
+    is(sWriteCache) {
       when(hit || is_alloc_reg || io.cpu.abort) {
-        state := s_IDLE
+        state := sIdle
       }.otherwise {
         io.nasti.aw.valid := is_dirty
         io.nasti.ar.valid := !is_dirty
         when(io.nasti.aw.fire) {
-          state := s_WRITE_BACK
+          state := sWriteBack
         }.elsewhen(io.nasti.ar.fire) {
-          state := s_REFILL
+          state := sRefill
         }
       }
     }
-    is(s_WRITE_BACK) {
+    is(sWriteBack) {
       io.nasti.w.valid := true.B
       when(write_wrap_out) {
-        state := s_WRITE_ACK
+        state := sWriteAck
       }
     }
-    is(s_WRITE_ACK) {
+    is(sWriteAck) {
       io.nasti.b.ready := true.B
       when(io.nasti.b.fire) {
-        state := s_REFILL_READY
+        state := sRefillReady
       }
     }
-    is(s_REFILL_READY) {
+    is(sRefillReady) {
       io.nasti.ar.valid := true.B
       when(io.nasti.ar.fire) {
-        state := s_REFILL
+        state := sRefill
       }
     }
-    is(s_REFILL) {
+    is(sRefill) {
       when(read_wrap_out) {
-        state := Mux(cpu_mask.orR, s_WRITE_CACHE, s_IDLE)
+        state := Mux(cpu_mask.orR, sWriteCache, sIdle)
       }
     }
   }

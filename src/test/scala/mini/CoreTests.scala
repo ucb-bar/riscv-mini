@@ -24,13 +24,13 @@ class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) exten
   val cycle = RegInit(0.U(32.W))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
   val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
-  val write = ((0 until (xlen / 8)).foldLeft(0.U(xlen.W))) { (write, i) =>
+  val write = (0 until (xlen / 8)).foldLeft(0.U(xlen.W)) { (write, i) =>
     write |
-      ((Mux(
+      (Mux(
         (dut.io.dcache.req.valid && dut.io.dcache.req.bits.mask(i)).asBool,
         dut.io.dcache.req.bits.data,
         dmem(daddr)
-      )(8 * (i + 1) - 1, 8 * i)) << (8 * i).U).asUInt
+      )(8 * (i + 1) - 1, 8 * i) << (8 * i).U).asUInt
   }
   dut.io.icache.resp.valid := !reset.asBool
   dut.io.dcache.resp.valid := !reset.asBool
