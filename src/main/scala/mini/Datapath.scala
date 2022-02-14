@@ -6,12 +6,11 @@ import chisel3._
 import chisel3.util._
 
 object Const {
-  val PC_START = 0x200
+  val PC_START = 0x8000_0000L
   val PC_EVEC = 0x100
 }
 
 class DatapathIO(xlen: Int) extends Bundle {
-  val host = new HostIO(xlen)
   val icache = Flipped(new CacheIO(xlen, xlen))
   val dcache = Flipped(new CacheIO(xlen, xlen))
   val ctrl = Flipped(new ControlSignals)
@@ -71,6 +70,7 @@ class Datapath(val conf: CoreConfig) extends Module {
       )
     )
   )
+  this.reset
   val inst =
     Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.resp.bits.data)
   pc := npc
@@ -178,7 +178,6 @@ class Datapath(val conf: CoreConfig) extends Module {
   csr.io.pc_check := pc_check
   csr.io.ld_type := ld_type
   csr.io.st_type := st_type
-  io.host <> csr.io.host
 
   // Regfile Write
   val regWrite =

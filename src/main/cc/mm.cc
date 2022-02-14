@@ -11,7 +11,7 @@
 mm_magic_t::mm_magic_t(size_t size, size_t word_size):
   data(new char[size]),
   size(size),
-  word_size(word_size), 
+  word_size(word_size),
   store_inflight(false)
 {
   dummy_data.resize(word_size);
@@ -27,6 +27,7 @@ void mm_magic_t::write(uint64_t addr, char *data) {
 
   char* base = this->data + addr;
   memcpy(base, data, word_size);
+  printf("Writing to addr %lx\n", addr);
 }
 
 void mm_magic_t::write(uint64_t addr, char *data, uint64_t strb, uint64_t size)
@@ -46,6 +47,7 @@ std::vector<char> mm_magic_t::read(uint64_t addr)
   addr %= this->size;
 
   char *base = this->data + addr;
+  printf("Reading from addr %lx\n", addr);
   return std::vector<char>(base, base + word_size);
 }
 

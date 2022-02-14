@@ -3,58 +3,66 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.util._
 
 object CSR {
-  val N = 0.U(3.W)
-  val W = 1.U(3.W)
-  val S = 2.U(3.W)
-  val C = 3.U(3.W)
-  val P = 4.U(3.W)
+  val N = 0.U(3.W) // Not a CSR instruction
+  val W = 1.U(3.W) // rd <= CSR, CSR <= rs1 (write)
+  val S = 2.U(3.W) // rd <= CSR, CSR[i] <= 1 if rs1[i] (set)
+  val C = 3.U(3.W) // rd <= CSR, CSR[i] <= 0 if !rs1[i] (clear)
+  val P = 4.U(3.W) // privileged instruction
 
   // Supports machine & user modes
   val PRV_U = 0x0.U(2.W)
   val PRV_M = 0x3.U(2.W)
 
-  // User-level CSR addrs
-  val cycle = 0xc00.U(12.W)
-  val time = 0xc01.U(12.W)
-  val instret = 0xc02.U(12.W)
-  val cycleh = 0xc80.U(12.W)
-  val timeh = 0xc81.U(12.W)
-  val instreth = 0xc82.U(12.W)
+  // User-level CSR (unprivileged counters) addrs
+  val cycle = 0xC00.U(12.W)
+  val time = 0xC01.U(12.W)
+  val instret = 0xC02.U(12.W)
+  val cycleh = 0xC80.U(12.W)
+  val timeh = 0xC81.U(12.W)
+  val instreth = 0xC82.U(12.W)
 
-  // Supervisor-level CSR addrs
-  val cyclew = 0x900.U(12.W)
-  val timew = 0x901.U(12.W)
-  val instretw = 0x902.U(12.W)
-  val cyclehw = 0x980.U(12.W)
-  val timehw = 0x981.U(12.W)
-  val instrethw = 0x982.U(12.W)
-
-  // Machine-level CSR addrs
+  //// Machine-level CSR addrs
   // Machine Information Registers
-  val mcpuid = 0xf00.U(12.W)
-  val mimpid = 0xf01.U(12.W)
-  val mhartid = 0xf10.U(12.W)
+  val mvendorid = 0xF11.U(12.W) // vendor ID (formerly part of mcpuid)
+  val marchid = 0xF12.U(12.W) // arch ID (formerly part of mcpuid)
+  val mimpid = 0xF13.U(12.W) // implementation ID
+  val mhartid = 0xF14.U(12.W) // hardware thread ID
+
   // Machine Trap Setup
-  val mstatus = 0x300.U(12.W)
-  val mtvec = 0x301.U(12.W)
-  val mtdeleg = 0x302.U(12.W)
-  val mie = 0x304.U(12.W)
-  val mtimecmp = 0x321.U(12.W)
-  // Machine Timers and Counters
-  val mtime = 0x701.U(12.W)
-  val mtimeh = 0x741.U(12.W)
+  val mstatus = 0x300.U(12.W) // machine status
+  val misa = 0x301.U(12.W) // isa and extensions
+  val medeleg = 0x302.U(12.W) // machine exception delegation
+  val mideleg = 0x303.U(12.W) // machine interrupt delegation
+  val mie = 0x304.U(12.W) // machine interrupt-enable
+  val mtvec = 0x305.U(12.W) // trap handler base address
+  val mstatush = 0x310.U(12.W) // upper word of mstatus (rv32)
+
   // Machine Trap Handling
-  val mscratch = 0x340.U(12.W)
-  val mepc = 0x341.U(12.W)
-  val mcause = 0x342.U(12.W)
-  val mbadaddr = 0x343.U(12.W)
-  val mip = 0x344.U(12.W)
-  // Machine HITF
-  val mtohost = 0x780.U(12.W)
-  val mfromhost = 0x781.U(12.W)
+  val mscratch = 0x340.U(12.W) // scratch register for trap handlers
+  val mepc = 0x341.U(12.W) // exception PC
+  val mcause = 0x342.U(12.W) // trap cause
+  val mtval = 0x343.U(12.W) // bad address / instruction
+  val mip = 0x344.U(12.W) // interrupt pending
+
+  // Machine Memory Protection
+  val pmpcfg0 = 0x3A0.U(12.W) // physical memory protection conf (TODO: there are 16 such registers)
+  val pmpaddr0 = 0x3B0.U(12.W) // physical memory protection addr (TODO: there are 64 such registers)
+
+  // Machine Timers and Counters
+  // TODO: mtime, mtimeh, mtimecmp are all memory mapped now, not CSRs
+  // val mtimecmp = 0x321.U(12.W) // TODO: no longer a CSR, now memory mapped
+  // time csr = read only shadow of mtime
+  // same for cycle, instret CSRs
+  // val mtime = 0x701.U(12.W)
+  // val mtimeh = 0x741.U(12.W)
+  val mcycle = 0xB00.U(12.W)
+  val minstret = 0xB02.U(12.W)
+  val mcycleh = 0xB80.U(12.W)
+  val minstreth = 0xB82.U(12.W)
 
   val regs = List(
     cycle,
@@ -63,29 +71,27 @@ object CSR {
     cycleh,
     timeh,
     instreth,
-    cyclew,
-    timew,
-    instretw,
-    cyclehw,
-    timehw,
-    instrethw,
-    mcpuid,
+    mvendorid,
+    marchid,
     mimpid,
     mhartid,
-    mtvec,
-    mtdeleg,
+    mstatus,
+    misa,
+    medeleg,
+    mideleg,
     mie,
-    mtimecmp,
-    mtime,
-    mtimeh,
+    mtvec,
     mscratch,
     mepc,
     mcause,
-    mbadaddr,
+    mtval,
     mip,
-    mtohost,
-    mfromhost,
-    mstatus
+    pmpcfg0,
+    pmpaddr0,
+    mcycle,
+    minstret,
+    mcycleh,
+    minstreth
   )
 }
 
@@ -114,8 +120,6 @@ class CSRIO(xlen: Int) extends Bundle {
   val expt = Output(Bool())
   val evec = Output(UInt(xlen.W))
   val epc = Output(UInt(xlen.W))
-  // HTIF
-  val host = new HostIO(xlen)
 }
 
 class CSR(val xlen: Int) extends Module {
@@ -125,23 +129,71 @@ class CSR(val xlen: Int) extends Module {
   val rs1_addr = io.inst(19, 15)
 
   // user counters
-  val time = RegInit(0.U(xlen.W))
-  val timeh = RegInit(0.U(xlen.W))
-  val cycle = RegInit(0.U(xlen.W))
-  val cycleh = RegInit(0.U(xlen.W))
-  val instret = RegInit(0.U(xlen.W))
-  val instreth = RegInit(0.U(xlen.W))
+  val cycle = RegInit(0.U(64.W)) // same counter is used for time
+  val instret = RegInit(0.U(64.W))
 
-  val mcpuid = Cat(
-    0.U(2.W) /* RV32I */,
-    0.U((xlen - 28).W),
-    (1 << ('I' - 'A') /* Base ISA */ |
-      1 << ('U' - 'A') /* User Mode */ ).U(26.W)
-  )
-  val mimpid = 0.U(xlen.W) // not implemented
-  val mhartid = 0.U(xlen.W) // only one hart
+  // CPU info
+  object MXL extends ChiselEnum {
+    val rv32 = Value(1.U(2.W))
+    val rv64 = Value(2.U(2.W))
+    val rv128 = Value(3.U(2.W))
+  }
+  def xlen2mxl(xlen: Int): UInt = {
+    xlen match {
+      case 32 => MXL.rv32.asUInt
+      case 64 => MXL.rv64.asUInt
+      case 128 => MXL.rv128.asUInt
+    }
+  }
+  val mxlen = xlen // machine CSR width
+  val mxl = xlen2mxl(xlen) // machine XLEN (usually the same as xlen)
+  val extensions =
+    (1 << 8) | // rv32i/64i base isa
+    (1 << 20) // user mode implemented
+  val misa = Cat(mxl, 0.U(mxlen-28), extensions.U(26.W))
+  val mvendorid = 0.U(mxlen.W) // non-commercial implementation
+  val marchid = 0.U(mxlen.W) // microarch of the hart: unimplemented
+  val mimpid = 0.U(mxlen.W) // processor impl encoding: unimplemented
+  val mhartid = 0.U(mxlen.W) // only one hart
 
-  // interrupt enable stack
+  //// mstatus
+  // trap handling info
+  val SIE = 0.B // supervisor interrupt enable
+  val MIE = 0.B // machine interrupt enable
+  val SPIE = 0.B // supervisor IE prior to trap
+  val MPIE = 0.B // machine IE prior to trap
+  val SPP = 0.B // supervisor privilege mode prior to trap
+  val MPP = 0.U(2.W) // machine privilege mode prior to trap
+  // ISA extensions and extension state tracking
+  val VS = 0.U(2.W) // state of vector extension
+  val FS = 0.U(2.W) // state of F extension (FP support)
+  val XS = 0.U(2.W) // state of custom ISA extension
+  val SD = 0.B // any state dirty? (0 = no support for VS, FS, XS)
+  // endianness
+  val UBE = 0.B // user mode endianness (LE)
+  val SBE = 0.B // supervisor mode endianness (LE)
+  val MBE = 0.B // machine mode endianness (LE)
+  // supervisor mode stuff
+  val MPRV = 0.B // memory privilege (0 = Ld/St use translation/privilege of current mode)
+  val SUM = 0.B // permit supervisor user memory access (unused if we're never in supervisor mode)
+  val MXR = 0.B // make executable readable (0 = loads from executable pages will trap, S-mode not supported)
+  val TVM = 0.B // trap virtual memory (0 = S-mode not supported)
+  val TW = 0.B // timeout wait (0 = WFI may execute in lower priv mode indefinetely)
+  val TSR = 0.B // trap SRET (0 = S-mode not suported)
+  val mstatus = if (xlen == 64) { // rv64 version
+    val UXL = 0.U(2.W)
+    val SXL = 0.U(2.W)
+    Cat(SD, 0.U(25.W), MBE, SBE, SXL, UXL, 0.U(9.W), TSR, TW, TVM, MXR, SUM, MPRV, XS, FS, MPP, VS, SPP, MPIE, UBE, SPIE, 0.B, MIE, 0.B, SIE, 0.B)
+  } else { // rv32 version
+    require(xlen == 32)
+    Cat(0.U(26.W), MBE, SBE, 0.U(4.W), SD, 0.U(8.W), TSR, TW, TVM, MXR, SUM, MPRV, XS, FS, MPP, VS, SPP, MPIE, UBE, SPIE, 0.B, MIE, 0.B, SIE, 0.B)
+  }
+  Predef.assert(mstatus.getWidth == 64)
+
+  // trap handling
+  val mtvec = Const.PC_EVEC.U(xlen.W)
+  val mtdeleg = 0x0.U(xlen.W)
+
   val PRV = RegInit(CSR.PRV_M)
   val PRV1 = RegInit(CSR.PRV_M)
   val PRV2 = 0.U(2.W)
@@ -154,15 +206,8 @@ class CSR(val xlen: Int) extends Module {
   val VM = 0.U(5.W)
   // memory privilege
   val MPRV = false.B
-  // extention context status
-  val XS = 0.U(2.W)
-  val FS = 0.U(2.W)
-  val SD = 0.U(1.W)
-  val mstatus = Cat(SD, 0.U((xlen - 23).W), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
-  val mtvec = Const.PC_EVEC.U(xlen.W)
-  val mtdeleg = 0x0.U(xlen.W)
 
-  // interrupt registers
+  // interrupt handling
   val MTIP = RegInit(false.B)
   val HTIP = false.B
   val STIP = false.B
@@ -175,10 +220,9 @@ class CSR(val xlen: Int) extends Module {
   val MSIE = RegInit(false.B)
   val HSIE = false.B
   val SSIE = false.B
+
   val mip = Cat(0.U((xlen - 8).W), MTIP, HTIP, STIP, false.B, MSIP, HSIP, SSIP, false.B)
   val mie = Cat(0.U((xlen - 8).W), MTIE, HTIE, STIE, false.B, MSIE, HSIE, SSIE, false.B)
-
-  val mtimecmp = Reg(UInt(xlen.W))
 
   val mscratch = Reg(UInt(xlen.W))
 
@@ -186,44 +230,40 @@ class CSR(val xlen: Int) extends Module {
   val mcause = Reg(UInt(xlen.W))
   val mbadaddr = Reg(UInt(xlen.W))
 
-  val mtohost = RegInit(0.U(xlen.W))
-  val mfromhost = Reg(UInt(xlen.W))
-  io.host.tohost := mtohost
-  when(io.host.fromhost.valid) {
-    mfromhost := io.host.fromhost.bits
-  }
-
-  val csrFile = Seq(
-    BitPat(CSR.cycle) -> cycle,
-    BitPat(CSR.time) -> time,
-    BitPat(CSR.instret) -> instret,
-    BitPat(CSR.cycleh) -> cycleh,
-    BitPat(CSR.timeh) -> timeh,
-    BitPat(CSR.instreth) -> instreth,
-    BitPat(CSR.cyclew) -> cycle,
-    BitPat(CSR.timew) -> time,
-    BitPat(CSR.instretw) -> instret,
-    BitPat(CSR.cyclehw) -> cycleh,
-    BitPat(CSR.timehw) -> timeh,
-    BitPat(CSR.instrethw) -> instreth,
-    BitPat(CSR.mcpuid) -> mcpuid,
+  val csrFileGeneral: Seq[(BitPat, UInt)] = Seq(
+    BitPat(CSR.cycle) -> (if (xlen == 32) cycle(31, 0) else cycle),
+    BitPat(CSR.time) -> (if (xlen == 32) cycle(31, 0) else cycle),
+    BitPat(CSR.instret) -> (if (xlen == 32) instret(31, 0) else instret),
+    BitPat(CSR.mvendorid) -> mvendorid,
+    BitPat(CSR.marchid) -> marchid,
     BitPat(CSR.mimpid) -> mimpid,
     BitPat(CSR.mhartid) -> mhartid,
-    BitPat(CSR.mtvec) -> mtvec,
-    BitPat(CSR.mtdeleg) -> mtdeleg,
-    BitPat(CSR.mie) -> mie,
-    BitPat(CSR.mtimecmp) -> mtimecmp,
-    BitPat(CSR.mtime) -> time,
-    BitPat(CSR.mtimeh) -> timeh,
-    BitPat(CSR.mscratch) -> mscratch,
-    BitPat(CSR.mepc) -> mepc,
-    BitPat(CSR.mcause) -> mcause,
-    BitPat(CSR.mbadaddr) -> mbadaddr,
-    BitPat(CSR.mip) -> mip,
-    BitPat(CSR.mtohost) -> mtohost,
-    BitPat(CSR.mfromhost) -> mfromhost,
-    BitPat(CSR.mstatus) -> mstatus
+    BitPat(CSR.mstatus) -> (if (xlen == 32) mstatus(31, 0) else mstatus),
+    BitPat(CSR.misa) -> misa,
+    BitPat(CSR.medeleg),
+    BitPat(CSR.mideleg),
+    BitPat(CSR.mie),
+    BitPat(CSR.mtvec),
+    BitPat(CSR.mscratch),
+    BitPat(CSR.mepc),
+    BitPat(CSR.mcause),
+    BitPat(CSR.mtval),
+    BitPat(CSR.mip),
+    BitPat(CSR.pmpcfg0),
+    BitPat(CSR.pmpaddr0),
+    BitPat(CSR.mcycle) -> (if (xlen == 32) cycle(31, 0) else cycle),
+    BitPat(CSR.minstret) -> (if (xlen == 32) instret(31, 0) else instret),
   )
+  Predef.assert(csrFileGeneral.map(_._2).forall(_.getWidth == xlen))
+  val csrFileRv32 = Seq(
+    BitPat(CSR.cycleh) -> cycle(63, 32),
+    BitPat(CSR.timeh) -> cycle(63, 32),
+    BitPat(CSR.instreth) -> instret(63, 32),
+    BitPat(CSR.mstatush) -> mstatus(63, 32),
+    BitPat(CSR.mcycleh) -> cycle(63, 32),
+    BitPat(CSR.minstret) -> instred(63, 32)
+  )
+  val csrFile = if (xlen == 32) {csrFileGeneral ++ csrFileRv32} else csrFileGeneral
 
   io.out := Lookup(csr_addr, 0.U, csrFile).asUInt
 

@@ -69,7 +69,7 @@ void tick() {
     top->io_nasti_r_ready,
     top->io_nasti_b_ready
   );
-  
+
   top->clock = 0;
   top->eval();
 #if VM_TRACE
