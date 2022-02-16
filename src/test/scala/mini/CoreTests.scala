@@ -4,22 +4,32 @@ package mini
 
 import chisel3._
 import chisel3.testers._
-import chisel3.util.experimental.loadMemoryFromFileInline
+import chisel3.experimental.{annotate, ChiselAnnotation}
+import firrtl.annotations.MemoryArrayInitAnnotation
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) extends BasicTester {
-  val filename = "tests/32/" + benchmark + ".hex" // we have 32 bits per memory entry
+  val memWords = 1 << 20
+  val hexfile = os.pwd / "tests" / f"$benchmark.hex"
+  val words: Seq[BigInt] = os.read.lines(hexfile)
+    .filter(_.nonEmpty)
+    .map(_.grouped(8).map(BigInt(_, 16))).flatMap(_.toSeq.reverse)
+    .padTo(memWords, 0)
 
   val dut = Module(core)
   val xlen = dut.conf.xlen
   dut.io.host.fromhost.bits := DontCare
   dut.io.host.fromhost.valid := false.B
 
-  val imem = Mem(1 << 20, UInt(xlen.W))
-  loadMemoryFromFileInline(imem, filename)
-  val dmem = Mem(1 << 20, UInt(xlen.W))
-  loadMemoryFromFileInline(dmem, filename)
+  val imem = Mem(memWords, UInt(xlen.W))
+  annotate(new ChiselAnnotation {
+    override def toFirrtl = MemoryArrayInitAnnotation(imem.toTarget, words)
+  })
+  val dmem = Mem(memWords, UInt(xlen.W))
+  annotate(new ChiselAnnotation {
+    override def toFirrtl = MemoryArrayInitAnnotation(dmem.toTarget, words)
+  })
 
   val cycle = RegInit(0.U(32.W))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
