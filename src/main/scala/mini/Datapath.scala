@@ -7,7 +7,6 @@ import chisel3.util._
 
 object Const {
   val PC_START = 0x8000_0000L
-  val PC_EVEC = 0x100
 }
 
 class DatapathIO(xlen: Int) extends Bundle {

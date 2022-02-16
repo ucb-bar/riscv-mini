@@ -35,8 +35,9 @@ object CSR {
   // Machine Trap Setup
   val mstatus = 0x300.U(12.W) // machine status
   val misa = 0x301.U(12.W) // isa and extensions
-  val medeleg = 0x302.U(12.W) // machine exception delegation
-  val mideleg = 0x303.U(12.W) // machine interrupt delegation
+  // medeleg and mideleg shouldn't exist if S-mode isn't supported
+  // val medeleg = 0x302.U(12.W) // machine exception delegation
+  // val mideleg = 0x303.U(12.W) // machine interrupt delegation
   val mie = 0x304.U(12.W) // machine interrupt-enable
   val mtvec = 0x305.U(12.W) // trap handler base address
   val mstatush = 0x310.U(12.W) // upper word of mstatus (rv32)
@@ -53,12 +54,6 @@ object CSR {
   val pmpaddr0 = 0x3B0.U(12.W) // physical memory protection addr (TODO: there are 64 such registers)
 
   // Machine Timers and Counters
-  // TODO: mtime, mtimeh, mtimecmp are all memory mapped now, not CSRs
-  // val mtimecmp = 0x321.U(12.W) // TODO: no longer a CSR, now memory mapped
-  // time csr = read only shadow of mtime
-  // same for cycle, instret CSRs
-  // val mtime = 0x701.U(12.W)
-  // val mtimeh = 0x741.U(12.W)
   val mcycle = 0xB00.U(12.W)
   val minstret = 0xB02.U(12.W)
   val mcycleh = 0xB80.U(12.W)
@@ -77,8 +72,6 @@ object CSR {
     mhartid,
     mstatus,
     misa,
-    medeleg,
-    mideleg,
     mie,
     mtvec,
     mscratch,
@@ -109,7 +102,7 @@ class CSRIO(xlen: Int) extends Bundle {
   val cmd = Input(UInt(3.W))
   val in = Input(UInt(xlen.W))
   val out = Output(UInt(xlen.W))
-  // Excpetion
+  // Exception
   val pc = Input(UInt(xlen.W))
   val addr = Input(UInt(xlen.W))
   val inst = Input(UInt(xlen.W))
@@ -128,8 +121,9 @@ class CSR(val xlen: Int) extends Module {
   val csr_addr = io.inst(31, 20)
   val rs1_addr = io.inst(19, 15)
 
-  // user counters
-  val cycle = RegInit(0.U(64.W)) // same counter is used for time
+  // user counters, TODO: same counters used for mtime, mcycle, minstret (they should be distinct)
+  val cycle = RegInit(0.U(64.W))
+  val time = RegInit(0.U(64.W))
   val instret = RegInit(0.U(64.W))
 
   // CPU info
@@ -156,14 +150,16 @@ class CSR(val xlen: Int) extends Module {
   val mimpid = 0.U(mxlen.W) // processor impl encoding: unimplemented
   val mhartid = 0.U(mxlen.W) // only one hart
 
-  //// mstatus
+  // Trap Setup
+  val current_prv_level = RegInit(CSR.PRV_M)
+  // mstatus
   // trap handling info
   val SIE = 0.B // supervisor interrupt enable
-  val MIE = 0.B // machine interrupt enable
+  val MIE = RegInit(0.B) // machine interrupt enable
   val SPIE = 0.B // supervisor IE prior to trap
-  val MPIE = 0.B // machine IE prior to trap
+  val MPIE = RegInit(0.B) // machine IE prior to trap
   val SPP = 0.B // supervisor privilege mode prior to trap
-  val MPP = 0.U(2.W) // machine privilege mode prior to trap
+  val MPP = RegInit(CSR.PRV_M) // machine privilege mode prior to trap
   // ISA extensions and extension state tracking
   val VS = 0.U(2.W) // state of vector extension
   val FS = 0.U(2.W) // state of F extension (FP support)
@@ -190,49 +186,40 @@ class CSR(val xlen: Int) extends Module {
   }
   Predef.assert(mstatus.getWidth == 64)
 
-  // trap handling
-  val mtvec = Const.PC_EVEC.U(xlen.W)
-  val mtdeleg = 0x0.U(xlen.W)
+  val MEIE = false.B // machine level external interrupt enable
+  val MTIE = RegInit(false.B) // machine level timer interrupt enable
+  val MSIE = RegInit(false.B) // machine level SW interrupt enable
+  val SEIE = false.B // supervisor level external IE
+  val STIE = false.B // supervisor level timer IE
+  val SSIE = false.B // supervisor level software IE
+  val mie = Cat(0.U((mxlen - 16).W), 0.U(4.W), MEIE, 0.B, SEIE, 0.B, MTIE, 0.B, STIE, 0.B, MSIE, 0.B, SSIE, 0.B)
+  Predef.assert(mie.getWidth == mxlen)
 
-  val PRV = RegInit(CSR.PRV_M)
-  val PRV1 = RegInit(CSR.PRV_M)
-  val PRV2 = 0.U(2.W)
-  val PRV3 = 0.U(2.W)
-  val IE = RegInit(false.B)
-  val IE1 = RegInit(false.B)
-  val IE2 = false.B
-  val IE3 = false.B
-  // virtualization management field
-  val VM = 0.U(5.W)
-  // memory privilege
-  val MPRV = false.B
+  val mtvec = Reg(UInt(mxlen.W))
+  assert(mtvec(1,0) === 0.U, "Only direct mode is supported")
 
-  // interrupt handling
-  val MTIP = RegInit(false.B)
-  val HTIP = false.B
-  val STIP = false.B
-  val MTIE = RegInit(false.B)
-  val HTIE = false.B
-  val STIE = false.B
-  val MSIP = RegInit(false.B)
-  val HSIP = false.B
-  val SSIP = false.B
-  val MSIE = RegInit(false.B)
-  val HSIE = false.B
-  val SSIE = false.B
+  // Machine Trap Handling
+  val mscratch = Reg(UInt(mxlen.W))
+  val mepc = Reg(UInt(mxlen.W))
+  val mcause = Reg(UInt(mxlen.W))
+  val mtval = Reg(UInt(mxlen.W))
 
-  val mip = Cat(0.U((xlen - 8).W), MTIP, HTIP, STIP, false.B, MSIP, HSIP, SSIP, false.B)
-  val mie = Cat(0.U((xlen - 8).W), MTIE, HTIE, STIE, false.B, MSIE, HSIE, SSIE, false.B)
+  val MEIP = false.B // machine external interrupt pending
+  val MTIP = RegInit(false.B) // machine timer interrupt pending
+  val MSIP = RegInit(false.B) // machine SW interrupt pending
+  val SEIP = false.B // supervisor external IP
+  val STIP = false.B // supervisor time IP
+  val SSIP = false.B // supervisor SW IP
+  val mip = Cat(0.U((mxlen - 16).W), 0.U(4.W), MEIP, 0.B, SEIP, 0.B, MTIP, 0.B, STIP, 0.B, MSIP, 0.B, SSIP, 0.B)
+  Predef.assert(mip.getWidth == mxlen)
 
-  val mscratch = Reg(UInt(xlen.W))
-
-  val mepc = Reg(UInt(xlen.W))
-  val mcause = Reg(UInt(xlen.W))
-  val mbadaddr = Reg(UInt(xlen.W))
+  // Machine Memory Protection
+  val pmpcfg0 = 0.U(xlen.W)
+  val pmpaddr0 = 0.U(xlen.W)
 
   val csrFileGeneral: Seq[(BitPat, UInt)] = Seq(
     BitPat(CSR.cycle) -> (if (xlen == 32) cycle(31, 0) else cycle),
-    BitPat(CSR.time) -> (if (xlen == 32) cycle(31, 0) else cycle),
+    BitPat(CSR.time) -> (if (xlen == 32) time(31, 0) else time),
     BitPat(CSR.instret) -> (if (xlen == 32) instret(31, 0) else instret),
     BitPat(CSR.mvendorid) -> mvendorid,
     BitPat(CSR.marchid) -> marchid,
@@ -240,28 +227,26 @@ class CSR(val xlen: Int) extends Module {
     BitPat(CSR.mhartid) -> mhartid,
     BitPat(CSR.mstatus) -> (if (xlen == 32) mstatus(31, 0) else mstatus),
     BitPat(CSR.misa) -> misa,
-    BitPat(CSR.medeleg),
-    BitPat(CSR.mideleg),
-    BitPat(CSR.mie),
-    BitPat(CSR.mtvec),
-    BitPat(CSR.mscratch),
-    BitPat(CSR.mepc),
-    BitPat(CSR.mcause),
-    BitPat(CSR.mtval),
-    BitPat(CSR.mip),
-    BitPat(CSR.pmpcfg0),
-    BitPat(CSR.pmpaddr0),
+    BitPat(CSR.mie) -> mie,
+    BitPat(CSR.mtvec) -> mtvec,
+    BitPat(CSR.mscratch) -> mscratch,
+    BitPat(CSR.mepc) -> mepc,
+    BitPat(CSR.mcause) -> mcause,
+    BitPat(CSR.mtval) -> mtval,
+    BitPat(CSR.mip) -> mip,
+    BitPat(CSR.pmpcfg0) -> pmpcfg0,
+    BitPat(CSR.pmpaddr0) -> pmpaddr0,
     BitPat(CSR.mcycle) -> (if (xlen == 32) cycle(31, 0) else cycle),
     BitPat(CSR.minstret) -> (if (xlen == 32) instret(31, 0) else instret),
   )
   Predef.assert(csrFileGeneral.map(_._2).forall(_.getWidth == xlen))
   val csrFileRv32 = Seq(
     BitPat(CSR.cycleh) -> cycle(63, 32),
-    BitPat(CSR.timeh) -> cycle(63, 32),
+    BitPat(CSR.timeh) -> time(63, 32),
     BitPat(CSR.instreth) -> instret(63, 32),
     BitPat(CSR.mstatush) -> mstatus(63, 32),
     BitPat(CSR.mcycleh) -> cycle(63, 32),
-    BitPat(CSR.minstret) -> instred(63, 32)
+    BitPat(CSR.minstret) -> instret(63, 32)
   )
   val csrFile = if (xlen == 32) {csrFileGeneral ++ csrFileRv32} else csrFileGeneral
 
@@ -300,12 +285,9 @@ class CSR(val xlen: Int) extends Module {
 
   // Counters
   time := time + 1.U
-  when(time.andR) { timeh := timeh + 1.U }
   cycle := cycle + 1.U
-  when(cycle.andR) { cycleh := cycleh + 1.U }
   val isInstRet = io.inst =/= Instructions.NOP && (!io.expt || isEcall || isEbreak) && !io.stall
   when(isInstRet) { instret := instret + 1.U }
-  when(isInstRet && instret.andR) { instreth := instreth + 1.U }
 
   when(!io.stall) {
     when(io.expt) {
@@ -323,46 +305,36 @@ class CSR(val xlen: Int) extends Module {
           )
         )
       )
-      PRV := CSR.PRV_M
-      IE := false.B
-      PRV1 := PRV
-      IE1 := IE
-      when(iaddrInvalid || laddrInvalid || saddrInvalid) { mbadaddr := io.addr }
+      current_prv_level := CSR.PRV_M
+      MPIE := MIE
+      MPP := current_prv_level
+      MIE := 0.B
+      when(iaddrInvalid || laddrInvalid || saddrInvalid) { mepc := io.addr }
     }.elsewhen(isEret) {
-      PRV := PRV1
-      IE := IE1
-      PRV1 := CSR.PRV_U
-      IE1 := true.B
+      current_prv_level := MPP
+      MIE := MPIE
+      MPP := CSR.PRV_U
+      MPIE := 1.B
     }.elsewhen(wen) {
       when(csr_addr === CSR.mstatus) {
-        PRV1 := wdata(5, 4)
-        IE1 := wdata(3)
-        PRV := wdata(2, 1)
-        IE := wdata(0)
-      }
-        .elsewhen(csr_addr === CSR.mip) {
-          MTIP := wdata(7)
-          MSIP := wdata(3)
-        }
-        .elsewhen(csr_addr === CSR.mie) {
-          MTIE := wdata(7)
-          MSIE := wdata(3)
-        }
-        .elsewhen(csr_addr === CSR.mtime) { time := wdata }
-        .elsewhen(csr_addr === CSR.mtimeh) { timeh := wdata }
-        .elsewhen(csr_addr === CSR.mtimecmp) { mtimecmp := wdata }
-        .elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
-        .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
-        .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen - 1) | 0xf).U }
-        .elsewhen(csr_addr === CSR.mbadaddr) { mbadaddr := wdata }
-        .elsewhen(csr_addr === CSR.mtohost) { mtohost := wdata }
-        .elsewhen(csr_addr === CSR.mfromhost) { mfromhost := wdata }
-        .elsewhen(csr_addr === CSR.cyclew) { cycle := wdata }
-        .elsewhen(csr_addr === CSR.timew) { time := wdata }
-        .elsewhen(csr_addr === CSR.instretw) { instret := wdata }
-        .elsewhen(csr_addr === CSR.cyclehw) { cycleh := wdata }
-        .elsewhen(csr_addr === CSR.timehw) { timeh := wdata }
-        .elsewhen(csr_addr === CSR.instrethw) { instreth := wdata }
+        MIE := wdata(3)
+      }.elsewhen(csr_addr === CSR.mip) {
+        MTIP := wdata(7)
+        MSIP := wdata(3)
+      }.elsewhen(csr_addr === CSR.mie) {
+        MTIE := wdata(7)
+        MSIE := wdata(3)
+      }.elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
+      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
+      .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen - 1) | 0xf).U }
+      .elsewhen(csr_addr === CSR.mbadaddr) { mbadaddr := wdata }
+      .elsewhen(csr_addr === CSR.cycle) { cycle := wdata }
+      .elsewhen(csr_addr === CSR.cycleh) { cycle := wdata }
+      .elsewhen(csr_addr === CSR.mcycle) { time := wdata }
+      .elsewhen(csr_addr === CSR.instretw) { instret := wdata }
+      .elsewhen(csr_addr === CSR.cyclehw) { cycleh := wdata }
+      .elsewhen(csr_addr === CSR.timehw) { timeh := wdata }
+      .elsewhen(csr_addr === CSR.instrethw) { instreth := wdata }
     }
   }
 }
