@@ -9,7 +9,7 @@
 #include <cassert>
 
 mm_magic_t::mm_magic_t(size_t size, size_t word_size):
-  data(new char[size]),
+  data(new uint8_t[size]),
   size(size),
   word_size(word_size),
   store_inflight(false)
@@ -122,12 +122,10 @@ void mm_magic_t::tick(
   }
 }
 
-void load_mem(char* mem, const char* fn)
-{
+void mm_magic_t::load_mem(const char* fn, const uint64_t base_addr) {
   int start = 0;
   std::ifstream in(fn);
-  if (!in)
-  {
+  if (!in) {
     std::cerr << "could not open " << fn << std::endl;
     exit(EXIT_FAILURE);
   }

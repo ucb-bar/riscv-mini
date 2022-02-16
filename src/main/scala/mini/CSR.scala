@@ -121,10 +121,11 @@ class CSR(val xlen: Int) extends Module {
   val csr_addr = io.inst(31, 20)
   val rs1_addr = io.inst(19, 15)
 
-  // user counters, TODO: same counters used for mtime, mcycle, minstret (they should be distinct)
+  // user counters, TODO: same counters used for mcycle, minstret (they should be distinct)
   val cycle = RegInit(0.U(64.W))
   val time = RegInit(0.U(64.W))
   val instret = RegInit(0.U(64.W))
+  // TODO: mtime, mtimeh, mtimecmp, mtimecmph are all memory mapped now (not in the CSR file)
 
   // CPU info
   object MXL extends ChiselEnum {
@@ -144,7 +145,7 @@ class CSR(val xlen: Int) extends Module {
   val extensions =
     (1 << 8) | // rv32i/64i base isa
     (1 << 20) // user mode implemented
-  val misa = Cat(mxl, 0.U(mxlen-28), extensions.U(26.W))
+  val misa = Cat(mxl, 0.U((mxlen-28).W), extensions.U(26.W))
   val mvendorid = 0.U(mxlen.W) // non-commercial implementation
   val marchid = 0.U(mxlen.W) // microarch of the hart: unimplemented
   val mimpid = 0.U(mxlen.W) // processor impl encoding: unimplemented
@@ -196,7 +197,7 @@ class CSR(val xlen: Int) extends Module {
   Predef.assert(mie.getWidth == mxlen)
 
   val mtvec = Reg(UInt(mxlen.W))
-  assert(mtvec(1,0) === 0.U, "Only direct mode is supported")
+  assert(mtvec(1,0) === 0.U, "Only direct trap mode is supported")
 
   // Machine Trap Handling
   val mscratch = Reg(UInt(mxlen.W))
@@ -239,7 +240,8 @@ class CSR(val xlen: Int) extends Module {
     BitPat(CSR.mcycle) -> (if (xlen == 32) cycle(31, 0) else cycle),
     BitPat(CSR.minstret) -> (if (xlen == 32) instret(31, 0) else instret),
   )
-  Predef.assert(csrFileGeneral.map(_._2).forall(_.getWidth == xlen))
+  // csrFileGeneral.foreach { x => println(x._1.value); println(x._2.getWidth) }
+  Predef.assert(csrFileGeneral.map(_._2).forall(_.getWidth == mxlen))
   val csrFileRv32 = Seq(
     BitPat(CSR.cycleh) -> cycle(63, 32),
     BitPat(CSR.timeh) -> time(63, 32),
@@ -252,21 +254,21 @@ class CSR(val xlen: Int) extends Module {
 
   io.out := Lookup(csr_addr, 0.U, csrFile).asUInt
 
-  val privValid = csr_addr(9, 8) <= PRV
+  val privValid = csr_addr(9, 8) <= current_prv_level
   val privInst = io.cmd === CSR.P
   val isEcall = privInst && !csr_addr(0) && !csr_addr(8)
   val isEbreak = privInst && csr_addr(0) && !csr_addr(8)
   val isEret = privInst && !csr_addr(0) && csr_addr(8)
   val csrValid = csrFile.map(_._1 === csr_addr).reduce(_ || _)
-  val csrRO = csr_addr(11, 10).andR || csr_addr === CSR.mtvec || csr_addr === CSR.mtdeleg
-  val wen = io.cmd === CSR.W || io.cmd(1) && rs1_addr.orR
+  val csrRO = csr_addr(11, 10).andR
+  val wen = io.cmd === CSR.W || ((io.cmd === CSR.S || io.cmd === CSR.C) && rs1_addr.orR)
   val wdata = MuxLookup(
     io.cmd,
     0.U,
     Seq(
       CSR.W -> io.in,
       CSR.S -> (io.out | io.in),
-      CSR.C -> (io.out & ~io.in)
+      CSR.C -> (io.out & (~io.in).asUInt)
     )
   )
   val iaddrInvalid = io.pc_check && io.addr(1)
@@ -280,7 +282,7 @@ class CSR(val xlen: Int) extends Module {
   io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
     io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO ||
     (privInst && !privValid) || isEcall || isEbreak
-  io.evec := mtvec + (PRV << 6)
+  io.evec := mtvec
   io.epc := mepc
 
   // Counters
@@ -292,19 +294,19 @@ class CSR(val xlen: Int) extends Module {
   when(!io.stall) {
     when(io.expt) {
       mepc := io.pc >> 2 << 2
-      mcause := Mux(
-        iaddrInvalid,
-        Cause.InstAddrMisaligned,
-        Mux(
-          laddrInvalid,
-          Cause.LoadAddrMisaligned,
-          Mux(
-            saddrInvalid,
-            Cause.StoreAddrMisaligned,
-            Mux(isEcall, Cause.Ecall + PRV, Mux(isEbreak, Cause.Breakpoint, Cause.IllegalInst))
-          )
-        )
-      )
+      when(iaddrInvalid) {
+        mcause := Cause.InstAddrMisaligned
+      }.elsewhen(laddrInvalid) {
+        mcause := Cause.LoadAddrMisaligned
+      }.elsewhen(saddrInvalid) {
+        mcause := Cause.StoreAddrMisaligned
+      }.elsewhen(isEcall) {
+        mcause := Cause.Ecall + current_prv_level // 8 = ecall from U, 11 = ecall from M
+      }.elsewhen(isEbreak) {
+        mcause := Cause.Breakpoint
+      }.otherwise {
+        mcause := Cause.IllegalInst
+      }
       current_prv_level := CSR.PRV_M
       MPIE := MIE
       MPP := current_prv_level
@@ -324,17 +326,22 @@ class CSR(val xlen: Int) extends Module {
       }.elsewhen(csr_addr === CSR.mie) {
         MTIE := wdata(7)
         MSIE := wdata(3)
-      }.elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
-      .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
-      .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen - 1) | 0xf).U }
-      .elsewhen(csr_addr === CSR.mbadaddr) { mbadaddr := wdata }
-      .elsewhen(csr_addr === CSR.cycle) { cycle := wdata }
-      .elsewhen(csr_addr === CSR.cycleh) { cycle := wdata }
-      .elsewhen(csr_addr === CSR.mcycle) { time := wdata }
-      .elsewhen(csr_addr === CSR.instretw) { instret := wdata }
-      .elsewhen(csr_addr === CSR.cyclehw) { cycleh := wdata }
-      .elsewhen(csr_addr === CSR.timehw) { timeh := wdata }
-      .elsewhen(csr_addr === CSR.instrethw) { instreth := wdata }
+      }
+        .elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
+        .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
+        .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen - 1) | 0xf).U }
+        .elsewhen(csr_addr === CSR.mepc) { mepc := wdata }
+        .elsewhen(csr_addr === CSR.cycle) { cycle := wdata } // TODO: should only write to lower half of cycle
+        .elsewhen(csr_addr === CSR.cycleh) { cycle := wdata } // TODO: should only write to upper half of cycle
+        .elsewhen(csr_addr === CSR.mcycle) { cycle := wdata } // TODO
+        .elsewhen(csr_addr === CSR.mcycleh) { cycle:= wdata } // TODO
+        .elsewhen(csr_addr === CSR.instret) { instret := wdata } // TODO
+        .elsewhen(csr_addr === CSR.instreth) { instret := wdata } // TODO
+        .elsewhen(csr_addr === CSR.minstret) { instret := wdata } // TODO
+        .elsewhen(csr_addr === CSR.minstreth) { instret := wdata } // TODO
+        .elsewhen(csr_addr === CSR.time) { time := wdata } // TODO
+        .elsewhen(csr_addr === CSR.timeh) { time := wdata } // TODO
+        .elsewhen(csr_addr === CSR.mtvec) { mtvec := wdata }
     }
   }
 }

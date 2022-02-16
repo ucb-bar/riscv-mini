@@ -69,7 +69,7 @@ class Datapath(val conf: CoreConfig) extends Module {
       )
     )
   )
-  this.reset
+
   val inst =
     Mux(started || io.ctrl.inst_kill || brCond.io.taken || csr.io.expt, Instructions.NOP, io.icache.resp.bits.data)
   pc := npc

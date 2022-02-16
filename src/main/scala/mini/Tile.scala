@@ -95,7 +95,6 @@ class MemArbiter(params: NastiBundleParameters) extends Module {
 }
 
 class TileIO(xlen: Int, nastiParams: NastiBundleParameters) extends Bundle {
-  val host = new HostIO(xlen)
   val nasti = new NastiBundle(nastiParams)
 }
 
@@ -111,7 +110,6 @@ class Tile(val coreParams: CoreConfig, val nastiParams: NastiBundleParameters, v
   val dcache = Module(new Cache(cacheParams, nastiParams, coreParams.xlen))
   val arb = Module(new MemArbiter(nastiParams))
 
-  io.host <> core.io.host
   core.io.icache <> icache.io.cpu
   core.io.dcache <> dcache.io.cpu
   arb.io.icache <> icache.io.nasti

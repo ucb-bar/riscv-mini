@@ -76,9 +76,10 @@ class mm_magic_t
   void write(uint64_t addr, char *data);
   void write(uint64_t addr, char *data, uint64_t strb, uint64_t size);
   std::vector<char> read(uint64_t addr);
+  void load_mem(const char* fn, const uint64_t base_addr);
 
  private:
-  char* data;
+  uint8_t* data;
   size_t size;
   size_t word_size;
 
@@ -95,5 +96,4 @@ class mm_magic_t
   uint64_t cycle;
 };
 
-void load_mem(char* mem, const char* fn);
 #endif
