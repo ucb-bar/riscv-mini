@@ -13,10 +13,11 @@ class BrCondIO(xlen: Int) extends Bundle {
 }
 
 trait BrCond extends Module {
+  def xlen: Int
   val io: BrCondIO
 }
 
-class BrCondSimple(xlen: Int) extends BrCond {
+class BrCondSimple(val xlen: Int) extends BrCond {
   val io = IO(new BrCondIO(xlen))
   val eq = io.rs1 === io.rs2
   val neq = !eq
@@ -33,7 +34,7 @@ class BrCondSimple(xlen: Int) extends BrCond {
       ((io.br_type === BR_GEU) && geu)
 }
 
-class BrCondArea(xlen: Int) extends BrCond {
+class BrCondArea(val xlen: Int) extends BrCond {
   val io = IO(new BrCondIO(xlen))
   val diff = io.rs1 - io.rs2
   val neq = diff.orR
