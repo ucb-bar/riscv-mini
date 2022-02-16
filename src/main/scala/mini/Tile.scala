@@ -3,6 +3,7 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.util._
 import junctions._
 
@@ -12,28 +13,32 @@ class MemArbiterIO(params: NastiBundleParameters) extends Bundle {
   val nasti = new NastiBundle(params)
 }
 
+object MemArbiterState extends ChiselEnum {
+  val sIdle, sICacheRead, sDCacheRead, sDCacheWrite, sDCacheAck = Value
+}
+
 class MemArbiter(params: NastiBundleParameters) extends Module {
   val io = IO(new MemArbiterIO(params))
 
-  val s_IDLE :: s_ICACHE_READ :: s_DCACHE_READ :: s_DCACHE_WRITE :: s_DCACHE_ACK :: Nil = Enum(5)
-  val state = RegInit(s_IDLE)
+  import MemArbiterState._
+  val state = RegInit(sIdle)
 
   // Write Address
   io.nasti.aw.bits := io.dcache.aw.bits
-  io.nasti.aw.valid := io.dcache.aw.valid && state === s_IDLE
-  io.dcache.aw.ready := io.nasti.aw.ready && state === s_IDLE
+  io.nasti.aw.valid := io.dcache.aw.valid && state === sIdle
+  io.dcache.aw.ready := io.nasti.aw.ready && state === sIdle
   io.icache.aw := DontCare
 
   // Write Data
   io.nasti.w.bits := io.dcache.w.bits
-  io.nasti.w.valid := io.dcache.w.valid && state === s_DCACHE_WRITE
-  io.dcache.w.ready := io.nasti.w.ready && state === s_DCACHE_WRITE
+  io.nasti.w.valid := io.dcache.w.valid && state === sDCacheWrite
+  io.dcache.w.ready := io.nasti.w.ready && state === sDCacheWrite
   io.icache.w := DontCare
 
   // Write Ack
   io.dcache.b.bits := io.nasti.b.bits
-  io.dcache.b.valid := io.nasti.b.valid && state === s_DCACHE_ACK
-  io.nasti.b.ready := io.dcache.b.ready && state === s_DCACHE_ACK
+  io.dcache.b.valid := io.nasti.b.valid && state === sDCacheAck
+  io.nasti.b.ready := io.dcache.b.ready && state === sDCacheAck
   io.icache.b := DontCare
 
   // Read Address
@@ -44,46 +49,46 @@ class MemArbiter(params: NastiBundleParameters) extends Module {
     Mux(io.dcache.ar.valid, io.dcache.ar.bits.len, io.icache.ar.bits.len)
   )
   io.nasti.ar.valid := (io.icache.ar.valid || io.dcache.ar.valid) &&
-    !io.nasti.aw.valid && state === s_IDLE
-  io.dcache.ar.ready := io.nasti.ar.ready && !io.nasti.aw.valid && state === s_IDLE
+    !io.nasti.aw.valid && state === sIdle
+  io.dcache.ar.ready := io.nasti.ar.ready && !io.nasti.aw.valid && state === sIdle
   io.icache.ar.ready := io.dcache.ar.ready && !io.dcache.ar.valid
 
   // Read Data
   io.icache.r.bits := io.nasti.r.bits
   io.dcache.r.bits := io.nasti.r.bits
-  io.icache.r.valid := io.nasti.r.valid && state === s_ICACHE_READ
-  io.dcache.r.valid := io.nasti.r.valid && state === s_DCACHE_READ
-  io.nasti.r.ready := io.icache.r.ready && state === s_ICACHE_READ ||
-    io.dcache.r.ready && state === s_DCACHE_READ
+  io.icache.r.valid := io.nasti.r.valid && state === sICacheRead
+  io.dcache.r.valid := io.nasti.r.valid && state === sDCacheRead
+  io.nasti.r.ready := io.icache.r.ready && state === sICacheRead ||
+    io.dcache.r.ready && state === sDCacheRead
 
   switch(state) {
-    is(s_IDLE) {
+    is(sIdle) {
       when(io.dcache.aw.fire) {
-        state := s_DCACHE_WRITE
+        state := sDCacheWrite
       }.elsewhen(io.dcache.ar.fire) {
-        state := s_DCACHE_READ
+        state := sDCacheRead
       }.elsewhen(io.icache.ar.fire) {
-        state := s_ICACHE_READ
+        state := sICacheRead
       }
     }
-    is(s_ICACHE_READ) {
+    is(sICacheRead) {
       when(io.nasti.r.fire && io.nasti.r.bits.last) {
-        state := s_IDLE
+        state := sIdle
       }
     }
-    is(s_DCACHE_READ) {
+    is(sDCacheRead) {
       when(io.nasti.r.fire && io.nasti.r.bits.last) {
-        state := s_IDLE
+        state := sIdle
       }
     }
-    is(s_DCACHE_WRITE) {
+    is(sDCacheWrite) {
       when(io.dcache.w.fire && io.dcache.w.bits.last) {
-        state := s_DCACHE_ACK
+        state := sDCacheAck
       }
     }
-    is(s_DCACHE_ACK) {
+    is(sDCacheAck) {
       when(io.nasti.b.fire) {
-        state := s_IDLE
+        state := sIdle
       }
     }
   }

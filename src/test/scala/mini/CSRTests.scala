@@ -15,14 +15,14 @@ class CSRTester(c: => CSR, trace: Boolean = false) extends BasicTester with Test
   val xlen = dut.xlen
 
   override val insts =
-    (CSR.regs.map(csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRW, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRS, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRC, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRWI, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRSI, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => SYS(Funct3.CSRRCI, 0, csr, rand_rs1.litValue))) ++
-      (CSR.regs.map(csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue))) ++ List[UInt](
+    CSR.regs.map(csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRW, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRS, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRC, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRWI, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRSI, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => SYS(Funct3.CSRRCI, 0, csr, rand_rs1.litValue)) ++
+      CSR.regs.map(csr => I(rand_fn3, 0, rand_rs1.litValue, csr.litValue)) ++ List[UInt](
       // system insts
       Instructions.ECALL,
       SYS(Funct3.CSRRC, 0, CSR.mcause, 0),
@@ -59,7 +59,7 @@ class CSRTester(c: => CSR, trace: Boolean = false) extends BasicTester with Test
   val pc = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
   val addr = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
   val data = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
-  val regs = (CSR.regs
+  val regs = CSR.regs
     .map(_.litValue)
     .map { addr =>
       addr -> RegInit(
@@ -68,7 +68,7 @@ class CSRTester(c: => CSR, trace: Boolean = false) extends BasicTester with Test
         else if (addr == CSR.mtvec.litValue) Const.PC_EVEC.U(xlen.W)
         else 0.U(xlen.W)
       )
-    })
+    }
     .toMap
 
   ctrl.io.inst := VecInit(insts)(cntr)

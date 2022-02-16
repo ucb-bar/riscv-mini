@@ -19,20 +19,20 @@ object ExceptionTest extends DatapathTest {
 // Define your own test
 
 trait TestUtils {
-  implicit def boolToBoolean(x:   Bool) = x.litValue == 1
-  implicit def bitPatToUInt(b:    BitPat) = BitPat.bitPatToUInt(b)
-  implicit def uintToBitPat(u:    UInt) = BitPat(u)
-  implicit def bigIntToInt(x:     BigInt) = x.toInt
-  implicit def bigIntToBoolean(x: BigInt) = x != 0
-  def toBigInt(x:                 Int) = (BigInt(x >>> 1) << 1) | (x & 0x1)
+  implicit def boolToBoolean(x:   Bool):   Boolean = x.litValue == 1
+  implicit def bitPatToUInt(b:    BitPat): UInt = BitPat.bitPatToUInt(b)
+  implicit def uintToBitPat(u:    UInt):   BitPat = BitPat(u)
+  implicit def bigIntToInt(x:     BigInt): Int = x.toInt
+  implicit def bigIntToBoolean(x: BigInt): Boolean = x != 0
+  def toBigInt(x:                 Int):    BigInt = (BigInt(x >>> 1) << 1) | (x & 0x1)
 
   def rs1(inst: UInt) = ((inst.litValue >> 15) & 0x1f).toInt
   def rs2(inst: UInt) = ((inst.litValue >> 20) & 0x1f).toInt
   def rd(inst:  UInt) = ((inst.litValue >> 7) & 0x1f).toInt
-  def csr(inst: UInt) = (inst.litValue >> 20)
+  def csr(inst: UInt) = inst.litValue >> 20
   def reg(x:    Int) = (x & ((1 << 5) - 1)).U(5.W)
   def imm(x:    Int) = (x & ((1 << 20) - 1)).S(21.W)
-  def Cat(l:    Seq[Bits]): UInt = (l.tail.foldLeft(l.head.asUInt)) { (x, y) =>
+  def Cat(l:    Seq[Bits]): UInt = l.tail.foldLeft(l.head.asUInt) { (x, y) =>
     assert(x.isLit && y.isLit)
     (x.litValue << y.getWidth | y.litValue).U((x.getWidth + y.getWidth).W)
   }
@@ -40,7 +40,7 @@ trait TestUtils {
   val fence = Cat(0.U(4.W), 0xf.U(4.W), 0xf.U(4.W), 0.U(13.W), Opcode.MEMORY)
   val nop = Cat(0.U(12.W), reg(0), Funct3.ADD, reg(0), Opcode.ITYPE)
   val csrRegs = CSR.regs.map(_.litValue)
-  private val csrMap = (csrRegs
+  private val csrMap = csrRegs
     .zip(
       List(
         "cycle",
@@ -73,7 +73,7 @@ trait TestUtils {
         "mfromhost",
         "mstatus"
       )
-    ))
+    )
     .toMap
   def csrName(csr: BigInt) = csrMap.getOrElse(csr, csr.toString(16))
 
@@ -103,10 +103,10 @@ trait TestUtils {
 
   /* Define tests */
   val rnd = new scala.util.Random
-  def rand_fn7 = (rnd.nextInt(1 << 7)).U(7.W)
+  def rand_fn7 = rnd.nextInt(1 << 7).U(7.W)
   def rand_rs2 = (rnd.nextInt((1 << 5) - 1) + 1).U(5.W)
   def rand_rs1 = (rnd.nextInt((1 << 5) - 1) + 1).U(5.W)
-  def rand_fn3 = (rnd.nextInt(1 << 3)).U(3.W)
+  def rand_fn3 = rnd.nextInt(1 << 3).U(3.W)
   def rand_rd = (rnd.nextInt((1 << 5) - 1) + 1).U(5.W)
   def rand_csr = csrRegs(rnd.nextInt(csrRegs.size - 1)).U
   def rand_inst = toBigInt(rnd.nextInt()).U

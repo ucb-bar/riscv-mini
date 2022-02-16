@@ -3,10 +3,15 @@
 package mini
 
 import chisel3._
+import chisel3.experimental.ChiselEnum
 import chisel3.testers._
 import chisel3.util._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
+
+object DatapathTesterState extends ChiselEnum {
+  val sInit, sRun = Value
+}
 
 class DatapathTester(datapath: => Datapath, testType: DatapathTest) extends BasicTester with TestUtils {
   val dut = Module(datapath)
@@ -19,14 +24,14 @@ class DatapathTester(datapath: => Datapath, testType: DatapathTest) extends Basi
 
   override val insts = tests(testType)
 
-  val sInit :: sRun :: Nil = Enum(2)
+  import DatapathTesterState._
   val state = RegInit(sInit)
   val (cntr, done) = Counter(state === sInit, insts.size)
   val timeout = RegInit(0.U(32.W))
   val mem = Mem(1 << 20, UInt(xlen.W))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
   val daddr = dut.io.dcache.req.bits.addr / (xlen / 8).U
-  val write = ((0 until (xlen / 8)).foldLeft(0.U)) { (data, i) =>
+  val write = (0 until (xlen / 8)).foldLeft(0.U) { (data, i) =>
     data |
       (Mux(dut.io.dcache.req.bits.mask(i), dut.io.dcache.req.bits.data, mem(daddr)) & (BigInt(0xff) << (8 * i)).U)
   }

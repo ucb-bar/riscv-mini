@@ -30,12 +30,12 @@ class BrCondTester(br: => BrCond) extends BasicTester with TestUtils {
   val (cntr, done) = Counter(true.B, insts.size)
   val rs1 = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
   val rs2 = Seq.fill(insts.size)(rnd.nextInt()).map(toBigInt)
-  val eq = VecInit((rs1.zip(rs2)).map { case (a, b) => (a == b).B })
-  val ne = VecInit((rs1.zip(rs2)).map { case (a, b) => (a != b).B })
-  val lt = VecInit((rs1.zip(rs2)).map { case (a, b) => (a.toInt < b.toInt).B })
-  val ge = VecInit((rs1.zip(rs2)).map { case (a, b) => (a.toInt >= b.toInt).B })
-  val ltu = VecInit((rs1.zip(rs2)).map { case (a, b) => (a < b).B })
-  val geu = VecInit((rs1.zip(rs2)).map { case (a, b) => (a >= b).B })
+  val eq = VecInit(rs1.zip(rs2).map { case (a, b) => (a == b).B })
+  val ne = VecInit(rs1.zip(rs2).map { case (a, b) => (a != b).B })
+  val lt = VecInit(rs1.zip(rs2).map { case (a, b) => (a.toInt < b.toInt).B })
+  val ge = VecInit(rs1.zip(rs2).map { case (a, b) => (a.toInt >= b.toInt).B })
+  val ltu = VecInit(rs1.zip(rs2).map { case (a, b) => (a < b).B })
+  val geu = VecInit(rs1.zip(rs2).map { case (a, b) => (a >= b).B })
   val out = Mux(
     dut.io.br_type === BR_EQ,
     eq(cntr),
