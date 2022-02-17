@@ -11,6 +11,8 @@ VTile
 dump.vcd*
 DVEfiles
 riscv-tools-priv1.7
+tests/32/*
+tests/64/*
 
 # Scala IDEs
 .project
