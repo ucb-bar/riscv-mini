@@ -11,7 +11,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) extends BasicTester {
   val originalHexFile = os.rel / "tests" / f"$benchmark.hex"
   val resizedHexFile = os.rel / "tests" / "32" / f"$benchmark.hex"
-  TestUtils.resizeHexFile(os.pwd / originalHexFile, os.pwd / resizedHexFile, 32)
+  TestUtils.resizeHexFile(os.pwd / originalHexFile, os.pwd / resizedHexFile, 32) // we have 32 bits per memory entry
 
   val dut = Module(core)
   val xlen = dut.conf.xlen

@@ -241,7 +241,10 @@ object TestUtils {
     val originalWidth = hexFileLineLengths.head * 4 // 4 bits / nibble
 
     if (originalWidth > resizedWidth) {
-      assert(originalWidth % resizedWidth == 0, f"The original width of the hex file ($originalWidth) is not evenly divisible by the desired resized width ($resizedWidth)")
+      assert(
+        originalWidth % resizedWidth == 0,
+        f"The original width of the hex file ($originalWidth) is not evenly divisible by the desired resized width ($resizedWidth)"
+      )
 
       hexFileLines.flatMap(_.grouped(resizedWidth / 4).toSeq.reverse)
     } else if (originalWidth < resizedWidth) {
@@ -259,7 +262,7 @@ class TestUtilsTests extends AnyFlatSpec {
     assert(out == Seq("66666666", "10101010", "deadbeef", "12345678", "77778888", "55556666", "33334444", "11112222"))
 
     val out2 = TestUtils.resizeHexFileInner(in, 64)
-    assert(out2 == Seq("1010101066666666", "12345678deadbeef", "5555666677778888", "1111222233334444") )
+    assert(out2 == Seq("1010101066666666", "12345678deadbeef", "5555666677778888", "1111222233334444"))
   }
 }
 
