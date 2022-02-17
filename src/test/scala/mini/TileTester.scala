@@ -16,7 +16,9 @@ object TileTesterState extends ChiselEnum {
 }
 
 class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Boolean = false) extends BasicTester {
-  val filename = "tests/64/" + benchmark + ".hex" // we have 64 bits per memory entry
+  val originalHexFile = os.rel / "tests" / f"$benchmark.hex"
+  val resizedHexFile = os.rel / "tests" / "64" / f"$benchmark.hex"
+  TestUtils.resizeHexFile(os.pwd / originalHexFile, os.pwd / resizedHexFile, 64) // we have 64 bits per memory entry
 
   val dut = Module(tile)
   // extract parameters from design under test
@@ -26,7 +28,7 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
   dut.io.host.fromhost.valid := false.B
 
   val _mem = Mem(1 << 20, UInt(nasti.dataBits.W))
-  loadMemoryFromFileInline(_mem, filename)
+  loadMemoryFromFileInline(_mem, resizedHexFile.toString())
   import TileTesterState._
   val state = RegInit(sIdle)
   val cycle = RegInit(0.U(32.W))

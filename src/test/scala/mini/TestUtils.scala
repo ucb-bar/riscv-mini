@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.util._
 import Instructions._
 import junctions.NastiBundleParameters
+import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.language.implicitConversions
 
@@ -225,6 +226,44 @@ trait TestUtils {
     BypassTest -> 10,
     ExceptionTest -> 4
   )
+}
+
+object TestUtils {
+  def resizeHexFile(originalHexFile: os.Path, resizedHexFile: os.Path, resizedWidth: Int): Unit = {
+    val hexFileLines = os.read.lines(originalHexFile)
+    val resizedLines = resizeHexFileInner(hexFileLines, resizedWidth)
+    os.write.over(resizedHexFile, resizedLines.mkString("\n"), createFolders = true)
+  }
+
+  def resizeHexFileInner(hexFileLines: Seq[String], resizedWidth: Int): Seq[String] = {
+    val hexFileLineLengths = hexFileLines.filter(_.nonEmpty).map(_.length)
+    assert(hexFileLineLengths.forall(_ == hexFileLineLengths.head), "hex file has lines of differing lengths")
+    val originalWidth = hexFileLineLengths.head * 4 // 4 bits / nibble
+
+    if (originalWidth > resizedWidth) {
+      assert(
+        originalWidth % resizedWidth == 0,
+        f"The original width of the hex file ($originalWidth) is not evenly divisible by the desired resized width ($resizedWidth)"
+      )
+
+      hexFileLines.flatMap(_.grouped(resizedWidth / 4).toSeq.reverse)
+    } else if (originalWidth < resizedWidth) {
+      ???
+    } else { // no resizing
+      hexFileLines
+    }
+  }
+}
+
+class TestUtilsTests extends AnyFlatSpec {
+  "resizeHexFile" should "resize to a smaller word size" in {
+    val in = Seq("12345678deadbeef1010101066666666", "11112222333344445555666677778888")
+    val out = TestUtils.resizeHexFileInner(in, 32)
+    assert(out == Seq("66666666", "10101010", "deadbeef", "12345678", "77778888", "55556666", "33334444", "11112222"))
+
+    val out2 = TestUtils.resizeHexFileInner(in, 64)
+    assert(out2 == Seq("1010101066666666", "12345678deadbeef", "5555666677778888", "1111222233334444"))
+  }
 }
 
 object TestParams {

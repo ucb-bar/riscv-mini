@@ -9,7 +9,9 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
 class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) extends BasicTester {
-  val filename = "tests/32/" + benchmark + ".hex" // we have 32 bits per memory entry
+  val originalHexFile = os.rel / "tests" / f"$benchmark.hex"
+  val resizedHexFile = os.rel / "tests" / "32" / f"$benchmark.hex"
+  TestUtils.resizeHexFile(os.pwd / originalHexFile, os.pwd / resizedHexFile, 32) // we have 32 bits per memory entry
 
   val dut = Module(core)
   val xlen = dut.conf.xlen
@@ -17,9 +19,9 @@ class CoreTester(core: => Core, benchmark: String, trace: Boolean = false) exten
   dut.io.host.fromhost.valid := false.B
 
   val imem = Mem(1 << 20, UInt(xlen.W))
-  loadMemoryFromFileInline(imem, filename)
+  loadMemoryFromFileInline(imem, resizedHexFile.toString())
   val dmem = Mem(1 << 20, UInt(xlen.W))
-  loadMemoryFromFileInline(dmem, filename)
+  loadMemoryFromFileInline(dmem, resizedHexFile.toString())
 
   val cycle = RegInit(0.U(32.W))
   val iaddr = dut.io.icache.req.bits.addr / (xlen / 8).U
@@ -63,7 +65,7 @@ object DefaultCoreConfig {
 class CoreSimpleTests extends AnyFlatSpec with ChiselScalatestTester {
   behavior.of("Core")
   it should "execute a simple test" in {
-    test(new CoreTester(new Core(DefaultCoreConfig()), "rv32ui-p-simple")).runUntilStop(15000)
+    test(new CoreTester(new Core(DefaultCoreConfig()), "rv32ui-p-simple")).runUntilStop(100)
   }
 }
 
