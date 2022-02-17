@@ -10,10 +10,10 @@
 struct mm_rresp_t
 {
   uint64_t id;
-  std::vector<char> data;
+  std::vector<uint8_t> data;
   bool last;
 
-  mm_rresp_t(uint64_t id, std::vector<char> data, bool last)
+  mm_rresp_t(uint64_t id, std::vector<uint8_t> data, bool last)
   {
     this->id = id;
     this->data = data;
@@ -33,7 +33,7 @@ class mm_magic_t
   mm_magic_t(size_t size, size_t word_size);
   ~mm_magic_t();
   void init(size_t sz, int word_size);
-  char* get_data() { return data; }
+  uint8_t* get_data() { return data; }
   size_t get_size() { return size; }
 
   bool ar_ready() { return true; }
@@ -73,9 +73,9 @@ class mm_magic_t
     bool b_ready
   );
 
-  void write(uint64_t addr, char *data);
-  void write(uint64_t addr, char *data, uint64_t strb, uint64_t size);
-  std::vector<char> read(uint64_t addr);
+  void write(uint64_t addr, uint8_t *data);
+  void write(uint64_t addr, uint8_t *data, uint64_t strb, uint64_t size);
+  std::vector<uint8_t> read(uint64_t addr);
   void load_mem(const char* fn, const uint64_t base_addr);
 
  private:
@@ -88,7 +88,7 @@ class mm_magic_t
   uint64_t store_id;
   uint64_t store_size;
   uint64_t store_count;
-  std::vector<char> dummy_data;
+  std::vector<uint8_t> dummy_data;
   std::queue<uint64_t> bresp;
 
   std::queue<mm_rresp_t> rresp;
