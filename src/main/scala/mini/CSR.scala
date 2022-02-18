@@ -160,7 +160,7 @@ class CSR(val xlen: Int) extends Module {
   val SPIE = 0.B // supervisor IE prior to trap
   val MPIE = RegInit(0.B) // machine IE prior to trap
   val SPP = 0.B // supervisor privilege mode prior to trap
-  val MPP = RegInit(CSR.PRV_M) // machine privilege mode prior to trap
+  val MPP = RegInit(CSR.PRV_U) // machine privilege mode prior to trap  // TODO: should the reset value of MPP be user mode?
   // ISA extensions and extension state tracking
   val VS = 0.U(2.W) // state of vector extension
   val FS = 0.U(2.W) // state of F extension (FP support)
@@ -256,9 +256,9 @@ class CSR(val xlen: Int) extends Module {
 
   val privValid = csr_addr(9, 8) <= current_prv_level
   val privInst = io.cmd === CSR.P
-  val isEcall = privInst && !csr_addr(0) && !csr_addr(8)
-  val isEbreak = privInst && csr_addr(0) && !csr_addr(8)
-  val isEret = privInst && !csr_addr(0) && csr_addr(8)
+  val isEcall = privInst && Instructions.ECALL === io.inst // TODO: optimize logic
+  val isEbreak = privInst && Instructions.EBREAK === io.inst // TODO: ''
+  val isMret = privInst && Instructions.MRET === io.inst // TODO: ''
   val csrValid = csrFile.map(_._1 === csr_addr).reduce(_ || _)
   val csrRO = csr_addr(11, 10).andR
   val wen = io.cmd === CSR.W || ((io.cmd === CSR.S || io.cmd === CSR.C) && rs1_addr.orR)
@@ -280,7 +280,7 @@ class CSR(val xlen: Int) extends Module {
   val saddrInvalid =
     MuxLookup(io.st_type, false.B, Seq(Control.ST_SW -> io.addr(1, 0).orR, Control.ST_SH -> io.addr(0)))
   io.expt := io.illegal || iaddrInvalid || laddrInvalid || saddrInvalid ||
-    io.cmd(1, 0).orR && (!csrValid || !privValid) || wen && csrRO ||
+    ((io.cmd === CSR.W || io.cmd === CSR.S || io.cmd === CSR.C) && (!csrValid || !privValid)) || wen && csrRO ||
     (privInst && !privValid) || isEcall || isEbreak
   io.evec := mtvec
   io.epc := mepc
@@ -312,7 +312,7 @@ class CSR(val xlen: Int) extends Module {
       MPP := current_prv_level
       MIE := 0.B
       when(iaddrInvalid || laddrInvalid || saddrInvalid) { mepc := io.addr }
-    }.elsewhen(isEret) {
+    }.elsewhen(isMret) {
       current_prv_level := MPP
       MIE := MPIE
       MPP := CSR.PRV_U
@@ -330,7 +330,6 @@ class CSR(val xlen: Int) extends Module {
         .elsewhen(csr_addr === CSR.mscratch) { mscratch := wdata }
         .elsewhen(csr_addr === CSR.mepc) { mepc := wdata >> 2.U << 2.U }
         .elsewhen(csr_addr === CSR.mcause) { mcause := wdata & (BigInt(1) << (xlen - 1) | 0xf).U }
-        .elsewhen(csr_addr === CSR.mepc) { mepc := wdata }
         .elsewhen(csr_addr === CSR.cycle) { cycle := wdata } // TODO: should only write to lower half of cycle
         .elsewhen(csr_addr === CSR.cycleh) { cycle := wdata } // TODO: should only write to upper half of cycle
         .elsewhen(csr_addr === CSR.mcycle) { cycle := wdata } // TODO

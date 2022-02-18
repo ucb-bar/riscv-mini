@@ -3,7 +3,6 @@
 package mini
 
 import chisel3._
-import chisel3.util.Valid
 
 case class CoreConfig(
   xlen:       Int,
@@ -12,8 +11,8 @@ case class CoreConfig(
   makeImmGen: Int => ImmGen = new ImmGenWire(_))
 
 class CoreIO(xlen: Int) extends Bundle {
-  val icache = Flipped((new CacheIO(xlen, xlen)))
-  val dcache = Flipped((new CacheIO(xlen, xlen)))
+  val icache = Flipped(new CacheIO(xlen, xlen))
+  val dcache = Flipped(new CacheIO(xlen, xlen))
 }
 
 class Core(val conf: CoreConfig) extends Module {
