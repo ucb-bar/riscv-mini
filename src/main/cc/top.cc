@@ -103,12 +103,14 @@ int main(int argc, char** argv) {
 
   // start
   top->reset = 0;
+  uint32_t retcode;
   do {
     tick();
+    if (top->io_dcache_req_valid && top->io_dcache_req_bits_addr == 0x80001000 && top->io_dcache_req_bits_data > 0) {
+      retcode = top->io_dcache_req_bits_data >> 1;
+      break;
+    }
   } while(main_time < timeout);
-  //} while(!top->io_host_tohost && main_time < timeout);
-
-  //int retcode = top->io_host_tohost >> 1;
 
   // Run for 10 more clocks
   for (size_t i = 0 ; i < 10 ; i++) {
@@ -122,9 +124,7 @@ int main(int argc, char** argv) {
   } else {
     cerr << "Simulation completed at time " << main_time <<
            " (cycle " << main_time / 10 << ")"<< endl;
-    //if (retcode) {
-      //cerr << "TOHOST = " << retcode << endl;
-    //}
+    cerr << "TOHOST = " << retcode << endl;
   }
 
 #if VM_TRACE
@@ -136,7 +136,6 @@ int main(int argc, char** argv) {
 
   cout << "Finishing simulation!\n";
 
-  //return retcode == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
-  return 0;
+  return retcode == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
