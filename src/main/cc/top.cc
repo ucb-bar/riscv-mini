@@ -118,13 +118,17 @@ int main(int argc, char** argv) {
   }
 
   if (main_time >= timeout) {
-    cerr << "Simulation terminated by timeout at time " << main_time
+    cerr << "FAIL: Simulation terminated by timeout at time " << main_time
          << " (cycle " << main_time / 10 << ")"<< endl;
     return EXIT_FAILURE;
   } else {
+    if (retcode == 0) {
+      cerr << "PASS: TOHOST = " << retcode << endl;
+    } else {
+      cerr << "FAIL: TOHOST = " << retcode << endl;
+    }
     cerr << "Simulation completed at time " << main_time <<
            " (cycle " << main_time / 10 << ")"<< endl;
-    cerr << "TOHOST = " << retcode << endl;
   }
 
 #if VM_TRACE
