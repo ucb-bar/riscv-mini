@@ -1,0 +1,18 @@
+diff --git a/p/link.ld b/p/link.ld
+index b3e315e..8924a6b 100644
+--- a/p/link.ld
++++ b/p/link.ld
+@@ -3,11 +3,11 @@ ENTRY(_start)
+ 
+ SECTIONS
+ {
++  . = 0x7ffff000;
++  .tohost : { *(.tohost) }
+   . = 0x80000000;
+   .text.init : { *(.text.init) }
+   . = ALIGN(0x1000);
+-  .tohost : { *(.tohost) }
+-  . = ALIGN(0x1000);
+   .text : { *(.text) }
+   . = ALIGN(0x1000);
+   .data : { *(.data) }

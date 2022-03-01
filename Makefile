@@ -41,9 +41,9 @@ rv32mi_hex = $(addsuffix .hex,$(rv32mi_bin))
 isa_tests_hex = $(rv32ui_hex) $(rv32mi_hex)
 isa_tests_out = $(patsubst riscv-tests/isa/%.hex,outputs/isa/%.out,$(isa_tests_hex))
 
-$(rv32ui_bin):
+$(rv32ui_bin) $(rv32mi_bin):
+	git apply --directory riscv-tests/env patches/env_p.patch || git apply --reverse --check --directory riscv-tests/env patches/env_p.patch
 	$(MAKE) -C riscv-tests/isa rv32ui
-$(rv32mi_bin):
 	$(MAKE) -C riscv-tests/isa rv32mi
 
 riscv-tests/isa/%.hex: riscv-tests/isa/% $(rv32ui_bin) $(rv32mi_bin)

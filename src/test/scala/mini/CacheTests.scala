@@ -10,6 +10,8 @@ import junctions._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
+class GoldCache()
+
 class GoldCacheIO(p: CacheConfig, nastiParams: NastiBundleParameters, xlen: Int) extends Bundle {
   val req = Flipped(Decoupled(new CacheReq(xlen, xlen)))
   val resp = Decoupled(new CacheResp(xlen))
@@ -23,7 +25,7 @@ object GoldCacheState extends ChiselEnum {
 class GoldCache(p: CacheConfig, nasti: NastiBundleParameters, xlen: Int) extends Module {
   // local parameters
   val nSets = p.nSets
-  val bBytes = p.blockBytes
+  val bBytes = p.bytesPerBlock
   val bBits = bBytes << 3
   val blen = log2Ceil(bBytes)
   val slen = log2Ceil(nSets)
@@ -149,7 +151,7 @@ class CacheTester(cache: => Cache) extends BasicTester {
   val xlen = dut.xlen
   val nasti = dut.nasti
   val nSets = p.nSets
-  val bBytes = p.blockBytes
+  val bBytes = p.bytesPerBlock
   val bBits = bBytes << 3
   val blen = log2Ceil(bBytes)
   val slen = log2Ceil(nSets)
@@ -408,6 +410,8 @@ class CacheTester(cache: => Cache) extends BasicTester {
 
 class CacheTests extends AnyFlatSpec with ChiselScalatestTester {
   val p = MiniConfig()
+
+  // TODO: add a test to check CacheConfig has the right derived values via manual calculation
 
   "Cache" should "pass with verilator" in {
     test(new CacheTester(new Cache(p.cache, p.nasti, p.core.xlen)))
