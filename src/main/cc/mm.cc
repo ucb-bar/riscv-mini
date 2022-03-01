@@ -9,44 +9,43 @@
 #include <cassert>
 
 mm_magic_t::mm_magic_t(size_t size, size_t word_size):
-  data(new char[size]),
+  data(new uint8_t[size]),
   size(size),
-  word_size(word_size), 
+  word_size(word_size),
   store_inflight(false)
 {
   dummy_data.resize(word_size);
 }
 
-mm_magic_t::~mm_magic_t()
-{
+mm_magic_t::~mm_magic_t() {
   delete [] data;
 }
 
-void mm_magic_t::write(uint64_t addr, char *data) {
+void mm_magic_t::write(uint64_t addr, uint8_t *data) {
   addr %= this->size;
 
-  char* base = this->data + addr;
+  uint8_t* base = this->data + addr;
   memcpy(base, data, word_size);
+  printf("Writing to addr %lx\n", addr);
 }
 
-void mm_magic_t::write(uint64_t addr, char *data, uint64_t strb, uint64_t size)
-{
+void mm_magic_t::write(uint64_t addr, uint8_t *data, uint64_t strb, uint64_t size) {
   strb &= ((1L << size) - 1) << (addr % word_size);
   addr %= this->size;
 
-  char *base = this->data + addr;
+  uint8_t *base = this->data + addr;
   for (int i = 0; i < word_size; i++) {
     if (strb & 1) base[i] = data[i];
     strb >>= 1;
   }
 }
 
-std::vector<char> mm_magic_t::read(uint64_t addr)
-{
+std::vector<uint8_t> mm_magic_t::read(uint64_t addr) {
   addr %= this->size;
 
-  char *base = this->data + addr;
-  return std::vector<char>(base, base + word_size);
+  uint8_t *base = this->data + addr;
+  // printf("Reading from addr %lx\n", addr);
+  return std::vector<uint8_t>(base, base + word_size);
 }
 
 void mm_magic_t::tick(
@@ -94,7 +93,7 @@ void mm_magic_t::tick(
   }
 
   if (w_fire) {
-    write(store_addr, (char*)w_data, w_strb, store_size);
+    write(store_addr, (uint8_t*)w_data, w_strb, store_size);
     store_addr += store_size;
     store_count--;
 
@@ -120,12 +119,10 @@ void mm_magic_t::tick(
   }
 }
 
-void load_mem(char* mem, const char* fn)
-{
-  int start = 0;
+void mm_magic_t::load_mem(const char* fn, const uint64_t base_addr) {
+  uint64_t start = base_addr;
   std::ifstream in(fn);
-  if (!in)
-  {
+  if (!in) {
     std::cerr << "could not open " << fn << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -135,7 +132,7 @@ void load_mem(char* mem, const char* fn)
   {
     #define parse_nibble(c) ((c) >= 'a' ? (c)-'a'+10 : (c)-'0')
     for (int i = line.length()-2, j = 0; i >= 0; i -= 2, j++) {
-      mem[start + j] = (parse_nibble(line[i]) << 4) | parse_nibble(line[i+1]);
+      this->data[start + j] = (parse_nibble(line[i]) << 4) | parse_nibble(line[i+1]);
     }
     start += line.length()/2;
   }

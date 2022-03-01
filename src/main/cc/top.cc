@@ -25,7 +25,8 @@ VerilatedVcdC* tfp;
 mm_magic_t* mem; // target memory
 
 // TODO Provide command-line options like vcd filename, timeout count, etc.
-const long timeout = 100000000L;
+//const long timeout = 100000000L;
+const long timeout = 100000L;
 
 void tick() {
   top->clock = 1;
@@ -69,7 +70,7 @@ void tick() {
     top->io_nasti_r_ready,
     top->io_nasti_b_ready
   );
-  
+
   top->clock = 0;
   top->eval();
 #if VM_TRACE
@@ -82,7 +83,7 @@ int main(int argc, char** argv) {
   Verilated::commandArgs(argc, argv);   // Remember args
   top = new VTile; // target design
   mem = new mm_magic_t(1L << 32, 8); // target memory
-  load_mem(mem->get_data(), (const char*)(argv[1])); // load hex
+  mem->load_mem((const char*)(argv[1]), 0x80000000UL); // load hex
 
 #if VM_TRACE			// If verilator was invoked with --trace
   Verilated::traceEverOn(true);	// Verilator must compute traced signals
@@ -102,13 +103,14 @@ int main(int argc, char** argv) {
 
   // start
   top->reset = 0;
-  top->io_host_fromhost_bits = 0;
-  top->io_host_fromhost_valid = 0;
+  uint32_t retcode;
   do {
     tick();
-  } while(!top->io_host_tohost && main_time < timeout);
-
-  int retcode = top->io_host_tohost >> 1;
+    if (top->io_dcache_req_valid && top->io_dcache_req_bits_addr == 0x80001000 && top->io_dcache_req_bits_data > 0) {
+      retcode = top->io_dcache_req_bits_data >> 1;
+      break;
+    }
+  } while(main_time < timeout);
 
   // Run for 10 more clocks
   for (size_t i = 0 ; i < 10 ; i++) {
@@ -116,15 +118,17 @@ int main(int argc, char** argv) {
   }
 
   if (main_time >= timeout) {
-    cerr << "Simulation terminated by timeout at time " << main_time
+    cerr << "FAIL: Simulation terminated by timeout at time " << main_time
          << " (cycle " << main_time / 10 << ")"<< endl;
     return EXIT_FAILURE;
   } else {
+    if (retcode == 0) {
+      cerr << "PASS: TOHOST = " << retcode << endl;
+    } else {
+      cerr << "FAIL: TOHOST = " << retcode << endl;
+    }
     cerr << "Simulation completed at time " << main_time <<
            " (cycle " << main_time / 10 << ")"<< endl;
-    if (retcode) {
-      cerr << "TOHOST = " << retcode << endl;
-    }
   }
 
 #if VM_TRACE

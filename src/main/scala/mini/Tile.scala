@@ -95,8 +95,8 @@ class MemArbiter(params: NastiBundleParameters) extends Module {
 }
 
 class TileIO(xlen: Int, nastiParams: NastiBundleParameters) extends Bundle {
-  val host = new HostIO(xlen)
   val nasti = new NastiBundle(nastiParams)
+  val dcache_req = Valid(new CacheReq(xlen, xlen)) // to monitor writes to tohost
 }
 
 object Tile {
@@ -111,10 +111,12 @@ class Tile(val coreParams: CoreConfig, val nastiParams: NastiBundleParameters, v
   val dcache = Module(new Cache(cacheParams, nastiParams, coreParams.xlen))
   val arb = Module(new MemArbiter(nastiParams))
 
-  io.host <> core.io.host
   core.io.icache <> icache.io.cpu
   core.io.dcache <> dcache.io.cpu
   arb.io.icache <> icache.io.nasti
   arb.io.dcache <> dcache.io.nasti
   io.nasti <> arb.io.nasti
+  assert(io.dcache_req.bits.getWidth == dcache.io.cpu.req.bits.getWidth)
+  io.dcache_req.valid := dcache.io.cpu.req.valid
+  io.dcache_req.bits := dcache.io.cpu.req.bits
 }

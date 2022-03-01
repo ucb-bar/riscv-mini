@@ -1,0 +1,4 @@
+[submodule "riscv-tests"]
+	path = riscv-tests
+	url = git@github.com:riscv-software-src/riscv-tests
+	ignore = dirty

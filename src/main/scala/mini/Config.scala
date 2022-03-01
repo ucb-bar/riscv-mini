@@ -3,6 +3,7 @@
 package mini
 
 import junctions.NastiBundleParameters
+import chisel3._
 
 case class Config(core: CoreConfig, cache: CacheConfig, nasti: NastiBundleParameters)
 
@@ -19,7 +20,8 @@ object MiniConfig {
       cache = CacheConfig(
         nWays = 1,
         nSets = 256,
-        blockBytes = 4 * (xlen / 8) // 4 * 32 bits = 16B
+        bytesPerBlock = 4 * (xlen / 8), // 4 * 32 bits = 16B
+        cacheable = (addr: UInt) => addr >= 0x80000000.U(xlen.W)
       ),
       nasti = NastiBundleParameters(
         addrBits = 32,
