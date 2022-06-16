@@ -27,17 +27,19 @@ class Datapath(val conf: CoreConfig) extends Module {
 
   import Control._
 
+  /** Pipeline State Registers * */
+
   /** *** Fetch / Execute Registers ****
     */
-  val fe_inst = RegInit(Instructions.NOP)
-  val fe_pc = Reg(UInt())
+  val fe_reg_inst = RegInit(Instructions.NOP)
+  val fe_reg_pc = Reg(UInt())
 
   /** *** Execute / Write Back Registers ****
     */
-  val ew_inst = RegInit(Instructions.NOP)
-  val ew_pc = Reg(UInt())
-  val ew_alu = Reg(UInt())
-  val csr_in = Reg(UInt())
+  val ew_reg_inst = RegInit(Instructions.NOP)
+  val ew_reg_pc = Reg(UInt())
+  val ew_reg_alu = Reg(UInt())
+  val csr_reg_in = Reg(UInt())
 
   /** **** Control signals ****
     */
@@ -75,35 +77,34 @@ class Datapath(val conf: CoreConfig) extends Module {
 
   // Pipelining
   when(!stall) {
-    fe_pc := pc
-    fe_inst := inst
+    fe_reg_pc := pc
+    fe_reg_inst := inst
   }
 
   /** **** Execute ****
     */
-  // Decode
-  io.ctrl.inst := fe_inst
+  io.ctrl.inst := fe_reg_inst
 
   // regFile read
-  val rd_addr = fe_inst(11, 7)
-  val rs1_addr = fe_inst(19, 15)
-  val rs2_addr = fe_inst(24, 20)
+  val rd_addr = fe_reg_inst(11, 7)
+  val rs1_addr = fe_reg_inst(19, 15)
+  val rs2_addr = fe_reg_inst(24, 20)
   regFile.io.raddr1 := rs1_addr
   regFile.io.raddr2 := rs2_addr
 
   // gen immdeates
-  immGen.io.inst := fe_inst
+  immGen.io.inst := fe_reg_inst
   immGen.io.sel := io.ctrl.imm_sel
 
   // bypass
-  val wb_rd_addr = ew_inst(11, 7)
+  val wb_rd_addr = ew_reg_inst(11, 7)
   val rs1hazard = wb_en && rs1_addr.orR && (rs1_addr === wb_rd_addr)
   val rs2hazard = wb_en && rs2_addr.orR && (rs2_addr === wb_rd_addr)
-  val rs1 = Mux(wb_sel === WB_ALU && rs1hazard, ew_alu, regFile.io.rdata1)
-  val rs2 = Mux(wb_sel === WB_ALU && rs2hazard, ew_alu, regFile.io.rdata2)
+  val rs1 = Mux(wb_sel === WB_ALU && rs1hazard, ew_reg_alu, regFile.io.rdata1)
+  val rs2 = Mux(wb_sel === WB_ALU && rs2hazard, ew_reg_alu, regFile.io.rdata2)
 
   // ALU operations
-  alu.io.A := Mux(io.ctrl.A_sel === A_RS1, rs1, fe_pc)
+  alu.io.A := Mux(io.ctrl.A_sel === A_RS1, rs1, fe_reg_pc)
   alu.io.B := Mux(io.ctrl.B_sel === B_RS2, rs2, immGen.io.out)
   alu.io.alu_op := io.ctrl.alu_op
 
@@ -113,7 +114,7 @@ class Datapath(val conf: CoreConfig) extends Module {
   brCond.io.br_type := io.ctrl.br_type
 
   // D$ access
-  val daddr = Mux(stall, ew_alu, alu.io.sum) >> 2.U << 2.U
+  val daddr = Mux(stall, ew_reg_alu, alu.io.sum) >> 2.U << 2.U
   val woffset = (alu.io.sum(1) << 4.U).asUInt | (alu.io.sum(0) << 3.U).asUInt
   io.dcache.req.valid := !stall && (io.ctrl.st_type.orR || io.ctrl.ld_type.orR)
   io.dcache.req.bits.addr := daddr
@@ -133,10 +134,10 @@ class Datapath(val conf: CoreConfig) extends Module {
     illegal := false.B
     pc_check := false.B
   }.elsewhen(!stall && !csr.io.expt) {
-    ew_pc := fe_pc
-    ew_inst := fe_inst
-    ew_alu := alu.io.out
-    csr_in := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
+    ew_reg_pc := fe_reg_pc
+    ew_reg_inst := fe_reg_inst
+    ew_reg_alu := alu.io.out
+    csr_reg_in := Mux(io.ctrl.imm_sel === IMM_Z, immGen.io.out, rs1)
     st_type := io.ctrl.st_type
     ld_type := io.ctrl.ld_type
     wb_sel := io.ctrl.wb_sel
@@ -147,7 +148,7 @@ class Datapath(val conf: CoreConfig) extends Module {
   }
 
   // Load
-  val loffset = (ew_alu(1) << 4.U).asUInt | (ew_alu(0) << 3.U).asUInt
+  val loffset = (ew_reg_alu(1) << 4.U).asUInt | (ew_reg_alu(0) << 3.U).asUInt
   val lshift = io.dcache.resp.bits.data >> loffset
   val load = MuxLookup(
     ld_type,
@@ -162,11 +163,11 @@ class Datapath(val conf: CoreConfig) extends Module {
 
   // CSR access
   csr.io.stall := stall
-  csr.io.in := csr_in
+  csr.io.in := csr_reg_in
   csr.io.cmd := csr_cmd
-  csr.io.inst := ew_inst
-  csr.io.pc := ew_pc
-  csr.io.addr := ew_alu
+  csr.io.inst := ew_reg_inst
+  csr.io.pc := ew_reg_pc
+  csr.io.addr := ew_reg_alu
   csr.io.illegal := illegal
   csr.io.pc_check := pc_check
   csr.io.ld_type := ld_type
@@ -175,7 +176,11 @@ class Datapath(val conf: CoreConfig) extends Module {
 
   // Regfile Write
   val regWrite =
-    MuxLookup(wb_sel, ew_alu.zext, Seq(WB_MEM -> load, WB_PC4 -> (ew_pc + 4.U).zext, WB_CSR -> csr.io.out.zext)).asUInt
+    MuxLookup(
+      wb_sel,
+      ew_reg_alu.zext,
+      Seq(WB_MEM -> load, WB_PC4 -> (ew_reg_pc + 4.U).zext, WB_CSR -> csr.io.out.zext)
+    ).asUInt
 
   regFile.io.wen := wb_en && !stall && !csr.io.expt
   regFile.io.waddr := wb_rd_addr
@@ -188,8 +193,8 @@ class Datapath(val conf: CoreConfig) extends Module {
 //  if (p(Trace)) {
 //    printf(
 //      "PC: %x, INST: %x, REG[%d] <- %x\n",
-//      ew_pc,
-//      ew_inst,
+//      ew_reg_pc,
+//      ew_reg_inst,
 //      Mux(regFile.io.wen, wb_rd_addr, 0.U),
 //      Mux(regFile.io.wen, regFile.io.wdata, 0.U)
 //    )
