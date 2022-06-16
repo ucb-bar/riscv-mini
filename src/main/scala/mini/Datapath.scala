@@ -54,21 +54,14 @@ class Datapath(val conf: CoreConfig) extends Module {
   val started = RegNext(reset.asBool)
   val stall = !io.icache.resp.valid || !io.dcache.resp.valid
   val pc = RegInit(Const.PC_START.U(conf.xlen.W) - 4.U(conf.xlen.W))
-  val npc = Mux(
-    stall,
-    pc,
-    Mux(
-      csr.io.expt,
-      csr.io.evec,
-      Mux(
-        io.ctrl.pc_sel === PC_EPC,
-        csr.io.epc,
-        Mux(
-          io.ctrl.pc_sel === PC_ALU || brCond.io.taken,
-          alu.io.sum >> 1.U << 1.U,
-          Mux(io.ctrl.pc_sel === PC_0, pc, pc + 4.U)
-        )
-      )
+  val npc = MuxCase(
+    pc + 4.U,
+    Array(
+      stall -> pc,
+      csr.io.expt -> csr.io.evec,
+      (io.ctrl.pc_sel === PC_EPC) -> csr.io.epc,
+      ((io.ctrl.pc_sel === PC_ALU) || (brCond.io.taken)) -> (alu.io.sum >> 1.U << 1.U),
+      (io.ctrl.pc_sel === PC_0) -> pc
     )
   )
   val inst =
