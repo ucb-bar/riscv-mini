@@ -4,6 +4,7 @@ base_dir   = $(abspath .)
 src_dir    = $(base_dir)/src/main
 gen_dir    = $(base_dir)/generated-src
 out_dir    = $(base_dir)/outputs
+nproc      = $(shell nproc --ignore 1)
 
 SBT       = sbt
 SBT_FLAGS = -ivy $(base_dir)/.ivy2
@@ -20,7 +21,7 @@ CXXFLAGS += -std=c++11 -Wall -Wno-unused-variable
 
 # compile verilator
 VERILATOR = verilator --cc --exe
-VERILATOR_FLAGS = --assert -Wno-STMTDLY -O3 --trace \
+VERILATOR_FLAGS = --assert -Wno-STMTDLY -O3 --trace --threads $(nproc)\
 	--top-module Tile -Mdir $(gen_dir)/VTile.csrc \
 	-CFLAGS "$(CXXFLAGS) -include $(gen_dir)/VTile.csrc/VTile.h" 
 
@@ -56,10 +57,14 @@ run-custom-bmark: $(custom_bmark_out)
 test:
 	$(SBT) $(SBT_FLAGS) test
 
+# Only runs tests that failed in the previous run
+test-quick:
+	$(SBT) $(SBT_FLAGS) testQuick
+
 clean:
 	rm -rf $(gen_dir) $(out_dir) test_run_dir
 
 cleanall: clean
 	rm -rf target project/target
 
-.PHONY: sbt compile verilator run-tests run-custom-bmark test clean cleanall
+.PHONY: sbt compile verilator run-tests run-custom-bmark test test-quick clean cleanall
