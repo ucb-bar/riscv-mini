@@ -59,7 +59,7 @@ class Datapath(val conf: CoreConfig) extends Module {
   // Next Program Counter
   val next_pc = MuxCase(
     pc + 4.U,
-    Array(
+    IndexedSeq(
       stall -> pc,
       csr.io.expt -> csr.io.evec,
       (io.ctrl.pc_sel === PC_EPC) -> csr.io.epc,
