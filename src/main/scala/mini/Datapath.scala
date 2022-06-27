@@ -4,6 +4,7 @@ package mini
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.BundleLiterals._
 
 object Const {
   val PC_START = 0x200
@@ -43,30 +44,23 @@ class Datapath(val conf: CoreConfig) extends Module {
 
   /** *** Fetch / Execute Registers ****
     */
-  val fe_reg = RegInit({
-    val reg = Wire(new FetchExecutePipelineRegister(conf.xlen))
-
-    // Setting initialisation values
-    reg.inst := Instructions.NOP
-    reg.pc := 0.U(conf.xlen.W)
-
-    reg
-  })
-  // val fe_reg_inst = RegInit(Instructions.NOP)
-  // val fe_reg_pc = Reg(UInt())
+  val fe_reg = RegInit(
+    (new FetchExecutePipelineRegister(conf.xlen)).Lit(
+      _.inst -> Instructions.NOP,
+      _.pc -> 0.U
+    )
+  )
 
   /** *** Execute / Write Back Registers ****
     */
-  val ew_reg = RegInit({
-    val reg = Wire(new ExecuteWritebackPipelineRegister(conf.xlen))
-
-    reg.inst := Instructions.NOP
-    reg.pc := 0.U(conf.xlen.W)
-    reg.alu := 0.U(conf.xlen.W)
-    reg.csr_in := 0.U(conf.xlen.W)
-
-    reg
-  })
+  val ew_reg = RegInit(
+    (new ExecuteWritebackPipelineRegister(conf.xlen)).Lit(
+      _.inst -> Instructions.NOP,
+      _.pc -> 0.U,
+      _.alu -> 0.U,
+      _.csr_in -> 0.U
+    )
+  )
 
   /** **** Control signals ****
     */
