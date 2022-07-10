@@ -82,7 +82,6 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
     *
     *   Address Read  > == AR == >
     *   Data Read     < == R  == <
-    *
     */
 
   switch(state) {
