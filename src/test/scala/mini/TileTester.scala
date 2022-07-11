@@ -73,6 +73,17 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
     stop()
   }
 
+  /**
+    *   Master(Tile)    ---------   Slaver(Memory)
+    *
+    *   Address Write > == AW == >
+    *   Data Write    > == W  == >
+    *   Response      < == B  == <
+    *
+    *   Address Read  > == AR == >
+    *   Data Read     < == R  == <
+    */
+
   switch(state) {
     is(sIdle) {
       when(dut.io.nasti.aw.valid) {
@@ -85,7 +96,7 @@ class TileTester(tile: => Tile, benchmark: String, latency: Int = 8, trace: Bool
       }.elsewhen(dut.io.nasti.ar.valid) {
         assert((1.U << dut.io.nasti.ar.bits.size).asUInt === (nasti.dataBits / 8).U)
         addr := dut.io.nasti.ar.bits.addr / (nasti.dataBits / 8).U
-        id := dut.io.nasti.aw.bits.id
+        id := dut.io.nasti.ar.bits.id
         len := dut.io.nasti.ar.bits.len
         off := 0.U
         state := sRead
