@@ -2,23 +2,15 @@
 
 package mini
 
-import chisel3.stage.ChiselGeneratorAnnotation
-import firrtl.options.TargetDirAnnotation
-
+import circt.stage.ChiselStage
 object Main extends App {
-  val targetDirectory = args.head
   val config = MiniConfig()
-  new chisel3.stage.ChiselStage().execute(
-    args,
-    Seq(
-      ChiselGeneratorAnnotation(() =>
-        new Tile(
-          coreParams = config.core,
-          nastiParams = config.nasti,
-          cacheParams = config.cache
-        )
-      ),
-      TargetDirAnnotation(targetDirectory)
-    )
+  ChiselStage.emitSystemVerilogFile(
+    new Tile(
+      coreParams = config.core,
+      nastiParams = config.nasti,
+      cacheParams = config.cache
+    ),
+    args
   )
 }

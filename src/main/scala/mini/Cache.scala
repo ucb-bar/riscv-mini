@@ -3,7 +3,6 @@
 package mini
 
 import chisel3._
-import chisel3.experimental.ChiselEnum
 import chisel3.util._
 import junctions._
 
@@ -125,7 +124,7 @@ class Cache(val p: CacheConfig, val nasti: NastiBundleParameters, val xlen: Int)
     dataMem.zipWithIndex.foreach {
       case (mem, i) =>
         val data = VecInit.tabulate(wBytes)(k => wdata(i * xlen + (k + 1) * 8 - 1, i * xlen + k * 8))
-        mem.write(idx_reg, data, wmask((i + 1) * wBytes - 1, i * wBytes).asBools())
+        mem.write(idx_reg, data, wmask((i + 1) * wBytes - 1, i * wBytes).asBools)
         mem.suggestName(s"dataMem_${i}")
     }
   }
