@@ -41,9 +41,7 @@ class AluSimple(val width: Int) extends Alu {
 
   val shamt = io.B(4, 0).asUInt
 
-  io.out := MuxLookup(
-    io.alu_op,
-    io.B,
+  io.out := MuxLookup(io.alu_op, io.B)(
     Seq(
       ALU_ADD -> (io.A + io.B),
       ALU_SUB -> (io.A - io.B),
