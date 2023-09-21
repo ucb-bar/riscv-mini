@@ -12,9 +12,9 @@ SBT_FLAGS = -ivy $(base_dir)/.ivy2
 sbt:
 	$(SBT) $(SBT_FLAGS)
 
-compile: $(gen_dir)/Tile.v
+compile: $(gen_dir)/Tile.sv
 
-$(gen_dir)/Tile.v: $(wildcard $(src_dir)/scala/*.scala)
+$(gen_dir)/Tile.sv: $(wildcard $(src_dir)/scala/*.scala)
 	$(SBT) $(SBT_FLAGS) "run --target-dir=$(gen_dir)"
 
 CXXFLAGS += -std=c++11 -Wall -Wno-unused-variable
@@ -25,7 +25,7 @@ VERILATOR_FLAGS = --assert -Wno-STMTDLY -O3 --trace --threads $(nproc)\
 	--top-module Tile -Mdir $(gen_dir)/VTile.csrc \
 	-CFLAGS "$(CXXFLAGS) -include $(gen_dir)/VTile.csrc/VTile.h" 
 
-$(base_dir)/VTile: $(gen_dir)/Tile.v $(src_dir)/cc/top.cc $(src_dir)/cc/mm.cc $(src_dir)/cc/mm.h
+$(base_dir)/VTile: $(gen_dir)/Tile.sv $(src_dir)/cc/top.cc $(src_dir)/cc/mm.cc $(src_dir)/cc/mm.h
 	$(VERILATOR) $(VERILATOR_FLAGS) -o $@ $< $(word 2, $^) $(word 3, $^)
 	$(MAKE) -C $(gen_dir)/VTile.csrc -f VTile.mk
 
