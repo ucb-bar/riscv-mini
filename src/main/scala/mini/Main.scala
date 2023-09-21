@@ -5,7 +5,7 @@ package mini
 import circt.stage.ChiselStage
 object Main extends App {
   val config = MiniConfig()
-  ChiselStage.emitSystemVerilog(
+  ChiselStage.emitSystemVerilogFile(
     new Tile(
       coreParams = config.core,
       nastiParams = config.nasti,

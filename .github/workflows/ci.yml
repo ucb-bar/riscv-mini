@@ -46,6 +46,8 @@ jobs:
         osscadsuite-version: '2022-02-02'
     - name: Install CIRCT
       uses: ./.github/workflows/install-circt
+      with:
+        version: 'firtool-1.37.0'
     - name: Setup Scala
       uses: olafurpg/setup-scala@v11
       with:
