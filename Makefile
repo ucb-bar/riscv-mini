@@ -15,7 +15,7 @@ sbt:
 compile: $(gen_dir)/Tile.v
 
 $(gen_dir)/Tile.v: $(wildcard $(src_dir)/scala/*.scala)
-	$(SBT) $(SBT_FLAGS) "run $(gen_dir)"
+	$(SBT) $(SBT_FLAGS) "run --target-dir=$(gen_dir)"
 
 CXXFLAGS += -std=c++11 -Wall -Wno-unused-variable
 

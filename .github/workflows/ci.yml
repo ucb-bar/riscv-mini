@@ -44,6 +44,8 @@ jobs:
       uses: YosysHQ/setup-oss-cad-suite@v1
       with:
         osscadsuite-version: '2022-02-02'
+    - name: Install CIRCT
+      uses: ./.github/workflows/install-circt
     - name: Setup Scala
       uses: olafurpg/setup-scala@v11
       with:
