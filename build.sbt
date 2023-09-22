@@ -2,14 +2,15 @@ ThisBuild / scalaVersion     := "2.13.7"
 ThisBuild / version          := "2.5.0"
 ThisBuild / organization     := "edu.berkeley.cs"
 
-val chiselVersion = "3.6.0"
+val chiselVersion = "5.0.0"
+val chiseltestVersion = "5.0.2"
 
 lazy val root = (project in file("."))
   .settings(
     name := "riscv-mini",
     libraryDependencies ++= Seq(
-      "edu.berkeley.cs" %% "chisel3" % chiselVersion,
-      "edu.berkeley.cs" %% "chiseltest" % "0.6.2" % "test"
+      "org.chipsalliance" %% "chisel" % chiselVersion,
+      "edu.berkeley.cs" %% "chiseltest" % chiseltestVersion % "test"
     ),
     scalacOptions ++= Seq(
       "-language:reflectiveCalls",
@@ -17,5 +18,5 @@ lazy val root = (project in file("."))
       "-feature",
       "-Xcheckinit",
     ),
-    addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % chiselVersion cross CrossVersion.full),
+    addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full),
   )
