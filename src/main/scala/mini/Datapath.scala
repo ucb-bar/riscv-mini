@@ -6,7 +6,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.BundleLiterals._
 
-object Const {
+object Consts {
   val PC_START = 0x200
   val PC_EVEC = 0x100
 }
@@ -76,7 +76,7 @@ class Datapath(val conf: CoreConfig) extends Module {
     */
   val started = RegNext(reset.asBool)
   val stall = !io.icache.resp.valid || !io.dcache.resp.valid
-  val pc = RegInit(Const.PC_START.U(conf.xlen.W) - 4.U(conf.xlen.W))
+  val pc = RegInit(Consts.PC_START.U(conf.xlen.W) - 4.U(conf.xlen.W))
   // Next Program Counter
   val next_pc = MuxCase(
     pc + 4.U,

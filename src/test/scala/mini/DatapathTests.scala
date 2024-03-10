@@ -42,10 +42,10 @@ class DatapathTester(datapath: => Datapath, testType: DatapathTest) extends Basi
 
   switch(state) {
     is(sInit) {
-      (0 until Const.PC_START by 4).foreach { addr =>
-        mem((addr / 4).U) := (if (addr == Const.PC_EVEC + (3 << 6)) fin else nop)
+      (0 until Consts.PC_START by 4).foreach { addr =>
+        mem((addr / 4).U) := (if (addr == Consts.PC_EVEC + (3 << 6)) fin else nop)
       }
-      mem((Const.PC_START / (xlen / 8)).U + cntr) := VecInit(insts)(cntr)
+      mem((Consts.PC_START / (xlen / 8)).U + cntr) := VecInit(insts)(cntr)
       when(done) { state := sRun }
     }
     is(sRun) {

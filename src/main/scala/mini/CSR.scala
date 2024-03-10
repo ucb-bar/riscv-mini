@@ -159,7 +159,7 @@ class CSR(val xlen: Int) extends Module {
   val FS = 0.U(2.W)
   val SD = 0.U(1.W)
   val mstatus = Cat(SD, 0.U((xlen - 23).W), VM, MPRV, XS, FS, PRV3, IE3, PRV2, IE2, PRV1, IE1, PRV, IE)
-  val mtvec = Const.PC_EVEC.U(xlen.W)
+  val mtvec = Consts.PC_EVEC.U(xlen.W)
   val mtdeleg = 0x0.U(xlen.W)
 
   // interrupt registers
