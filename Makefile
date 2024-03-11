@@ -17,7 +17,7 @@ compile: $(gen_dir)/Tile.sv
 $(gen_dir)/Tile.sv: $(wildcard $(src_dir)/scala/*.scala)
 	$(SBT) $(SBT_FLAGS) "run --target-dir=$(gen_dir)"
 
-CXXFLAGS += -std=c++11 -Wall -Wno-unused-variable
+CXXFLAGS += -std=c++14 -Wall -Wno-unused-variable
 
 # compile verilator
 VERILATOR = verilator --cc --exe
