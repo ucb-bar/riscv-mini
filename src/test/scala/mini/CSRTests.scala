@@ -65,7 +65,7 @@ class CSRTester(c: => CSR, trace: Boolean = false) extends BasicTester with Test
       addr -> RegInit(
         if (addr == CSR.mcpuid.litValue) (BigInt(1) << ('I' - 'A') | BigInt(1) << ('U' - 'A')).U(xlen.W)
         else if (addr == CSR.mstatus.litValue) (CSR.PRV_M.litValue << 4 | CSR.PRV_M.litValue << 1).U(xlen.W)
-        else if (addr == CSR.mtvec.litValue) Const.PC_EVEC.U(xlen.W)
+        else if (addr == CSR.mtvec.litValue) Consts.PC_EVEC.U(xlen.W)
         else 0.U(xlen.W)
       )
     }
